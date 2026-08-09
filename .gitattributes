@@ -1,0 +1,19 @@
+# The shell scripts run on the Linux server. A CRLF in install.sh or manage.sh
+# breaks the shebang line and the script fails with a confusing "not found",
+# so keep them LF whatever the checkout platform does.
+*.sh            text eol=lf
+bin/*.php       text eol=lf
+*.php           text eol=lf
+*.sql           text eol=lf
+*.md            text
+*.css           text eol=lf
+*.js            text eol=lf
+
+# Shell scripts should also arrive executable.
+install.sh      text eol=lf
+manage.sh       text eol=lf
+
+*.png           binary
+*.jpg           binary
+*.svg           text eol=lf
+*.pdf           binary

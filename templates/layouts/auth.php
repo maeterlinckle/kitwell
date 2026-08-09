@@ -1,0 +1,58 @@
+<?php
+/**
+ * Minimal layout for signed-out pages.
+ *
+ * @var string $content
+ * @var string $pageTitle
+ * @var string $appName
+ */
+$pageTitle = $pageTitle ?? '';
+?>
+<!doctype html>
+<html lang="en-GB" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#0f172a">
+    <title><?= e($pageTitle !== '' ? $pageTitle . ' · ' . $appName : $appName) ?></title>
+    <link rel="icon" href="<?= e(asset_url('favicon.svg')) ?>" type="image/svg+xml">
+    <link rel="stylesheet" href="<?= e(asset_url('css/app.css')) ?>">
+    <script>
+        (function () {
+            try {
+                var stored = localStorage.getItem('theme');
+                if (!stored) {
+                    var match = document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);
+                    stored = match ? match[1] : null;
+                }
+                if (!stored) {
+                    stored = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                document.documentElement.setAttribute('data-theme', stored);
+            } catch (e) { /* theme stays light */ }
+        })();
+    </script>
+</head>
+<body class="body-centred">
+
+<div class="auth-shell">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <span class="brand-mark" aria-hidden="true">AR</span>
+            <span class="brand-name"><?= e($appName) ?></span>
+        </div>
+
+        <?= partial('partials/flash') ?>
+        <?= $content ?>
+    </div>
+
+    <button type="button" class="btn btn-ghost theme-toggle-standalone" data-theme-toggle>
+        <span class="theme-icon" aria-hidden="true"></span>
+        <span data-theme-label>Dark mode</span>
+    </button>
+</div>
+
+<script src="<?= e(asset_url('js/app.js')) ?>" defer></script>
+</body>
+</html>

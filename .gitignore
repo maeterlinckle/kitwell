@@ -1,0 +1,16 @@
+/vendor/
+/.env
+
+# Claude Code's per-machine settings: absolute paths and tool allow-lists that
+# mean nothing on anyone else's box. A shared .claude/settings.json is fine.
+/.claude/settings.local.json
+/storage/uploads/*
+!/storage/uploads/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/cache/*
+!/storage/cache/.gitkeep
+composer.lock
+.DS_Store
+Thumbs.db
+*.log

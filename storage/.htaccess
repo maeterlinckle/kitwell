@@ -1,0 +1,3 @@
+# Belt and braces: storage sits outside the document root, but if the web root
+# is ever misconfigured this stops anything here being served directly.
+Require all denied

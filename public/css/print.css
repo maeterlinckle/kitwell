@@ -1,0 +1,120 @@
+/* ==========================================================================
+   Barcode label sheets.
+
+   Sizes are set in millimetres so what comes out of the printer matches the
+   label stock. Print at 100% scale — any scaling changes the bar widths and
+   the barcode may stop scanning.
+   ========================================================================== */
+
+.print-body {
+    background: #ffffff;
+    color: #000000;
+}
+
+.print-toolbar {
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #cbd5e1;
+    background: #f8fafc;
+    z-index: 10;
+}
+
+.label-sheet {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3mm;
+    padding: 5mm;
+    align-content: flex-start;
+}
+
+.label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4mm;
+    border: 1px dashed #94a3b8;   /* cutting guide; hidden when printing */
+    border-radius: 1mm;
+    padding: 1.5mm;
+    background: #ffffff;
+    color: #000000;
+    text-align: center;
+    overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.label-small  { width: 50mm; min-height: 19mm; }
+.label-medium { width: 62mm; min-height: 25mm; }
+.label-large  { width: 76mm; min-height: 32mm; }
+
+.label-sheet.label-small  .label { width: 50mm; min-height: 19mm; }
+.label-sheet.label-medium .label { width: 62mm; min-height: 25mm; }
+.label-sheet.label-large  .label { width: 76mm; min-height: 32mm; }
+
+.label-barcode { line-height: 0; }
+.label-barcode svg { display: block; max-width: 100%; height: auto; }
+
+.label-org {
+    font: 600 6pt/1.1 system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.label-name {
+    font: 600 7pt/1.15 system-ui, sans-serif;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.label-location { font: 400 6pt/1.1 system-ui, sans-serif; }
+
+.label-tag-fallback {
+    font: 700 10pt/1.2 monospace;
+    letter-spacing: 0.05em;
+}
+
+.print-note {
+    padding: 0 1rem 2rem;
+    max-width: 60ch;
+}
+
+.print-warning {
+    padding: 0.75rem 1rem;
+    border-left: 4px solid #a16207;
+    background: #fef3c7;
+    color: #78350f;
+    border-radius: 0 4px 4px 0;
+}
+
+@media print {
+    @page {
+        size: A4;
+        margin: 8mm;
+    }
+
+    .no-print { display: none !important; }
+
+    html, body {
+        background: #ffffff !important;
+        margin: 0;
+        padding: 0;
+    }
+
+    .label-sheet {
+        padding: 0;
+        gap: 2mm;
+    }
+
+    .label {
+        border: 0;                 /* no cutting guides on the printed sheet */
+        padding: 1mm;
+    }
+}
