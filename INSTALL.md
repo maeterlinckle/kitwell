@@ -17,6 +17,15 @@ the scripts instead.
 On the server, as root:
 
 ```bash
+git clone https://github.com/maeterlinckle/kitwell.git /opt/asset-register-src
+cd /opt/asset-register-src
+sudo ./install.sh
+```
+
+Or, if the server has no outbound git access, copy an archive over and unpack it
+instead:
+
+```bash
 tar -xzf asset-register.tar.gz -C /opt/asset-register-src
 cd /opt/asset-register-src
 sudo ./install.sh
@@ -35,7 +44,15 @@ being changed.
 ## Getting the files onto the server
 
 The whole project is the payload — there is nothing to build and no packages to
-fetch, so a zip or tarball is enough.
+fetch, so a clone, a zip or a tarball are all equally good.
+
+**By clone**, when the server can reach GitHub. This is also the easiest to
+update later, since `manage.sh update` can point straight at a `git pull`ed
+copy:
+
+```bash
+git clone https://github.com/maeterlinckle/kitwell.git
+```
 
 **From an existing install** (this leaves out `.env`, the uploads and the
 database, so the archive holds nothing secret):

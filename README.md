@@ -94,9 +94,13 @@ the script did.
 ### 1. Get the files onto the server
 
 ```bash
-git clone <your-repo> /var/www/asset-register
+git clone https://github.com/maeterlinckle/kitwell.git /var/www/asset-register
 cd /var/www/asset-register
 ```
+
+If the server has no outbound git access, `manage.sh package` on an existing
+install (or a plain tarball of a checkout) works just as well — see
+[INSTALL.md](INSTALL.md).
 
 Composer is optional — the app ships with a fallback autoloader — but running it
 gives you a faster classmap:
