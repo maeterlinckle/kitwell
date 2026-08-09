@@ -19,7 +19,9 @@
 #
 set -euo pipefail
 
-readonly VERSION="1.0"
+# Deliberately namespaced and not readonly. A bare `readonly VERSION` collided
+# with the VERSION= line in /etc/os-release and killed the script on startup.
+INSTALLER_VERSION="1.1"
 readonly SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Answers ----------------------------------------------------------------
@@ -63,7 +65,7 @@ SKIP_PACKAGES=no
 ASSUME_YES=no
 
 # --- Discovered at run time -------------------------------------------------
-OS_ID=""; OS_NAME=""; PKG=""
+OS_ID=""; OS_LIKE=""; OS_NAME=""; PKG=""
 WEB_USER=""; WEB_GROUP=""
 APACHE_SVC=""; APACHE_SITES_DIR=""; APACHE_BIN=""
 PHP_BIN=""; PHP_VERSION=""; PHP_FPM_SOCKET=""; PHP_PKG_PREFIX="php"
@@ -341,7 +343,7 @@ if [ -n "$ANSWERS_FILE" ]; then
 fi
 
 say ""
-say "${C_BOLD}Asset Register installer ${VERSION}${C_RESET}"
+say "${C_BOLD}Asset Register installer ${INSTALLER_VERSION}${C_RESET}"
 say "${C_DIM}Source: ${SRC_DIR}${C_RESET}"
 
 # ---------------------------------------------------------------------------
@@ -359,16 +361,23 @@ esac
 [ -f "$SRC_DIR/public/index.php" ] && [ -d "$SRC_DIR/database/migrations" ] \
     || die "This does not look like the Asset Register source tree — public/index.php is missing. Run install.sh from inside the unpacked project."
 
+# /etc/os-release is a shell fragment defining NAME, VERSION, ID, HOME_URL and
+# a dozen more. Sourcing it here would drop all of them into this script's
+# namespace, where they can collide with its own variables — VERSION did
+# exactly that. Read it in a subshell and lift out only the three fields
+# needed, so nothing else can ever leak in.
 if [ -r /etc/os-release ]; then
-    # shellcheck disable=SC1091
-    . /etc/os-release
-    OS_ID="${ID:-unknown}"
-    OS_NAME="${PRETTY_NAME:-$OS_ID}"
+    eval "$(
+        # shellcheck disable=SC1091
+        . /etc/os-release 2>/dev/null
+        printf 'OS_ID=%q\nOS_LIKE=%q\nOS_NAME=%q\n' \
+            "${ID:-unknown}" "${ID_LIKE:-}" "${PRETTY_NAME:-${NAME:-${ID:-unknown}}}"
+    )"
 else
     die "Cannot read /etc/os-release, so the distribution cannot be identified."
 fi
 
-case " ${OS_ID} ${ID_LIKE:-} " in
+case " ${OS_ID} ${OS_LIKE} " in
     *" debian "*|*" ubuntu "*) PKG=apt ;;
     *" fedora "*|*" rhel "*|*" centos "*) PKG=dnf ;;
     *" suse "*|*" opensuse "*) PKG=zypper ;;
@@ -689,6 +698,10 @@ install_packages() {
     if [ "$PKG" = pacman ] && [ ! -d /var/lib/mysql/mysql ]; then
         mariadb-install-db --user=mysql --basedir=/usr --datadir=/var/lib/mysql >/dev/null
     fi
+
+    # This script runs the very binaries it just installed. Drop bash's cached
+    # command lookups so a path resolved before the install cannot go stale.
+    hash -r 2>/dev/null || true
 
     ok "Packages installed"
 }
