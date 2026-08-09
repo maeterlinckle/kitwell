@@ -1528,6 +1528,15 @@ tr.preview-warning td { background: var(--warn-soft); }
     max-width: 100%;
     max-height: 100%;
 }
+/* The UA stylesheet hides a closed dialog with `dialog:not([open])
+   { display: none }`, but ANY author rule beats the UA origin — so the
+   `display: flex` above kept the element painted after close(). The result was
+   a full-viewport, 92%-opaque overlay that swallowed every click: the Close
+   button looked broken and the page looked "slightly translucent", because you
+   were seeing it through the dialog rather than through the backdrop.
+   Restore the UA behaviour explicitly. Do not remove. */
+.lightbox:not([open]) { display: none; }
+
 .lightbox::backdrop { background: rgb(2 6 23 / 92%); }
 
 .lightbox img {
