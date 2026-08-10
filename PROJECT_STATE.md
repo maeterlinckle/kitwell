@@ -902,9 +902,18 @@ Decisions worth keeping:
   Settings page on day one without shell access. An answers file carrying one
   over from an existing install wins — reusing the old key is what keeps an
   already-stored SMTP password readable.
-- **`composer install` is now load-bearing but still not fatal.** It is what
-  installs PHPMailer; if Composer is absent the installer says so and carries
-  on, because everything except sending email works without it.
+- **The installer installs Composer itself**, rather than shrugging when the
+  machine has none. It shrugged originally, which produced an install that
+  looked complete but could not send a single email — and re-running
+  `install.sh` did not fix it, because it shrugged again. Two routes:
+  the distribution's `composer` package first (no new trust — signed by the
+  same repository as everything else, and attempted *tolerantly* because the
+  package name varies and does not exist everywhere; adding it to the main
+  package list would abort an otherwise good install), then the official
+  getcomposer.org installer verified against the SHA-384 at
+  `composer.github.io/installer.sig`, refused on mismatch.
+  Still not fatal: everything except sending email works without it, and
+  `manage.sh composer-install` retries the whole thing on an existing install.
 - **`cron-install` schedules the reminder run** (daily 08:00) alongside the
   nightly backup and hourly overdue refresh. It does nothing until a reminder
   type is switched on in Settings.
@@ -1017,6 +1026,15 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   written inline inside an array literal ends in `)]`, which its SQL regex
   cannot see as a terminator, so it is reported as uncontrolled concatenation.
   Assign the result on its own line.
+- **"Tell the user to run X" is only useful if X exists on their machine.**
+  Settings → Email said "run composer install"; the server had no Composer, so
+  the advice failed with `command not found`. Guidance has to name something
+  that works from where the reader is standing — the message now names
+  `manage.sh composer-install`, which installs Composer first if it has to.
+- **Never add an optional package to the main `pkgs` array in `install.sh`.**
+  `pkg_install "${pkgs[@]}" || die` aborts the whole install if any one name is
+  unknown, and `composer` is named differently (or absent) across
+  distributions. Install optional packages separately and tolerantly.
 - **A migration can need a privilege the application never uses.** `RENAME
   TABLE` requires `ALTER` **and `DROP`** on the source table; so does
   `ALTER TABLE … RENAME TO`. Reasoning about the grant from "what does the

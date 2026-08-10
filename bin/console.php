@@ -374,7 +374,7 @@ function cmdDoctor(array $argv): int
         $check(
             'PHPMailer installed',
             Mailer::libraryInstalled() ? 'ok' : 'WARN',
-            Mailer::libraryInstalled() ? 'vendor/ present' : 'run `composer install --no-dev`'
+            Mailer::libraryInstalled() ? 'vendor/ present' : 'run `sudo ./manage.sh composer-install`'
         );
 
         $mailEnabled  = Setting::bool('mail_enabled', false);

@@ -235,11 +235,13 @@ $authUser = auth_user();
         <h2>Installing the mail library</h2>
         <p>
             Sending is done by PHPMailer, the one package this application depends on at runtime.
-            Install it in the application directory:
+            On the server, run:
         </p>
-        <pre class="mono">composer install --no-dev --optimize-autoloader</pre>
+        <pre class="mono">sudo <?= e(rtrim(str_replace('\\', '/', (string) config('app.root', '.')), '/')) ?>/manage.sh composer-install</pre>
         <p class="muted">
-            Everything else in the application works without it — only sending is unavailable.
+            That installs Composer first if the machine does not have it, then fetches PHPMailer
+            and sets the file permissions. Everything else in the application works without it —
+            only sending is unavailable.
         </p>
     </div>
 <?php endif; ?>

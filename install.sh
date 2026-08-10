@@ -425,7 +425,7 @@ fi
 # ---------------------------------------------------------------------------
 # 2. What is already here
 # ---------------------------------------------------------------------------
-step "Looking for PHP, a web server and MariaDB"
+step "Looking for PHP, a web server, MariaDB and Composer"
 
 PHP_BIN="$(command -v php || true)"
 if [ -n "$PHP_BIN" ]; then
@@ -458,6 +458,13 @@ if have mariadbd || have mysqld || [ -d /var/lib/mysql ]; then
 else
     info "MariaDB is not installed"
     PLAN+=("Install the MariaDB server")
+fi
+
+if have composer; then
+    ok "Composer $(composer --version --no-ansi 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+else
+    info "Composer is not installed"
+    PLAN+=("Install Composer, then use it to install PHPMailer (which sends the emails)")
 fi
 
 # ---------------------------------------------------------------------------
@@ -616,6 +623,105 @@ pkg_refresh() {
         zypper) zypper --non-interactive refresh ;;
         pacman) pacman -Sy --noconfirm ;;
     esac
+}
+
+# Fetch a URL to stdout. curl or wget, whichever the machine has.
+fetch_url() {
+    if have curl; then
+        curl -fsSL --retry 3 --retry-delay 2 --max-time 120 "$1"
+    elif have wget; then
+        wget -qO- --tries=3 --timeout=120 "$1"
+    else
+        return 1
+    fi
+}
+
+#
+# Make sure `composer` is on the PATH.
+#
+# PHPMailer is the one runtime dependency, and Composer is how it arrives. The
+# installer used to shrug when Composer was missing, which left an install that
+# looked complete but could not send a single email — and re-running install.sh
+# did not fix it, because it shrugged again. So it now installs Composer.
+#
+# Two routes, in order of how much trust each asks for:
+#
+#   1. The distribution's own package. No new trust: it is signed by the same
+#      repository as everything else on the machine. Tried tolerantly, because
+#      the package is named differently across distributions and does not exist
+#      at all on some — and a missing optional package must never abort an
+#      otherwise good install.
+#   2. The official installer from getcomposer.org, checked against the SHA-384
+#      that Composer publishes at composer.github.io/installer.sig. This is the
+#      method Composer's own documentation gives, signature check included. It
+#      is only reached when route 1 produced nothing.
+#
+# Returns non-zero if both fail; the caller carries on, because everything
+# except sending email works without it.
+#
+ensure_composer() {
+    if have composer; then
+        return 0
+    fi
+
+    if [ "$SKIP_PACKAGES" = yes ]; then
+        warn "--skip-packages: Composer was not installed, so email will be unavailable."
+        return 1
+    fi
+
+    info "Composer is needed for PHPMailer — installing it"
+
+    pkg_install composer >/dev/null 2>&1 || true
+    hash -r 2>/dev/null || true
+
+    if have composer; then
+        ok "Composer installed from the distribution's packages"
+        return 0
+    fi
+
+    info "Not in this distribution's packages — using the official installer"
+
+    have curl || have wget || pkg_install curl >/dev/null 2>&1 || true
+    hash -r 2>/dev/null || true
+
+    local tmp setup expected actual
+    tmp="$(mktemp -d)"
+    setup="$tmp/composer-setup.php"
+
+    if ! fetch_url "https://getcomposer.org/installer" > "$setup" 2>/dev/null || [ ! -s "$setup" ]; then
+        rm -rf "$tmp"
+        warn "Could not download the Composer installer (no network, or getcomposer.org is unreachable)."
+        return 1
+    fi
+
+    # The path goes in as an argument, not interpolated into the code string:
+    # a temp path is not attacker-controlled, but building code by string
+    # concatenation is a habit worth not having.
+    expected="$(fetch_url 'https://composer.github.io/installer.sig' 2>/dev/null | tr -d '[:space:]')"
+    actual="$("$PHP_BIN" -r 'echo hash_file("sha384", $argv[1]);' "$setup" 2>/dev/null)"
+
+    if [ -z "$expected" ] || [ -z "$actual" ] || [ "$expected" != "$actual" ]; then
+        rm -rf "$tmp"
+        warn "The Composer installer failed its signature check, so it was NOT run."
+        warn "Expected $expected"
+        warn "Got      $actual"
+        return 1
+    fi
+
+    if COMPOSER_ALLOW_SUPERUSER=1 "$PHP_BIN" "$setup" --quiet --install-dir=/usr/local/bin --filename=composer; then
+        rm -rf "$tmp"
+        hash -r 2>/dev/null || true
+
+        if have composer; then
+            ok "Composer installed to /usr/local/bin/composer (signature verified)"
+            return 0
+        fi
+    fi
+
+    rm -rf "$tmp"
+    warn "The Composer installer ran but left no usable binary."
+
+    return 1
 }
 
 apt_php_candidate() {
@@ -941,25 +1047,38 @@ mkdir -p "$INSTALL_DIR/storage/logs" \
          "$INSTALL_DIR/storage/uploads/hires" \
          "$INSTALL_DIR/storage/uploads/imports"
 
-# Composer is not required for the application to run — there is a fallback
-# autoloader — but it is what installs PHPMailer, and without PHPMailer the
-# outbound email added in stage 12 cannot send. So this is now worth saying
-# out loud rather than passing over in silence.
+# PHPMailer, the one runtime dependency. The application runs without it — the
+# built-in autoloader takes over — but it cannot send email, so getting this
+# right is the difference between "reminders work" and "reminders silently do
+# not exist".
+step "Installing PHP dependencies"
+
+composer_ok=no
+
 if [ -f "$INSTALL_DIR/vendor/autoload.php" ]; then
-    info "vendor/ is already present — leaving it alone"
-elif have composer && [ -f "$INSTALL_DIR/composer.json" ]; then
-    info "Composer found — installing dependencies and building the autoloader"
-    if ( cd "$INSTALL_DIR" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction --quiet ); then
-        ok "Dependencies installed (PHPMailer, for outbound email)"
+    ok "vendor/ is already present — leaving it alone"
+    composer_ok=yes
+elif ensure_composer; then
+    info "composer install --no-dev --optimize-autoloader"
+
+    if ( cd "$INSTALL_DIR" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction ); then
+        if [ -f "$INSTALL_DIR/vendor/autoload.php" ]; then
+            ok "PHPMailer installed — outbound email is available"
+            composer_ok=yes
+        else
+            warn "Composer reported success but vendor/autoload.php is missing."
+        fi
     else
-        warn "Composer failed. Everything works except sending email; run"
-        warn "  cd $INSTALL_DIR && composer install --no-dev --optimize-autoloader"
+        warn "composer install failed. The output above says why."
     fi
-else
-    warn "Composer was not found, so PHPMailer is not installed."
-    warn "Everything works except sending email. To enable it later:"
-    warn "  apt/dnf install composer   (or see https://getcomposer.org)"
+fi
+
+if [ "$composer_ok" != yes ]; then
+    warn "PHPMailer is not installed, so the application cannot send email."
+    warn "Everything else works. To fix it later:"
     warn "  cd $INSTALL_DIR && composer install --no-dev --optimize-autoloader"
+    warn "or, if composer itself is missing:"
+    warn "  sudo $INSTALL_DIR/manage.sh install-composer"
 fi
 
 # ---------------------------------------------------------------------------

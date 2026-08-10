@@ -112,10 +112,13 @@ a database password. (`Compress-Archive` includes dotfiles.)
    be configured from the Settings page without anyone needing shell access.
    **Back it up with the database** — a dump restored without the matching key
    leaves a password that cannot be decrypted.
-8b. **Runs `composer install` if Composer is present**, which fetches PHPMailer,
-   the one runtime dependency. If Composer is missing it says so and carries on:
-   everything works except *sending* email, and Settings → Email prints the
-   exact command to run later.
+8b. **Installs Composer and PHPMailer.** Composer comes from the distribution's
+   own package where there is one; otherwise from the official getcomposer.org
+   installer, verified against the SHA-384 Composer publishes and refused if it
+   does not match. It then runs `composer install --no-dev`.
+   If all of that fails the install still completes — everything except
+   *sending* email works — and it prints
+   `manage.sh composer-install`, which retries the whole thing later.
 9. **Sets ownership and modes:** application files `root:www-data`,
    directories 750, files 640; `storage/` owned by the web user, 2775/664 — the
    only directory the application can write to. On SELinux systems it also sets
@@ -230,6 +233,7 @@ The tasks the README describes, as one command each:
 | Change a `.env` value | `manage.sh config FORCE_HTTPS false` |
 | Trim the audit trail | `manage.sh prune-activity 730` |
 | Schedule backups and reminder emails | `manage.sh cron-install` |
+| PHPMailer is missing | `manage.sh composer-install` |
 | Is email working? | `manage.sh mail-status` |
 | Prove it | `manage.sh mail-test you@example.com` |
 | Run the reminders now | `manage.sh send-reminders --dry-run` |

@@ -60,7 +60,7 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 | PHP       | 8.1 or newer | Required: `pdo_mysql`, `mbstring`, `fileinfo`, `json`. Recommended: `gd` and `exif` for photo resizing and orientation |
 | MariaDB   | 10.4 or newer | InnoDB, `utf8mb4`. Developed and tested against MariaDB 12.3 |
 | Web server| Apache with `mod_rewrite`, or nginx | Document root must point at `public/` |
-| Composer  | Needed for email | Installs PHPMailer, the one runtime dependency. Without it everything works except sending mail |
+| Composer  | Installed for you | `install.sh` installs it (distribution package first, otherwise the official signature-checked installer) and uses it to fetch PHPMailer. Without it everything works except sending mail |
 | PHP `openssl` | Needed for email | Encrypts the stored SMTP password. Present in almost every PHP build |
 | HTTPS     | Required in production | TLS is expected to terminate at a reverse proxy |
 | SMTP server | Optional | Any host you can send through. Email is off until it is configured |
@@ -561,12 +561,23 @@ fills the log with failures nobody asked for.
 
 ### Setting it up
 
-1. Install PHPMailer if the installer could not:
-   `cd /var/www/asset-register && composer install --no-dev --optimize-autoloader`
-2. **Settings → Email → Connection**: host, port, encryption, sign-in details
+1. **Settings → Email → Connection**: host, port, encryption, sign-in details
    and the "from" address. Tick *Send email from this application* and save.
-3. Press **Send test email**. If it fails you get the mail server's own error
+2. Press **Send test email**. If it fails you get the mail server's own error
    message, not a shrug.
+
+`install.sh` installs PHPMailer for you. If the page says it is missing — an
+older install, or a machine that had no Composer at the time:
+
+```bash
+sudo /var/www/asset-register/manage.sh composer-install
+```
+
+That installs Composer first if the machine has none, then fetches PHPMailer
+and fixes the file ownership. It tries the distribution's own `composer`
+package before anything else; only if that does not exist does it fall back to
+the official installer from getcomposer.org, checked against the SHA-384
+Composer publishes. If the signature does not match, it refuses to run it.
 
 Most providers want STARTTLS on port 587. Port 465 is the older implicit-TLS
 style. Choose *None* only for a relay on the same machine.

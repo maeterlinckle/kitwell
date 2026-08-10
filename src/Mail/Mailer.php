@@ -158,7 +158,12 @@ final class Mailer
         $settings = self::settings();
 
         if (!self::libraryInstalled()) {
-            $problems[] = 'The PHPMailer package is not installed. Run “composer install --no-dev” in the application directory.';
+            // Names manage.sh rather than composer itself: the machine may not
+            // have Composer at all, in which case "run composer install" is
+            // advice that fails with "command not found". manage.sh fetches
+            // Composer first when it needs to.
+            $problems[] = 'The PHPMailer package is not installed. Run “sudo '
+                . self::appRootPath() . '/manage.sh composer-install” on the server.';
         }
 
         if ($settings['host'] === '') {
@@ -184,6 +189,18 @@ final class Mailer
         }
 
         return $problems;
+    }
+
+    /**
+     * The application root with forward slashes and no trailing separator.
+     *
+     * These paths are only ever shown inside a shell command for a Linux
+     * server, so a Windows development box producing `C:\foo/manage.sh` is
+     * cosmetic — but a command someone might copy should not look broken.
+     */
+    private static function appRootPath(): string
+    {
+        return rtrim(str_replace('\\', '/', (string) Config::get('app.root', '.')), '/');
     }
 
     /** Configured, installed and switched on. */

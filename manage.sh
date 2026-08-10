@@ -72,6 +72,8 @@ Application
   prune-activity [DAYS]       delete audit rows older than DAYS (default 365)
 
 Email
+  install-composer            install Composer, if the machine has none
+  composer-install            install PHPMailer (fetches Composer first if needed)
   mail-status                 show the mail configuration, reminders and log
   mail-test EMAIL             send a test message and report the result
   send-reminders [OPTS]       run the reminder emails now
@@ -361,6 +363,114 @@ cmd_seed() {
 cmd_refresh_overdue() { console hires:refresh-overdue; }
 
 #
+# Put `composer` on the PATH.
+#
+# The same two routes install.sh uses, for the same reasons: the distribution's
+# own package first (no new trust — signed by the same repository as everything
+# else on the machine), then the official installer from getcomposer.org
+# verified against the SHA-384 Composer publishes.
+#
+# This exists as its own command because an install that predates it has no
+# Composer and therefore no PHPMailer, and "go and work out how to install
+# Composer" is not an answer to give someone whose reminder emails are not
+# going out.
+#
+cmd_install_composer() {
+    require_root install-composer
+
+    if have composer; then
+        ok "Composer is already installed: $(command -v composer)"
+        return 0
+    fi
+
+    step "Installing Composer"
+
+    local pkg=""
+    for candidate in apt-get dnf yum zypper pacman; do
+        have "$candidate" && { pkg="$candidate"; break; }
+    done
+
+    case "$pkg" in
+        apt-get) DEBIAN_FRONTEND=noninteractive apt-get install -y composer >/dev/null 2>&1 || true ;;
+        dnf)     dnf install -y composer >/dev/null 2>&1 || true ;;
+        yum)     yum install -y composer >/dev/null 2>&1 || true ;;
+        zypper)  zypper --non-interactive install composer >/dev/null 2>&1 || true ;;
+        pacman)  pacman -S --needed --noconfirm composer >/dev/null 2>&1 || true ;;
+    esac
+
+    hash -r 2>/dev/null || true
+
+    if have composer; then
+        ok "Installed from the distribution's packages"
+        return 0
+    fi
+
+    info "Not in this distribution's packages — using the official installer"
+
+    local fetch=""
+    have curl && fetch="curl -fsSL --max-time 120"
+    [ -z "$fetch" ] && have wget && fetch="wget -qO-"
+    [ -n "$fetch" ] || die "Neither curl nor wget is installed, so Composer cannot be downloaded."
+
+    local tmp setup expected actual
+    tmp="$(mktemp -d)"
+    setup="$tmp/composer-setup.php"
+
+    if ! $fetch https://getcomposer.org/installer > "$setup" 2>/dev/null || [ ! -s "$setup" ]; then
+        rm -rf "$tmp"
+        die "Could not download the Composer installer from getcomposer.org."
+    fi
+
+    expected="$($fetch https://composer.github.io/installer.sig 2>/dev/null | tr -d '[:space:]')"
+    actual="$("$PHP_BIN" -r 'echo hash_file("sha384", $argv[1]);' "$setup" 2>/dev/null)"
+
+    if [ -z "$expected" ] || [ -z "$actual" ] || [ "$expected" != "$actual" ]; then
+        rm -rf "$tmp"
+        die "The Composer installer failed its signature check, so it was NOT run.
+  Expected $expected
+  Got      $actual"
+    fi
+
+    COMPOSER_ALLOW_SUPERUSER=1 "$PHP_BIN" "$setup" --quiet --install-dir=/usr/local/bin --filename=composer \
+        || { rm -rf "$tmp"; die "The Composer installer failed."; }
+
+    rm -rf "$tmp"
+    hash -r 2>/dev/null || true
+
+    have composer || die "The installer ran but left no composer binary."
+    ok "Installed to /usr/local/bin/composer (signature verified)"
+}
+
+#
+# Install the PHP dependencies, fetching Composer first if it is missing.
+#
+cmd_composer_install() {
+    require_root composer-install
+    [ -f "$APP_DIR/composer.json" ] || die "$APP_DIR/composer.json is missing."
+
+    have composer || cmd_install_composer
+
+    step "Installing PHP dependencies"
+
+    if ! ( cd "$APP_DIR" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction ); then
+        warn "composer install failed — see the output above."
+        return 1
+    fi
+
+    [ -f "$APP_DIR/vendor/autoload.php" ] || { warn "vendor/autoload.php is still missing."; return 1; }
+
+    # vendor/ was created after the last ownership pass, so it would otherwise
+    # be root-owned and unreadable by the web server.
+    chown -R root:"$WEB_GROUP" "$APP_DIR/vendor" 2>/dev/null || true
+    find "$APP_DIR/vendor" -type d -exec chmod 750 {} + 2>/dev/null || true
+    find "$APP_DIR/vendor" -type f -exec chmod 640 {} + 2>/dev/null || true
+
+    ok "PHPMailer installed — outbound email is available"
+    say ""
+    say "  Configure it at Settings → Email, or check it with:  $0 mail-status"
+}
+
+#
 # Re-issue the database grant.
 #
 # Installs made before this fix gave the application user everything except
@@ -602,9 +712,10 @@ cmd_update() {
         . | tar -xf - -C "$APP_DIR"
     ok "Files updated — .env, storage/ and the database were left alone"
 
-    if have composer && [ -f "$APP_DIR/composer.json" ]; then
-        ( cd "$APP_DIR" && composer install --no-dev --optimize-autoloader --no-interaction --quiet ) || true
-    fi
+    # An update can introduce a new dependency, so this is not optional
+    # housekeeping — it is part of applying the version. Failures are reported
+    # but never abort the update: everything except email works without it.
+    cmd_composer_install || true
 
     cmd_permissions
     cmd_migrate
@@ -807,8 +918,10 @@ case "$COMMAND" in
     migrate)         cmd_migrate "$@" ;;
     seed)            cmd_seed ;;
     refresh-overdue) cmd_refresh_overdue ;;
-    db-grant)        cmd_db_grant ;;
-    mail-status)     cmd_mail_status ;;
+    db-grant)         cmd_db_grant ;;
+    install-composer) cmd_install_composer ;;
+    composer-install) cmd_composer_install ;;
+    mail-status)      cmd_mail_status ;;
     mail-test)       cmd_mail_test "${1:-}" ;;
     send-reminders)  cmd_send_reminders "$@" ;;
     calendar-url)    cmd_calendar_url "${1:-}" ;;
