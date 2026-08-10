@@ -172,6 +172,60 @@ $defaultType = $isScheduled ? (string) $schedule['maintenance_type'] : 'repair';
         </div>
     <?php endif; ?>
 
+    <?php /* "Check the belt again in three weeks." A one-off schedule, so it
+             appears in the maintenance list and the reminders like any other
+             job and closes itself once done — a follow-up must not quietly
+             become a recurrence nobody meant to create. */ ?>
+    <div class="card">
+        <h2>Follow-up check <span class="optional">(optional)</span></h2>
+        <p class="muted">
+            Does this need looking at again? Schedule a one-off check now and it will appear in the
+            maintenance list, and in the reminder emails, when it falls due.
+        </p>
+
+        <div class="field">
+            <label class="checkbox">
+                <input type="checkbox" id="schedule_followup" name="schedule_followup" value="1"
+                       data-toggle-fields="followup-fields"
+                    <?= old($old, 'schedule_followup') === '1' ? 'checked' : '' ?>>
+                <span>Schedule a follow-up check</span>
+            </label>
+        </div>
+
+        <div id="followup-fields" class="field-row">
+            <div class="field">
+                <label class="label" for="followup_interval">Check again in</label>
+                <input class="input<?= isset($errors['followup_interval']) ? ' has-error' : '' ?>" type="number"
+                       id="followup_interval" name="followup_interval" min="1" max="365" step="1"
+                       inputmode="numeric" placeholder="3"
+                       value="<?= e(old($old, 'followup_interval')) ?>">
+                <?php if (isset($errors['followup_interval'])): ?>
+                    <p class="field-error"><?= e($errors['followup_interval']) ?></p>
+                <?php endif; ?>
+            </div>
+
+            <div class="field">
+                <label class="label" for="followup_unit"><span class="sr-only">Unit</span>&nbsp;</label>
+                <select class="input" id="followup_unit" name="followup_unit">
+                    <?php foreach (MaintenanceSchedule::UNITS as $unit): ?>
+                        <option value="<?= e($unit) ?>" <?= old($old, 'followup_unit', 'weeks') === $unit ? 'selected' : '' ?>>
+                            <?= e($unit) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="field-hint">Counted from the date performed.</p>
+            </div>
+
+            <div class="field">
+                <label class="label" for="followup_title">What to check <span class="optional">(optional)</span></label>
+                <input class="input" type="text" id="followup_title" name="followup_title" maxlength="191"
+                       placeholder="<?= e($isScheduled ? 'Follow-up check: ' . str_limit((string) $schedule['title'], 40) : 'Follow-up check') ?>"
+                       value="<?= e(old($old, 'followup_title')) ?>">
+                <p class="field-hint">The work you described above is copied into the new job's instructions.</p>
+            </div>
+        </div>
+    </div>
+
     <div class="card">
         <h2>Evidence <span class="optional">(optional)</span></h2>
 

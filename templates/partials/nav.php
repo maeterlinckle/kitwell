@@ -119,7 +119,14 @@ $groupIsOpen = static function (array $link): bool {
                                 <?= e($link['label']) ?>
                             </a>
                         <?php else: ?>
-                            <details class="nav-group" data-nav-group <?= $groupIsOpen($link) ? 'open' : '' ?>>
+                            <?php /* `open` marks the section you are in. On a phone that
+                                     expands the accordion, which is the point. On a
+                                     desktop the panel is an overlay, so it would sit on
+                                     top of the page you just navigated to —
+                                     data-nav-autoopen lets the stylesheet keep it shut
+                                     there until you actually reach for it. */ ?>
+                            <details class="nav-group" data-nav-group
+                                <?= $groupIsOpen($link) ? 'open data-nav-autoopen' : '' ?>>
                                 <summary class="nav-link nav-group-toggle<?= $groupIsOpen($link) ? ' is-active' : '' ?>">
                                     <span><?= e($link['label']) ?></span>
                                     <span class="nav-caret" aria-hidden="true"></span>
@@ -154,7 +161,8 @@ $groupIsOpen = static function (array $link): bool {
                          accordions on a phone and drops down on a desktop
                          without a second structure. */ ?>
                 <?php $accountOpen = is_active_path('/profile'); ?>
-                <details class="nav-group nav-account-group" data-nav-group <?= $accountOpen ? 'open' : '' ?>>
+                <details class="nav-group nav-account-group" data-nav-group
+                    <?= $accountOpen ? 'open data-nav-autoopen' : '' ?>>
                     <summary class="nav-link nav-user nav-group-toggle<?= $accountOpen ? ' is-active' : '' ?>">
                         <span class="avatar" aria-hidden="true"><?= e(mb_strtoupper(mb_substr((string) ($user['name'] ?? '?'), 0, 1))) ?></span>
                         <span class="nav-user-text">

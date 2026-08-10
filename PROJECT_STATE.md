@@ -753,6 +753,15 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 4. **Maintenance** — routine/periodic/ad-hoc schedules, completions with photos,
    automatic next-due calculation, SQL-computed due status, configurable
    "due soon" window, unplanned work logged straight onto an asset.
+   **Four shapes, and all four must stay reachable:** `routine` (a standard
+   cadence — weekly, monthly, annually), `periodic` (any custom interval),
+   `ad-hoc` (a one-off *planned* job, which closes itself once completed), and
+   **unplanned work** — a `maintenance_logs` row with `schedule_id` NULL and no
+   schedule at all, which is the repair nobody saw coming. That last one is
+   recorded, never scheduled, and it has its own front door at
+   `/maintenance/log`. A follow-up check creates an `ad-hoc` schedule
+   deliberately, so "check it again in three weeks" cannot become an accidental
+   recurrence.
 5. **PAT** — `requires_pat` toggle, full per-asset test history, class-conditional
    readings, SQL-computed status in which `Failed` outranks the retest date,
    configurable window and default interval.
@@ -1026,6 +1035,19 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   written inline inside an array literal ends in `)]`, which its SQL regex
   cannot see as a terminator, so it is reported as uncontrolled concatenation.
   Assign the result on its own line.
+- **A `<details>` rendered `open` by the server is an overlay on desktop.**
+  The nav marks the group containing the current page as `open` so a phone's
+  accordion expands. Above 900px the same panel is `position: absolute`, so it
+  landed on top of every page you navigated to and stayed there. Fixed with
+  `data-nav-autoopen`: CSS hides it at desktop widths (no flash, and
+  `:focus-within` keeps it usable with JavaScript off), and the script then
+  closes it properly — leaving it `open` but hidden made the first click
+  *close* it, so a menu took two clicks to appear.
+- **A feature reachable from only one buried place reads as missing.**
+  Unplanned maintenance was only ever linked from inside an asset's Maintenance
+  card, so it looked like the ability had been lost. It now has a front door at
+  `/maintenance/log` with an asset picker, buttons on the maintenance list and
+  history, and a `maintenance` scan mode.
 - **"Tell the user to run X" is only useful if X exists on their machine.**
   Settings → Email said "run composer install"; the server had no Composer, so
   the advice failed with `command not found`. Guidance has to name something

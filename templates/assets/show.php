@@ -257,7 +257,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                     <h2>Maintenance <span class="count-pill"><?= count($schedules) ?></span></h2>
                     <div class="head-actions">
                         <?php if (can('maintenance.complete')): ?>
-                            <a class="btn btn-sm" href="<?= e(url('/assets/' . $id . '/maintenance/log')) ?>">Log work</a>
+                            <a class="btn btn-sm" href="<?= e(url('/assets/' . $id . '/maintenance/log')) ?>">Record work</a>
                         <?php endif; ?>
                         <?php if (can('maintenance.manage')): ?>
                             <a class="btn btn-sm" href="<?= e(url('/maintenance/create?asset=' . $id)) ?>">Add schedule</a>

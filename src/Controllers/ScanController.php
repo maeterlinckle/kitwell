@@ -21,7 +21,7 @@ use App\Models\Hire;
  */
 final class ScanController extends Controller
 {
-    private const MODES = ['view', 'checkout', 'return'];
+    private const MODES = ['view', 'checkout', 'return', 'maintenance'];
 
     public function index(): void
     {
@@ -90,11 +90,13 @@ final class ScanController extends Controller
                 'return_url'  => url('/hires/' . (int) $openHire['id'] . '/return'),
             ],
             'can' => [
-                'checkout' => Auth::can('hires.create') && $blocked === null,
-                'return'   => Auth::can('hires.return') && $openHire !== null,
+                'checkout'    => Auth::can('hires.create') && $blocked === null,
+                'return'      => Auth::can('hires.return') && $openHire !== null,
+                'maintenance' => Auth::can('maintenance.complete'),
             ],
-            'blocked'      => $blocked,
-            'checkout_url' => url('/hires/checkout?asset=' . $assetId),
+            'blocked'         => $blocked,
+            'checkout_url'    => url('/hires/checkout?asset=' . $assetId),
+            'maintenance_url' => url('/assets/' . $assetId . '/maintenance/log'),
         ]);
     }
 
@@ -134,6 +136,12 @@ final class ScanController extends Controller
             }
 
             Response::redirect('/hires/checkout?asset=' . $assetId);
+        }
+
+        // Scanning to record a repair lands on the form, not on the asset page.
+        // Recording the work is the errand; the asset page is a detour.
+        if ($mode === 'maintenance' && Auth::can('maintenance.complete')) {
+            Response::redirect('/assets/' . $assetId . '/maintenance/log');
         }
 
         if ($mode === 'return' && Auth::can('hires.return')) {

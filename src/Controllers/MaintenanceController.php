@@ -20,6 +20,17 @@ use App\Models\MaintenanceSchedule;
 
 final class MaintenanceController extends Controller
 {
+    /**
+     * The follow-up check created by the last recordCompletion(), if any.
+     *
+     * A property rather than a widened return type: both callers already use
+     * the returned log id to anchor their redirect, and only the flash message
+     * cares whether a follow-up was scheduled.
+     *
+     * @var array{id:int,due:string}|null
+     */
+    private ?array $lastFollowUp = null;
+
     /** The work list: everything due, overdue or scheduled. */
     public function index(): void
     {
@@ -213,8 +224,46 @@ final class MaintenanceController extends Controller
         $assetId = (int) $schedule['asset_id'];
         $logId   = $this->recordCompletion($assetId, $schedule, '/maintenance/' . $scheduleId . '/complete');
 
-        Flash::success('Maintenance logged against ' . $schedule['asset_tag'] . '.');
+        Flash::success('Maintenance logged against ' . $schedule['asset_tag'] . '.' . $this->followUpNote());
         Response::redirect('/maintenance/' . $scheduleId . '#log-' . $logId);
+    }
+
+    /** A sentence for the flash message when a follow-up was scheduled too. */
+    private function followUpNote(): string
+    {
+        if ($this->lastFollowUp === null) {
+            return '';
+        }
+
+        return ' A follow-up check is scheduled for ' . format_date($this->lastFollowUp['due']) . '.';
+    }
+
+    /**
+     * The front door for unplanned work.
+     *
+     * Recording a repair that was never on a schedule used to be reachable only
+     * by opening the asset and scrolling to its Maintenance card, which made
+     * a first-class kind of maintenance look like it did not exist. This is the
+     * same lookup-first shape the PAT flow uses: scan or search, then straight
+     * into the form.
+     */
+    public function logChooser(): void
+    {
+        $assetId = (int) Request::query('asset', 0);
+
+        if ($assetId > 0 && Asset::find($assetId) !== null) {
+            Response::redirect('/assets/' . $assetId . '/maintenance/log');
+        }
+
+        $keywords = trim((string) Request::query('q', ''));
+
+        $this->view('maintenance/choose-asset', [
+            'pageTitle' => 'Record maintenance',
+            'keywords'  => $keywords,
+            'assets'    => $keywords === ''
+                ? Asset::recentlyMaintained(15)
+                : Asset::search(['q' => $keywords, 'status' => ['In Stock', 'On Hire', 'In Maintenance']], 1, 25)['rows'],
+        ]);
     }
 
     /** Log unplanned work straight onto an asset, with no schedule involved. */
@@ -246,7 +295,7 @@ final class MaintenanceController extends Controller
 
         $logId = $this->recordCompletion($id, null, '/assets/' . $id . '/maintenance/log');
 
-        Flash::success('Maintenance logged against ' . $asset['asset_tag'] . '.');
+        Flash::success('Maintenance logged against ' . $asset['asset_tag'] . '.' . $this->followUpNote());
         Response::redirect('/assets/' . $id . '#maintenance');
     }
 
@@ -271,12 +320,44 @@ final class MaintenanceController extends Controller
             'condition_after'   => 'in:' . implode(',', Asset::CONDITIONS),
             'next_due_date'     => 'date',
             'notes'             => 'max:5000',
+            'followup_interval' => 'integer|min_value:1|max_value:365',
+            'followup_unit'     => 'in:' . implode(',', MaintenanceSchedule::UNITS),
+            'followup_title'    => 'max:191',
         ], [
-            'performed_on'     => 'Date performed',
-            'maintenance_type' => 'Type of work',
-            'work_done'        => 'Work done',
-            'next_due_date'    => 'Next due date',
+            'performed_on'      => 'Date performed',
+            'maintenance_type'  => 'Type of work',
+            'work_done'         => 'Work done',
+            'next_due_date'     => 'Next due date',
+            'followup_interval' => 'Follow-up interval',
+            'followup_unit'     => 'Follow-up unit',
+            'followup_title'    => 'Follow-up title',
         ], $redirectTo);
+
+        // Worked out before anything is written, so an unusable interval is a
+        // field error rather than a log row with no follow-up attached to it.
+        $followUpDue = null;
+
+        if (Request::boolean('schedule_followup')) {
+            if ((string) $data['followup_interval'] === '') {
+                $this->failValidation(
+                    ['followup_interval' => 'Say how long until the follow-up check, or untick it.'],
+                    $redirectTo
+                );
+            }
+
+            $followUpDue = MaintenanceSchedule::dateAfter(
+                (string) $data['performed_on'],
+                (int) $data['followup_interval'],
+                (string) ($data['followup_unit'] !== '' ? $data['followup_unit'] : 'weeks')
+            );
+
+            if ($followUpDue === null) {
+                $this->failValidation(
+                    ['followup_interval' => 'That follow-up interval could not be turned into a date.'],
+                    $redirectTo
+                );
+            }
+        }
 
         if ($data['performed_on'] > date('Y-m-d')) {
             $this->failValidation(['performed_on' => 'The date performed cannot be in the future.'], $redirectTo);
@@ -319,6 +400,39 @@ final class MaintenanceController extends Controller
             );
         }
 
+        $asset = Asset::find($assetId);
+
+        // "Check this again in three weeks." A one-off schedule, so it shows up
+        // in the maintenance list and the reminders like any other job, and
+        // closes itself once done rather than becoming a recurrence nobody
+        // meant to create.
+        $followUpId = null;
+
+        if ($followUpDue !== null) {
+            $title = (string) $data['followup_title'];
+
+            if ($title === '') {
+                $title = $schedule === null
+                    ? 'Follow-up check'
+                    : 'Follow-up check: ' . str_limit((string) $schedule['title'], 160);
+            }
+
+            $followUpId = MaintenanceSchedule::createFollowUp($assetId, [
+                'title'               => $title,
+                'due_date'            => $followUpDue,
+                'assigned_to_user_id' => $performedByUserId > 0 ? $performedByUserId : null,
+                'instructions'        => "Follow-up on the work recorded on " . format_date($data['performed_on'])
+                    . ":\n\n" . str_limit((string) $data['work_done'], 1000),
+            ]);
+
+            ActivityLog::record(
+                'created',
+                'maintenance_schedule',
+                $followUpId,
+                sprintf('Scheduled a follow-up check on %s for %s', $asset['asset_tag'] ?? ('asset #' . $assetId), format_date($followUpDue))
+            );
+        }
+
         // Carry the recorded condition onto the asset, and put it back in
         // stock if it was sitting in maintenance.
         $assetChanges = [];
@@ -329,8 +443,6 @@ final class MaintenanceController extends Controller
             $assetChanges['condition_rating'] = $data['condition_after'];
         }
 
-        $asset = Asset::find($assetId);
-
         if (Request::boolean('return_to_stock') && $asset !== null && $asset['status'] === 'In Maintenance') {
             $assetChanges['status'] = 'In Stock';
         }
@@ -339,6 +451,8 @@ final class MaintenanceController extends Controller
             $assetChanges['updated_by'] = Auth::id();
             Asset::update($assetId, $assetChanges);
         }
+
+        $this->lastFollowUp = $followUpId === null ? null : ['id' => $followUpId, 'due' => $followUpDue];
 
         ActivityLog::record(
             'maintenance_logged',

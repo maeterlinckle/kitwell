@@ -111,6 +111,33 @@ final class Asset
     }
 
     /**
+     * A short list to start the "record maintenance" picker with.
+     *
+     * Anything currently in maintenance first — that is almost always what the
+     * person is holding — then whatever was worked on most recently. It is a
+     * starting point, not a filter: the picker searches the whole register.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function recentlyMaintained(int $limit = 15): array
+    {
+        return Database::select(
+            self::SELECT . "
+              LEFT JOIN (
+                  SELECT asset_id, MAX(performed_on) AS last_maintained
+                    FROM maintenance_logs
+                   GROUP BY asset_id
+              ) ml ON ml.asset_id = a.id
+              WHERE a.status <> 'Retired'
+              ORDER BY (a.status = 'In Maintenance') DESC,
+                       ml.last_maintained IS NULL,
+                       ml.last_maintained DESC,
+                       a.asset_tag
+              LIMIT " . max(1, min(100, $limit))
+        );
+    }
+
+    /**
      * Search and filter the register.
      *
      * Keyword search is a multi-term LIKE across the identifying columns:

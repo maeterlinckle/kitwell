@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Core\Auth;
 use App\Core\Database;
 use DateTimeImmutable;
 
@@ -373,6 +374,50 @@ final class MaintenanceSchedule
         }
 
         return 'Every ' . $interval . ' ' . $unit;
+    }
+
+    /**
+     * A date this far ahead of a starting point, or null if the interval makes
+     * no sense.
+     *
+     * Shared by the follow-up check on the completion form and anything else
+     * that has to turn "3 weeks" into a date.
+     */
+    public static function dateAfter(string $from, int $interval, string $unit): ?string
+    {
+        if ($interval < 1 || !in_array($unit, self::UNITS, true)) {
+            return null;
+        }
+
+        $start = DateTimeImmutable::createFromFormat('Y-m-d', $from);
+
+        return $start === false ? null : $start->modify(sprintf('+%d %s', $interval, $unit))->format('Y-m-d');
+    }
+
+    /**
+     * Schedule a follow-up check.
+     *
+     * A one-off (`ad-hoc`) schedule: it appears in the maintenance list and the
+     * reminders like anything else, and closes itself once completed, so a
+     * "check the belt again in three weeks" cannot quietly become a recurring
+     * job nobody meant to create.
+     *
+     * @param array<string,mixed> $data title, due_date, instructions, assigned_to_user_id
+     */
+    public static function createFollowUp(int $assetId, array $data): int
+    {
+        return self::create([
+            'asset_id'            => $assetId,
+            'title'               => $data['title'],
+            'maintenance_type'    => 'ad-hoc',
+            'frequency_interval'  => null,
+            'frequency_unit'      => null,
+            'next_due_date'       => $data['due_date'],
+            'assigned_to_user_id' => $data['assigned_to_user_id'] ?? null,
+            'instructions'        => $data['instructions'] ?? null,
+            'is_active'           => 1,
+            'created_by'          => Auth::id(),
+        ]);
     }
 
     /** Record a completion against the schedule itself. */

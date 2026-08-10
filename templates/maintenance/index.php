@@ -25,8 +25,13 @@ $hasFilters = ($filters['q'] ?? '') !== '' || !empty($filters['status']) || !emp
     </div>
     <div class="head-actions">
         <a class="btn" href="<?= e(url('/maintenance/history')) ?>">History</a>
+        <?php /* Unplanned work is a first-class kind of maintenance, so it gets a
+                 first-class button rather than living only inside an asset page. */ ?>
+        <?php if (can('maintenance.complete')): ?>
+            <a class="btn btn-primary" href="<?= e(url('/maintenance/log')) ?>">Record work</a>
+        <?php endif; ?>
         <?php if (can('maintenance.manage')): ?>
-            <a class="btn btn-primary" href="<?= e(url('/maintenance/create')) ?>">New schedule</a>
+            <a class="btn" href="<?= e(url('/maintenance/create')) ?>">New schedule</a>
         <?php endif; ?>
     </div>
 </div>
@@ -161,10 +166,19 @@ $hasFilters = ($filters['q'] ?? '') !== '' || !empty($filters['status']) || !emp
         <p class="muted">
             <?= $hasFilters
                 ? 'Try fewer filters. Closed one-off jobs are hidden unless you tick “Include closed schedules”.'
-                : 'Add a schedule to an asset and it will appear here as it falls due.' ?>
+                : 'Add a schedule to an asset and it will appear here as it falls due. Work that was never
+                   scheduled — a repair, a broken part — is recorded rather than scheduled, and shows up
+                   in the history instead.' ?>
         </p>
-        <?php if (!$hasFilters && can('maintenance.manage')): ?>
-            <a class="btn btn-primary" href="<?= e(url('/maintenance/create')) ?>">Create the first schedule</a>
+        <?php if (!$hasFilters): ?>
+            <div class="form-actions">
+                <?php if (can('maintenance.manage')): ?>
+                    <a class="btn btn-primary" href="<?= e(url('/maintenance/create')) ?>">Create the first schedule</a>
+                <?php endif; ?>
+                <?php if (can('maintenance.complete')): ?>
+                    <a class="btn" href="<?= e(url('/maintenance/log')) ?>">Record unplanned work</a>
+                <?php endif; ?>
+            </div>
         <?php endif; ?>
     </div>
 <?php else: ?>

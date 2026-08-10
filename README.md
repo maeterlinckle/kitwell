@@ -854,13 +854,19 @@ touched.
 
 ### Maintenance
 
-Any asset can carry any number of schedules, in three flavours:
+Maintenance comes in four shapes. The first three are *schedules* — an asset can
+carry any number of them — and the fourth is not scheduled at all.
 
-| Type | Recurs | For |
-|------|--------|-----|
-| **Routine** | Yes, on a standard cadence picked from a list (weekly → annual) | Regular checks |
-| **Periodic** | Yes, on any interval you type (e.g. every 18 months) | Servicing on an unusual cycle |
-| **One-off** | No | A single planned job; it closes itself once completed |
+| Kind | Recurs | For | Where |
+|------|--------|-----|-------|
+| **Routine** | Yes, on a standard cadence picked from a list (weekly → annual) | Things that must happen on a regular basis | Maintenance → New schedule |
+| **Periodic** | Yes, on any interval you type (e.g. every 18 months) | Regular but on an unusual cycle | Maintenance → New schedule |
+| **One-off** | No | A single *planned* job; it closes itself once completed | Maintenance → New schedule |
+| **Unplanned work** | Never | The repair nobody saw coming — a broken part, something you noticed and dealt with | Maintenance → **Record work** |
+
+The fourth is the important distinction: it is **recorded, not scheduled**.
+There is no schedule behind it, because there never was one. It goes straight
+into the asset's history and into Maintenance → History.
 
 Completing a job records the date, who did it (a user *or* a named external
 contractor), the work done, parts, cost, downtime, result and optional photos.
@@ -877,9 +883,27 @@ Deleting a schedule keeps every completion already logged against the asset:
 `maintenance_logs.schedule_id` is set to NULL rather than cascading, because
 history should outlive the plan that produced it.
 
-Unplanned work is logged straight onto an asset (**Log work** on the asset page)
-with no schedule involved — which is how most workshop repairs actually get
-recorded.
+#### Recording unplanned work
+
+Three ways in, because this is how most workshop repairs actually get recorded:
+
+- **Maintenance → Record work** — scan the label, or search the register.
+- **Scan → Record work** — scanning takes you straight to the form.
+- **Record work** on the asset's own page, when you are already looking at it.
+
+None of them needs a schedule to exist first.
+
+#### Follow-up checks
+
+Any completion — scheduled or unplanned — can schedule a **follow-up check**:
+tick the box, say *3 weeks*, and a one-off job appears in the maintenance list
+and in the reminder emails when it falls due. The work you described is copied
+into its instructions, and it is assigned to whoever did the original.
+
+It is deliberately a **one-off**: "check the belt again in three weeks" closes
+itself once done rather than quietly becoming a recurring job nobody meant to
+create. If it turns out the thing does need checking regularly, make it a
+routine or periodic schedule.
 
 #### Overdue and upcoming
 

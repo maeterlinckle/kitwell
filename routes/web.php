@@ -111,6 +111,11 @@ $router->group(['auth'], static function (Router $router): void {
 $router->group(['auth'], static function (Router $router): void {
     $router->get('/maintenance',         [MaintenanceController::class, 'index'],   ['can:maintenance.view'], 'maintenance');
     $router->get('/maintenance/history', [MaintenanceController::class, 'history'], ['can:maintenance.view']);
+
+    // Unplanned work: no schedule exists, so the flow starts by finding the
+    // asset. Registered before the {id} routes for the same reason as the rest.
+    $router->get('/maintenance/log', [MaintenanceController::class, 'logChooser'], ['can:maintenance.complete']);
+
     $router->get('/maintenance/create',  [MaintenanceController::class, 'create'],  ['can:maintenance.manage']);
     $router->post('/maintenance',        [MaintenanceController::class, 'store'],   ['can:maintenance.manage', 'csrf']);
 

@@ -261,6 +261,26 @@
         apply();
     })();
 
+    // --- Checkbox that reveals its own fields --------------------------------
+    // Progressive enhancement: without JavaScript the fields stay visible and
+    // are simply ignored unless the box is ticked, so nothing is unreachable.
+    (function () {
+        var toggles = document.querySelectorAll('[data-toggle-fields]');
+        if (!toggles.length) return;
+
+        toggles.forEach(function (toggle) {
+            var target = document.getElementById(toggle.getAttribute('data-toggle-fields'));
+            if (!target) return;
+
+            function apply() {
+                target.hidden = !toggle.checked;
+            }
+
+            toggle.addEventListener('change', apply);
+            apply();
+        });
+    })();
+
     // Choosing a routine cadence fills in the matching interval fields.
     (function () {
         var preset = document.getElementById('routine_preset');
@@ -544,6 +564,41 @@
     Array.prototype.forEach.call(groups, function (group) {
         group.addEventListener('toggle', function () {
             if (group.open && desktop.matches) closeAll(group);
+        });
+    });
+
+    // A group carrying data-nav-autoopen was opened by the server to show which
+    // section the current page belongs to, not because anyone asked for it.
+    //
+    // On a phone that is an accordion and is exactly what we want. On a desktop
+    // the panel floats over the page, so the stylesheet hides it — but the
+    // element is still `open`, which would make the first click *close* it and
+    // leave the user clicking twice to see a menu. So on desktop, close it
+    // properly and drop the attribute: the highlight on the summary already
+    // says which section you are in.
+    function normaliseAutoOpen() {
+        if (!desktop.matches) return;
+
+        Array.prototype.forEach.call(groups, function (group) {
+            if (!group.hasAttribute('data-nav-autoopen')) return;
+            group.open = false;
+            group.removeAttribute('data-nav-autoopen');
+        });
+    }
+
+    normaliseAutoOpen();
+
+    if (desktop.addEventListener) {
+        desktop.addEventListener('change', normaliseAutoOpen);
+    } else if (desktop.addListener) {
+        desktop.addListener(normaliseAutoOpen);   // Safari < 14
+    }
+
+    // Below the breakpoint the accordion stays open; drop the attribute once
+    // it has been touched so nothing lingers if the window is later widened.
+    Array.prototype.forEach.call(groups, function (group) {
+        group.addEventListener('click', function () {
+            group.removeAttribute('data-nav-autoopen');
         });
     });
 

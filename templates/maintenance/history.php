@@ -22,7 +22,12 @@ $rows = $result['rows'];
             <?php endif; ?>
         </p>
     </div>
-    <a class="btn btn-ghost" href="<?= e(url('/maintenance')) ?>">Back to schedules</a>
+    <div class="head-actions">
+        <?php if (can('maintenance.complete')): ?>
+            <a class="btn btn-primary" href="<?= e(url('/maintenance/log')) ?>">Record work</a>
+        <?php endif; ?>
+        <a class="btn btn-ghost" href="<?= e(url('/maintenance')) ?>">Back to schedules</a>
+    </div>
 </div>
 
 <form method="get" action="<?= e(url('/maintenance/history')) ?>" class="card filter-card">

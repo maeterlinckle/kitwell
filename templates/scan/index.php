@@ -2,18 +2,20 @@
 /**
  * Quick scan.
  *
- * @var string $mode  view | checkout | return
+ * @var string $mode  view | checkout | return | maintenance
  */
 $titles = [
-    'view'     => 'Scan an asset',
-    'checkout' => 'Scan to check out',
-    'return'   => 'Scan to book in',
+    'view'        => 'Scan an asset',
+    'checkout'    => 'Scan to check out',
+    'return'      => 'Scan to book in',
+    'maintenance' => 'Scan to record maintenance',
 ];
 
 $blurbs = [
-    'view'     => 'Scan or type an asset tag to jump straight to it.',
-    'checkout' => 'Scan the item going out. You will be taken straight to the checkout form.',
-    'return'   => 'Scan the item coming back. You will be taken straight to its return form.',
+    'view'        => 'Scan or type an asset tag to jump straight to it.',
+    'checkout'    => 'Scan the item going out. You will be taken straight to the checkout form.',
+    'return'      => 'Scan the item coming back. You will be taken straight to its return form.',
+    'maintenance' => 'Scan the item you have worked on. You will be taken straight to the record form.',
 ];
 ?>
 <div class="page-head">
@@ -22,12 +24,15 @@ $blurbs = [
         <p class="muted"><?= e($blurbs[$mode]) ?></p>
     </div>
     <div class="head-actions">
-        <?php foreach (['view' => 'Look up', 'checkout' => 'Check out', 'return' => 'Book in'] as $option => $label): ?>
+        <?php foreach (['view' => 'Look up', 'checkout' => 'Check out', 'return' => 'Book in', 'maintenance' => 'Record work'] as $option => $label): ?>
             <?php
             if ($option === 'checkout' && !can('hires.create')) {
                 continue;
             }
             if ($option === 'return' && !can('hires.return')) {
+                continue;
+            }
+            if ($option === 'maintenance' && !can('maintenance.complete')) {
                 continue;
             }
             ?>

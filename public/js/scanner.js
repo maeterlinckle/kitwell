@@ -355,12 +355,20 @@
             html += '<a class="btn btn-primary btn-lg" href="' + escapeHtml(data.hire.return_url) + '">Book in</a>';
         }
 
+        if (mode === 'maintenance' && data.can.maintenance) {
+            html += '<a class="btn btn-primary btn-lg" href="' + escapeHtml(data.maintenance_url) + '">Record work</a>';
+        }
+
         if (mode !== 'checkout' && data.can.checkout) {
             html += '<a class="btn" href="' + escapeHtml(data.checkout_url) + '">Check out</a>';
         }
 
         if (mode !== 'return' && data.can.return) {
             html += '<a class="btn" href="' + escapeHtml(data.hire.return_url) + '">Book in</a>';
+        }
+
+        if (mode !== 'maintenance' && data.can.maintenance) {
+            html += '<a class="btn" href="' + escapeHtml(data.maintenance_url) + '">Record work</a>';
         }
 
         html += '<a class="btn' + (mode === 'view' ? ' btn-primary btn-lg' : '') + '" href="'

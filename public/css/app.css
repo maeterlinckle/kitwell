@@ -2013,6 +2013,18 @@ tr.preview-warning td { background: var(--warn-soft); }
 
     .nav-group-toggle { width: auto; }
 
+    /* A group is rendered `open` when the current page is inside it, so the
+       menu shows where you are. On a phone that is an accordion and it simply
+       expands. Here the panel floats over the page, so an auto-opened one
+       would land on top of the page you just navigated to and stay there.
+       Keep it shut until the group is actually reached for.
+
+       :focus-within rather than a class, so this still works with JavaScript
+       off: clicking the summary focuses it and the panel appears. The script
+       drops the attribute on first interaction, after which the group behaves
+       like any other. */
+    .nav-group[data-nav-autoopen]:not(:focus-within) > .nav-sublist { display: none; }
+
     /* The account menu sits at the right-hand end of the bar, so its panel
        hangs from the right edge — anchored left it would run off the page. */
     .nav-account-group > .nav-sublist { left: auto; right: 0; }
