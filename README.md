@@ -126,12 +126,26 @@ on older installs — same client) and run:
 ```sql
 CREATE DATABASE asset_register CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'asset_register'@'localhost' IDENTIFIED BY 'a-long-random-password';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON asset_register.* TO 'asset_register'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES ON asset_register.* TO 'asset_register'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-The application never needs `DROP`, so it is deliberately not granted. Add it
-temporarily only if you intend to rebuild the schema from scratch.
+`DROP` is needed by the **migrations**, not by the running application: MariaDB
+requires `ALTER` *and* `DROP` on the source table of a `RENAME TABLE`, which
+migration 017 uses. Without it an upgrade stops with
+`ERROR 1142: DROP command denied`.
+
+Withholding it bought less than it appeared to — the same user already holds
+`DELETE` (empty every table) and `ALTER` (drop any column or index), so it
+blocked one verb while leaving equivalent damage available two other ways.
+
+What is still withheld is the part that matters: **no `GRANT OPTION`, no
+`CREATE USER`, no `FILE`, no `SUPER`, no `PROCESS`, and no rights on any other
+database.** A compromise stays inside this one schema.
+
+> **Upgrading an install made before 2026-08-11?** It has the older grant.
+> `sudo ./manage.sh db-grant` repairs it, or run the `GRANT` above again.
+> `manage.sh doctor` now checks for this.
 
 ### 3. Configure the environment
 

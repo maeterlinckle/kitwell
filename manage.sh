@@ -65,6 +65,8 @@ Application
   set-setting KEY VALUE       change one
   config KEY [VALUE]          read or change a value in .env
   migrate [--status]          apply pending database migrations
+  db-grant                    re-apply the database grant (fixes "DROP command
+                              denied" from a pre-2026-08-11 install)
   seed                        load the demo data (never on a live system)
   refresh-overdue             recompute the stored overdue flag on hires
   prune-activity [DAYS]       delete audit rows older than DAYS (default 365)
@@ -357,6 +359,57 @@ cmd_seed() {
 }
 
 cmd_refresh_overdue() { console hires:refresh-overdue; }
+
+#
+# Re-issue the database grant.
+#
+# Installs made before this fix gave the application user everything except
+# DROP, on the reasoning that the application never issues one. Its *migrations*
+# do: RENAME TABLE needs ALTER and DROP on the source table, so migration 017
+# stopped dead with "ERROR 1142: DROP command denied". This repairs an existing
+# install without touching the data or the password.
+#
+cmd_db_grant() {
+    require_root db-grant
+    [ -n "$DB_CLIENT" ] || die "No mariadb/mysql client is installed."
+
+    local db user
+    db="$(env_get DB_DATABASE)"
+    user="$(env_get DB_USERNAME)"
+
+    [ -n "$db" ] && [ -n "$user" ] || die "Could not read DB_DATABASE and DB_USERNAME from $ENV_FILE."
+
+    if [ -z "$(db_dump_args)" ]; then
+        die "This needs the MariaDB root account over the local socket, which is not available.
+  Run this by hand as a database administrator:
+
+    GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES
+      ON \`${db}\`.* TO '${user}'@'localhost';
+    FLUSH PRIVILEGES;"
+    fi
+
+    step "Re-applying the database grant"
+    say "  $user@localhost on $db"
+
+    # Deliberately not REVOKE-then-GRANT: a failure between the two would leave
+    # the site unable to reach its own database. GRANT is additive, so the
+    # application keeps working throughout.
+    "$DB_CLIENT" -u root <<SQL
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES ON \`${db}\`.* TO '${user}'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+
+    ok "Grant applied"
+    say ""
+    say "  Now in effect:"
+    "$DB_CLIENT" -u root -N -B -e "SHOW GRANTS FOR '${user}'@'localhost'" \
+        | grep -F "\`${db}\`" | sed 's/^/    /' || true
+    say ""
+    say "  Still withheld: GRANT OPTION, CREATE USER, FILE, SUPER, PROCESS, and"
+    say "  any rights at all on another database."
+    say ""
+    say "  If a migration failed before this, run it again:  $0 migrate"
+}
 
 cmd_mail_status() { console mail:status; }
 
@@ -754,6 +807,7 @@ case "$COMMAND" in
     migrate)         cmd_migrate "$@" ;;
     seed)            cmd_seed ;;
     refresh-overdue) cmd_refresh_overdue ;;
+    db-grant)        cmd_db_grant ;;
     mail-status)     cmd_mail_status ;;
     mail-test)       cmd_mail_test "${1:-}" ;;
     send-reminders)  cmd_send_reminders "$@" ;;

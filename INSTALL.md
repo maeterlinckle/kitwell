@@ -98,8 +98,11 @@ a database password. (`Compress-Archive` includes dotfiles.)
 4. **Shows the plan and waits for a yes.** Nothing has changed up to this point.
 5. **Installs the packages**, starts and enables MariaDB and the web server.
 6. **Creates the database** and a user with exactly the rights the application
-   needs — `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES`.
-   No `DROP`: nothing in the application ever issues one.
+   and its migrations need — `SELECT, INSERT, UPDATE, DELETE, CREATE, DROP,
+   ALTER, INDEX, REFERENCES` on that one database and nothing else.
+   `DROP` is there for the migrations: `RENAME TABLE` requires it on the source
+   table. Still withheld: `GRANT OPTION`, `CREATE USER`, `FILE`, `SUPER`,
+   `PROCESS`, and any rights on another database.
 7. **Copies the files**, leaving out `.git`, `.env`, `vendor/` and the contents
    of `storage/`.
 8. **Writes `.env`** with a generated 28-character database password and a

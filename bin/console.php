@@ -315,6 +315,31 @@ function cmdDoctor(array $argv): int
             $pending === [] ? count($migrator->applied()) . ' applied, none pending' : count($pending) . ' pending — run `php bin/migrate.php`'
         );
 
+        // A grant that cannot run a migration is a problem you want to find on
+        // a quiet afternoon, not halfway through an upgrade. Installs made
+        // before 2026-08-11 withheld DROP, which RENAME TABLE requires.
+        try {
+            $grants  = Database::select('SHOW GRANTS FOR CURRENT_USER()');
+            $all     = strtoupper(implode(' ', array_map(static fn (array $r): string => (string) reset($r), $grants)));
+            $missing = [];
+
+            foreach (['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER', 'INDEX', 'REFERENCES'] as $privilege) {
+                if (!str_contains($all, 'ALL PRIVILEGES') && !str_contains($all, $privilege)) {
+                    $missing[] = $privilege;
+                }
+            }
+
+            $check(
+                'Database privileges',
+                $missing === [] ? 'ok' : 'FAIL',
+                $missing === []
+                    ? 'enough to run migrations'
+                    : 'missing ' . implode(', ', $missing) . ' — run `sudo ./manage.sh db-grant`'
+            );
+        } catch (Throwable $e) {
+            $check('Database privileges', 'WARN', 'could not be read: ' . $e->getMessage());
+        }
+
         $admins = User::countActiveAdmins();
         $check('Active administrators', $admins > 0 ? 'ok' : 'FAIL', (string) $admins);
 

@@ -883,7 +883,19 @@ Decisions worth keeping:
 - **The installer never adds a third-party repository silently.** On Debian and
   Ubuntu releases whose own PHP is older than 8.1 it offers `deb.sury.org` /
   `ppa:ondrej/php` and stops if you decline.
-- **The database user is granted exactly the README's rights and no `DROP`.**
+- **The database user is granted exactly the README's rights, on one database.**
+  `DROP` **is** included, since 2026-08-11. It was originally withheld on the
+  reasoning that "the application never issues one" — true of the application,
+  false of its migrations: `RENAME TABLE` requires `ALTER` *and* `DROP` on the
+  source table, so migration 017 failed on every existing install with
+  `ERROR 1142: DROP command denied`. Withholding it also bought less than it
+  looked: the same user holds `DELETE` and `ALTER`, which between them can empty
+  every table and dismantle the schema. What is still withheld is the part that
+  matters — `GRANT OPTION`, `CREATE USER`, `FILE`, `SUPER`, `PROCESS`, and any
+  rights on another database.
+  `manage.sh db-grant` repairs an older install; `console.php doctor` checks for
+  it; and `Migrator` turns error 1142 into those instructions rather than a raw
+  SQLSTATE.
 - **Backups prefer root over the local socket**, so the application user does
   not need rights beyond its own database.
 - **The installer generates `APP_KEY`** so email can be configured from the
@@ -1005,6 +1017,11 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   written inline inside an array literal ends in `)]`, which its SQL regex
   cannot see as a terminator, so it is reported as uncontrolled concatenation.
   Assign the result on its own line.
+- **A migration can need a privilege the application never uses.** `RENAME
+  TABLE` requires `ALTER` **and `DROP`** on the source table; so does
+  `ALTER TABLE … RENAME TO`. Reasoning about the grant from "what does the
+  running code issue?" is how migration 017 shipped un-runnable on every
+  existing install. **Check the grant against the migrations, not the models.**
 - **Never name a view variable `$template`.** `View::renderFile(string $template,
   array $data)` takes the template path in a parameter of that name, and its
   `extract($data, EXTR_SKIP)` therefore *silently drops* your variable — the

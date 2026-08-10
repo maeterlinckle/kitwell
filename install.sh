@@ -878,12 +878,28 @@ if db_root -N -B -e "SHOW DATABASES LIKE '${db_name_sql}'" | grep -q .; then
     db_existed=yes
 fi
 
-# The application never issues DROP, so it is deliberately not granted.
+# DROP is included, and that is a correction rather than a relaxation.
+#
+# This grant originally withheld DROP on the reasoning that "the application
+# never issues one". That is true of the *application* but not of its
+# migrations: `RENAME TABLE` requires ALTER **and DROP** on the source table,
+# so migration 017 (loans -> hires) failed on every existing install with
+# "ERROR 1142: DROP command denied". A database user that cannot migrate the
+# database it owns is not a safe configuration, it is a broken one.
+#
+# What withholding DROP actually bought was thinner than it looked: the same
+# user already holds DELETE (empty every table) and ALTER (drop any column or
+# index). It blocked exactly one verb while leaving the equivalent damage
+# available by two other routes.
+#
+# Still withheld, and these are the ones that matter: no GRANT OPTION, no
+# CREATE USER, no FILE, no SUPER, no PROCESS, and no rights on any other
+# database. A compromise stays inside this schema.
 db_root <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${db_user_sql}'@'localhost' IDENTIFIED BY '${db_pass_sql}';
 ALTER USER '${db_user_sql}'@'localhost' IDENTIFIED BY '${db_pass_sql}';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON \`${DB_NAME}\`.* TO '${db_user_sql}'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES ON \`${DB_NAME}\`.* TO '${db_user_sql}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 
@@ -892,7 +908,7 @@ if [ "$db_existed" = yes ]; then
 else
     ok "Created the database '$DB_NAME'"
 fi
-ok "Granted '$DB_USER'@'localhost' the rights the application needs (no DROP)"
+ok "Granted '$DB_USER'@'localhost' the rights the application and its migrations need"
 
 # ---------------------------------------------------------------------------
 # 8. Copy the files

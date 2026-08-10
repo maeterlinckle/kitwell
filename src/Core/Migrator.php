@@ -85,7 +85,13 @@ final class Migrator
                     Database::connection()->exec($statement);
                 } catch (\PDOException $e) {
                     throw new RuntimeException(
-                        sprintf("Migration %s failed:\n%s\n\nStatement:\n%s", $file, $e->getMessage(), $statement),
+                        sprintf(
+                            "Migration %s failed:\n%s\n\nStatement:\n%s%s",
+                            $file,
+                            $e->getMessage(),
+                            $statement,
+                            self::advice($e)
+                        ),
                         0,
                         $e
                     );
@@ -101,6 +107,42 @@ final class Migrator
         }
 
         return $done;
+    }
+
+    /**
+     * Turn the handful of database errors that have an obvious cure into
+     * instructions, rather than leaving an operator holding a raw SQLSTATE
+     * halfway through an upgrade.
+     *
+     * Only failures with a single, unambiguous fix belong here. Guessing at
+     * anything else would be worse than saying nothing.
+     */
+    private static function advice(\PDOException $e): string
+    {
+        $message = $e->getMessage();
+
+        // 1142: the grant is missing a verb the migration needs. Installs made
+        // before 2026-08-11 withheld DROP, which RENAME TABLE requires.
+        if (str_contains($message, '1142') && str_contains($message, 'DROP command denied')) {
+            return "\n\nThe database user does not hold DROP, which RENAME TABLE requires."
+                . "\nInstalls made before 2026-08-11 withheld it. Nothing has been changed —"
+                . "\nfix the grant and run this again:"
+                . "\n\n    sudo ./manage.sh db-grant"
+                . "\n    sudo ./manage.sh migrate"
+                . "\n\nOr by hand, as a database administrator:"
+                . "\n\n    GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES"
+                . "\n      ON `" . (string) Config::get('database.database') . "`.*"
+                . "\n      TO '" . (string) Config::get('database.username') . "'@'localhost';"
+                . "\n    FLUSH PRIVILEGES;";
+        }
+
+        if (str_contains($message, '1142') || str_contains($message, '1044') || str_contains($message, '1045')) {
+            return "\n\nThis is a database permissions problem, not a fault in the migration."
+                . "\nCheck what the application's user is allowed to do:"
+                . "\n\n    SHOW GRANTS FOR '" . (string) Config::get('database.username') . "'@'localhost';";
+        }
+
+        return '';
     }
 
     /**
