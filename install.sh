@@ -897,7 +897,7 @@ fi
 mkdir -p "$INSTALL_DIR/storage/logs" \
          "$INSTALL_DIR/storage/uploads/assets" \
          "$INSTALL_DIR/storage/uploads/maintenance" \
-         "$INSTALL_DIR/storage/uploads/loans" \
+         "$INSTALL_DIR/storage/uploads/hires" \
          "$INSTALL_DIR/storage/uploads/imports"
 
 if have composer && [ -f "$INSTALL_DIR/composer.json" ]; then

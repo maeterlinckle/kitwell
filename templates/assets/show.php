@@ -15,9 +15,9 @@ use App\Core\Upload;
  * @var array<int,array<string,mixed>> $maintenanceLogs
  * @var array<int,array<string,mixed>> $patRecords
  * @var array<string,mixed>|null $patStatus
- * @var array<string,mixed>|null $openLoan
- * @var string|null $loanBlocked
- * @var array<int,array<string,mixed>> $loanHistory
+ * @var array<string,mixed>|null $openHire
+ * @var string|null $hireBlocked
+ * @var array<int,array<string,mixed>> $hireHistory
  * @var array<int,array<string,mixed>> $history
  */
 $id       = (int) $asset['id'];
@@ -34,8 +34,8 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <?php if ((int) $asset['requires_pat'] === 1): ?>
                 <span class="badge badge-warn">Requires PAT</span>
             <?php endif; ?>
-            <?php if ((int) $asset['is_loanable'] === 0): ?>
-                <span class="badge badge-muted">Not loanable</span>
+            <?php if ((int) $asset['is_hireable'] === 0): ?>
+                <span class="badge badge-muted">Not hireable</span>
             <?php endif; ?>
             <?php if ($asset['parent_asset_id'] !== null): ?>
                 <span class="badge badge-role"><?= e($asset['relationship_type'] ?? 'sub-asset') ?> of
@@ -46,10 +46,10 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
     </div>
 
     <div class="head-actions">
-        <?php if ($openLoan !== null && can('loans.return')): ?>
-            <a class="btn btn-primary" href="<?= e(url('/loans/' . $openLoan['id'] . '/return')) ?>">Book in</a>
-        <?php elseif ($openLoan === null && can('loans.create') && $loanBlocked === null): ?>
-            <a class="btn btn-primary" href="<?= e(url('/loans/checkout?asset=' . $id)) ?>">Check out</a>
+        <?php if ($openHire !== null && can('hires.return')): ?>
+            <a class="btn btn-primary" href="<?= e(url('/hires/' . $openHire['id'] . '/return')) ?>">Book in</a>
+        <?php elseif ($openHire === null && can('hires.create') && $hireBlocked === null): ?>
+            <a class="btn btn-primary" href="<?= e(url('/hires/checkout?asset=' . $id)) ?>">Check out</a>
         <?php endif; ?>
         <?php if (can('assets.edit')): ?>
             <a class="btn" href="<?= e(url('/assets/' . $id . '/edit')) ?>">Edit</a>
@@ -64,17 +64,17 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
     </div>
 </div>
 
-<?php if ($openLoan !== null && can('loans.view')): ?>
-    <div class="loan-banner <?= $openLoan['effective_status'] === 'Overdue' ? 'is-overdue' : '' ?>">
-        <div class="loan-banner-main">
-            <span class="loan-banner-label">On loan</span>
-            <span class="loan-banner-headline">
-                With <a href="<?= e(url('/borrowers/' . $openLoan['borrower_id'])) ?>"><?= e($openLoan['borrower_name']) ?></a>
+<?php if ($openHire !== null && can('hires.view')): ?>
+    <div class="hire-banner <?= $openHire['effective_status'] === 'Overdue' ? 'is-overdue' : '' ?>">
+        <div class="hire-banner-main">
+            <span class="hire-banner-label">On hire</span>
+            <span class="hire-banner-headline">
+                With <a href="<?= e(url('/hirers/' . $openHire['hirer_id'])) ?>"><?= e($openHire['hirer_name']) ?></a>
             </span>
-            <span class="loan-banner-detail">
-                Out since <?= e(format_date($openLoan['checked_out_at'])) ?> ·
-                due back <?= e(format_date($openLoan['due_back_date'])) ?>
-                <?php $d = (int) $openLoan['days_until_due']; ?>
+            <span class="hire-banner-detail">
+                Out since <?= e(format_date($openHire['checked_out_at'])) ?> ·
+                due back <?= e(format_date($openHire['due_back_date'])) ?>
+                <?php $d = (int) $openHire['days_until_due']; ?>
                 <?php if ($d < 0): ?>
                     (<?= abs($d) ?> day<?= abs($d) === 1 ? '' : 's' ?> overdue)
                 <?php elseif ($d === 0): ?>
@@ -84,15 +84,15 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                 <?php endif; ?>
             </span>
         </div>
-        <div class="loan-banner-actions">
-            <a class="btn btn-sm" href="<?= e(url('/loans/' . $openLoan['id'])) ?>">Loan details</a>
-            <?php if (can('loans.return')): ?>
-                <a class="btn btn-sm btn-primary" href="<?= e(url('/loans/' . $openLoan['id'] . '/return')) ?>">Book in</a>
+        <div class="hire-banner-actions">
+            <a class="btn btn-sm" href="<?= e(url('/hires/' . $openHire['id'])) ?>">Hire details</a>
+            <?php if (can('hires.return')): ?>
+                <a class="btn btn-sm btn-primary" href="<?= e(url('/hires/' . $openHire['id'] . '/return')) ?>">Book in</a>
             <?php endif; ?>
         </div>
     </div>
-<?php elseif ($loanBlocked !== null && can('loans.create') && !$retired): ?>
-    <div class="flash flash-info"><span class="flash-text"><?= e($loanBlocked) ?></span></div>
+<?php elseif ($hireBlocked !== null && can('hires.create') && !$retired): ?>
+    <div class="flash flash-info"><span class="flash-text"><?= e($hireBlocked) ?></span></div>
 <?php endif; ?>
 
 <?php if (can('pat.view') && ((int) $asset['requires_pat'] === 1 || (int) ($patStatus['test_count'] ?? 0) > 0)): ?>
@@ -334,7 +334,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <?php if ($photos === []): ?>
                 <p class="muted">
                     No photos yet. Adding them over time builds a dated record of this item's
-                    condition — worth doing before and after a loan.
+                    condition — worth doing before and after a hire.
                 </p>
             <?php else: ?>
                 <?= partial('partials/photo-gallery', [
@@ -408,28 +408,28 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <?php endif; ?>
         </div>
 
-        <?php if (can('loans.view') && $loanHistory !== []): ?>
-            <div class="card" id="loans">
+        <?php if (can('hires.view') && $hireHistory !== []): ?>
+            <div class="card" id="hires">
                 <div class="card-head">
-                    <h2>Loan history <span class="count-pill"><?= count($loanHistory) ?></span></h2>
+                    <h2>Hire history <span class="count-pill"><?= count($hireHistory) ?></span></h2>
                 </div>
                 <div class="table-wrap">
                     <table class="table table-compact">
                         <thead>
                         <tr>
-                            <th scope="col">Borrower</th>
+                            <th scope="col">Hirer</th>
                             <th scope="col">Out</th>
                             <th scope="col">Due</th>
                             <th scope="col">Returned</th>
                         </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($loanHistory as $entry): ?>
+                        <?php foreach ($hireHistory as $entry): ?>
                             <tr>
                                 <td>
-                                    <a href="<?= e(url('/loans/' . $entry['id'])) ?>"><?= e($entry['borrower_name']) ?></a>
+                                    <a href="<?= e(url('/hires/' . $entry['id'])) ?>"><?= e($entry['hirer_name']) ?></a>
                                     <div class="cell-sub">
-                                        <span class="badge loan-<?= e(strtolower((string) $entry['effective_status'])) ?>">
+                                        <span class="badge hire-<?= e(strtolower((string) $entry['effective_status'])) ?>">
                                             <?= e($entry['effective_status']) ?>
                                         </span>
                                     </div>
@@ -496,7 +496,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                         </form>
                     <?php endif; ?>
                 <?php elseif (can('assets.edit')): ?>
-                    <p class="muted">Archiving keeps every record — history, PAT results and loans — but takes the asset out of day-to-day lists.</p>
+                    <p class="muted">Archiving keeps every record — history, PAT results and hires — but takes the asset out of day-to-day lists.</p>
                     <form method="post" action="<?= e(url('/assets/' . $id . '/archive')) ?>">
                         <?= csrf_field() ?>
                         <button type="submit" class="btn btn-warning btn-block"
@@ -513,7 +513,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                                 data-confirm="Permanently delete <?= e($asset['asset_tag']) ?> and its files? This cannot be undone.">
                             Delete permanently
                         </button>
-                        <p class="field-hint">Only possible while the asset has no loan, PAT or maintenance history.</p>
+                        <p class="field-hint">Only possible while the asset has no hire, PAT or maintenance history.</p>
                     </form>
                 <?php endif; ?>
             </div>

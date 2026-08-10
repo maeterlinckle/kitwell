@@ -1,50 +1,104 @@
 <?php
 /**
- * Responsive navigation. Items are filtered by permission, so a user only ever
- * sees what their role can actually reach.
+ * Responsive navigation.
+ *
+ * Six top-level destinations, with the rarely-used ones grouped underneath:
+ * PAT under Maintenance, Hirers under Hires, and the whole admin area plus the
+ * CSV tools under Settings. Everything is filtered by permission, so a user
+ * only ever sees what their role can actually reach — and a group with nothing
+ * visible in it disappears entirely rather than opening onto an empty list.
+ *
+ * Desktop and mobile render from the same markup on purpose. A group is a
+ * <details> element: on a phone it is an accordion inside the slide-out menu,
+ * on a desktop the same element is styled as a drop-down. There is no second
+ * structure to keep in step, and it works with JavaScript switched off.
  */
 $user = auth_user();
 
-// 'built' marks sections that exist yet. Unbuilt ones are shown greyed out so
-// the shape of the system is visible without handing anyone a 404.
+/**
+ * A nav entry. 'children' makes it a group; the parent's own href is not a
+ * destination in that case, only a label.
+ */
 $links = [
-    // Hidden from borrowers: the dashboard only redirects them to My loans,
-    // so showing both would be two links to the same page.
-    ['label' => 'Dashboard',   'href' => '/',            'permission' => null,               'built' => true,
-     'unless_all' => ['assets.view', 'loans.view', 'maintenance.view', 'pat.view']],
-    ['label' => 'Assets',      'href' => '/assets',      'permission' => 'assets.view',      'built' => true],
-    ['label' => 'Maintenance', 'href' => '/maintenance', 'permission' => 'maintenance.view', 'built' => true],
-    ['label' => 'PAT',         'href' => '/pat',         'permission' => 'pat.view',         'built' => true],
-    ['label' => 'Loans',       'href' => '/loans',       'permission' => 'loans.view',       'built' => true],
-    ['label' => 'My loans',    'href' => '/my-loans',    'permission' => 'loans.view_own',   'built' => true, 'unless' => 'loans.view'],
-    ['label' => 'Borrowers',   'href' => '/borrowers',   'permission' => 'borrowers.view',   'built' => true],
-    ['label' => 'Reports',     'href' => '/reports',     'permission' => 'reports.view',     'built' => true],
+    // Hidden from hirers: the dashboard only redirects them to My hires, so
+    // showing both would be two links to the same page.
+    ['label' => 'Dashboard', 'href' => '/', 'permission' => null,
+     'unless_all' => ['assets.view', 'hires.view', 'maintenance.view', 'pat.view']],
+
+    ['label' => 'Assets', 'href' => '/assets', 'permission' => 'assets.view'],
+
+    ['label' => 'Maintenance', 'href' => '/maintenance', 'permission' => null, 'children' => [
+        ['label' => 'Schedules',   'href' => '/maintenance', 'permission' => 'maintenance.view'],
+        ['label' => 'PAT records', 'href' => '/pat',         'permission' => 'pat.view'],
+    ]],
+
+    ['label' => 'Hires', 'href' => '/hires', 'permission' => null, 'children' => [
+        ['label' => 'Current & history', 'href' => '/hires',  'permission' => 'hires.view'],
+        ['label' => 'Hirers',            'href' => '/hirers', 'permission' => 'hirers.view'],
+    ]],
+
+    // A hirer sees only their own, and has no group to nest it under.
+    ['label' => 'My hires', 'href' => '/my-hires', 'permission' => 'hires.view_own', 'unless' => 'hires.view'],
+
+    ['label' => 'Reports', 'href' => '/reports', 'permission' => 'reports.view'],
+
+    // Everything occasional lives here: set up once, visited rarely. The CSV
+    // tools are here rather than in the day-to-day flow for the same reason.
+    ['label' => 'Settings', 'href' => '/admin/settings', 'permission' => null, 'children' => [
+        ['label' => 'Users',        'href' => '/admin/users',      'permission' => 'users.view'],
+        ['label' => 'Roles',        'href' => '/admin/roles',      'permission' => 'roles.manage'],
+        ['label' => 'Categories',   'href' => '/admin/categories', 'permission' => 'categories.manage'],
+        ['label' => 'Locations',    'href' => '/admin/locations',  'permission' => 'locations.manage'],
+        ['label' => 'Activity log', 'href' => '/admin/activity',   'permission' => 'audit.view'],
+        ['label' => 'Import CSV',   'href' => '/import',           'permission' => 'assets.create'],
+        ['label' => 'Export assets','href' => '/assets/export',    'permission' => 'assets.export'],
+        ['label' => 'Application settings', 'href' => '/admin/settings', 'permission' => 'settings.manage'],
+    ]],
 ];
 
-$adminLinks = [
-    ['label' => 'Import',       'href' => '/import',           'permission' => 'assets.create'],
-    ['label' => 'Categories',   'href' => '/admin/categories', 'permission' => 'categories.manage'],
-    ['label' => 'Locations',    'href' => '/admin/locations',  'permission' => 'locations.manage'],
-    ['label' => 'Users',        'href' => '/admin/users',      'permission' => 'users.view'],
-    ['label' => 'Roles',        'href' => '/admin/roles',      'permission' => 'roles.manage'],
-    ['label' => 'Settings',     'href' => '/admin/settings',   'permission' => 'settings.manage'],
-    ['label' => 'Activity log', 'href' => '/admin/activity',   'permission' => 'audit.view'],
-];
-
-$visible = array_filter($links, static function (array $link): bool {
+/** Can this user see this entry at all? */
+$allowed = static function (array $link): bool {
     if (isset($link['unless']) && can((string) $link['unless'])) {
         return false;
     }
 
-    // Hide when the user holds none of the listed permissions.
     if (isset($link['unless_all']) && !can_any(...$link['unless_all'])) {
         return false;
     }
 
     return $link['permission'] === null || can((string) $link['permission']);
-});
+};
 
-$visibleAdmin = array_filter($adminLinks, static fn (array $link): bool => can((string) $link['permission']));
+// Resolve groups: drop the children a user cannot see, then drop the group if
+// nothing is left in it.
+$visible = [];
+
+foreach ($links as $link) {
+    if (!$allowed($link)) {
+        continue;
+    }
+
+    if (isset($link['children'])) {
+        $link['children'] = array_values(array_filter($link['children'], $allowed));
+
+        if ($link['children'] === []) {
+            continue;
+        }
+    }
+
+    $visible[] = $link;
+}
+
+/** Is the current page this entry, or anything inside it? */
+$groupIsOpen = static function (array $link): bool {
+    foreach ($link['children'] ?? [] as $child) {
+        if (is_active_path($child['href'])) {
+            return true;
+        }
+    }
+
+    return false;
+};
 ?>
 <header class="site-header">
     <div class="container header-inner">
@@ -53,49 +107,37 @@ $visibleAdmin = array_filter($adminLinks, static fn (array $link): bool => can((
             <span class="brand-name"><?= e($appName ?? 'Asset Register') ?></span>
         </a>
 
-        <?php if (can('assets.view')): ?>
-            <a class="btn btn-primary btn-scan" href="<?= e(url('/scan')) ?>" title="Scan a barcode">
-                <span class="scan-icon" aria-hidden="true"></span>
-                <span class="btn-label">Scan</span>
-            </a>
-        <?php endif; ?>
-
-        <button type="button" class="nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="primary-nav">
-            <span class="nav-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
-            <span class="sr-only">Menu</span>
-        </button>
-
         <nav id="primary-nav" class="primary-nav" data-nav aria-label="Main">
             <ul class="nav-list">
                 <?php foreach ($visible as $link): ?>
-                    <li>
-                        <?php if ($link['built']): ?>
+                    <li class="<?= isset($link['children']) ? 'nav-item nav-item-group' : 'nav-item' ?>">
+                        <?php if (!isset($link['children'])): ?>
                             <a href="<?= e(url($link['href'])) ?>"
                                class="nav-link<?= is_active_path($link['href']) ? ' is-active' : '' ?>"
                                 <?= is_active_path($link['href']) ? 'aria-current="page"' : '' ?>>
                                 <?= e($link['label']) ?>
                             </a>
                         <?php else: ?>
-                            <span class="nav-link is-pending" aria-disabled="true">
-                                <?= e($link['label']) ?>
-                                <span class="badge badge-muted">Soon</span>
-                            </span>
+                            <details class="nav-group" data-nav-group <?= $groupIsOpen($link) ? 'open' : '' ?>>
+                                <summary class="nav-link nav-group-toggle<?= $groupIsOpen($link) ? ' is-active' : '' ?>">
+                                    <span><?= e($link['label']) ?></span>
+                                    <span class="nav-caret" aria-hidden="true"></span>
+                                </summary>
+                                <ul class="nav-sublist">
+                                    <?php foreach ($link['children'] as $child): ?>
+                                        <li>
+                                            <a href="<?= e(url($child['href'])) ?>"
+                                               class="nav-link nav-sublink<?= is_active_path($child['href']) ? ' is-active' : '' ?>"
+                                                <?= is_active_path($child['href']) ? 'aria-current="page"' : '' ?>>
+                                                <?= e($child['label']) ?>
+                                            </a>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </details>
                         <?php endif; ?>
                     </li>
                 <?php endforeach; ?>
-
-                <?php if ($visibleAdmin !== []): ?>
-                    <li class="nav-divider" aria-hidden="true"></li>
-                    <?php foreach ($visibleAdmin as $link): ?>
-                        <li>
-                            <a href="<?= e(url($link['href'])) ?>"
-                               class="nav-link<?= is_active_path($link['href']) ? ' is-active' : '' ?>"
-                                <?= is_active_path($link['href']) ? 'aria-current="page"' : '' ?>>
-                                <?= e($link['label']) ?>
-                            </a>
-                        </li>
-                    <?php endforeach; ?>
-                <?php endif; ?>
             </ul>
 
             <div class="nav-account">
@@ -118,5 +160,22 @@ $visibleAdmin = array_filter($adminLinks, static fn (array $link): bool => can((
                 </form>
             </div>
         </nav>
+
+        <?php /* Quick actions, pinned right on both desktop and mobile. Scanning
+                 is a primary workshop action, not a menu destination, so it stays
+                 out of the menu and out of the hamburger. */ ?>
+        <div class="header-actions">
+            <?php if (can('assets.view')): ?>
+                <a class="scan-action" href="<?= e(url('/scan')) ?>" title="Scan a barcode" aria-label="Scan a barcode">
+                    <span class="scan-icon" aria-hidden="true"></span>
+                    <span class="scan-action-label">Scan</span>
+                </a>
+            <?php endif; ?>
+
+            <button type="button" class="nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="primary-nav">
+                <span class="nav-toggle-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+                <span class="sr-only">Menu</span>
+            </button>
+        </div>
     </div>
 </header>

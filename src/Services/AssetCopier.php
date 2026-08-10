@@ -15,7 +15,7 @@ use App\Models\AssetManual;
  *
  *   1. Duplicate — create N new assets from an existing one, each with its own
  *      generated tag. Item-specific details (serial number, photos, PAT and
- *      loan history) are never carried over.
+ *      hire history) are never carried over.
  *   2. Apply — push selected fields from one asset onto other existing assets,
  *      field by field, so nothing the user did not tick is touched.
  */
@@ -45,7 +45,7 @@ final class AssetCopier
         'cable_csa_mm2'         => 'Cable CSA (mm²)',
         'requires_pat'          => 'Requires PAT',
         'pat_interval_months'   => 'PAT interval (months)',
-        'is_loanable'           => 'Available for loan',
+        'is_hireable'           => 'Available for hire',
         'notes'                 => 'Notes',
     ];
 
@@ -53,7 +53,7 @@ final class AssetCopier
     public const DUPLICATE_DEFAULTS = [
         'name', 'description', 'category_id', 'manufacturer', 'model', 'manufacturer_url',
         'supplier', 'plug_fuse_rating_amps', 'cable_csa_mm2', 'requires_pat',
-        'pat_interval_months', 'is_loanable',
+        'pat_interval_months', 'is_hireable',
     ];
 
     /**

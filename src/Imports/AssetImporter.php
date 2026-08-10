@@ -72,7 +72,7 @@ final class AssetImporter extends Importer
             ],
             'status' => [
                 'label' => 'Status',
-                'description' => 'In Stock, On Loan, In Maintenance or Retired. Defaults to In Stock.',
+                'description' => 'In Stock, On Hire, In Maintenance or Retired. Defaults to In Stock.',
                 'example' => 'In Stock',
             ],
             'purchase_date' => [
@@ -135,8 +135,8 @@ final class AssetImporter extends Importer
                 'description' => 'Optional. Leave blank to use the site default.',
                 'example' => '12',
             ],
-            'is_loanable' => [
-                'label' => 'Available for loan', 'aliases' => ['loanable', 'can be loaned'],
+            'is_hireable' => [
+                'label' => 'Available for hire', 'aliases' => ['hireable', 'can be hired'],
                 'description' => 'Yes/No. Defaults to Yes.',
                 'example' => 'Yes',
             ],
@@ -318,9 +318,9 @@ final class AssetImporter extends Importer
                 $matched    = 'In Stock';
             }
 
-            // An imported row cannot be "On Loan": there is no loan to attach.
-            if ($matched === 'On Loan') {
-                $warnings[] = 'Status On Loan cannot be set by import (there is no loan record) — using In Stock.';
+            // An imported row cannot be "On Hire": there is no hire to attach.
+            if ($matched === 'On Hire') {
+                $warnings[] = 'Status On Hire cannot be set by import (there is no hire record) — using In Stock.';
                 $matched    = 'In Stock';
             }
 
@@ -416,8 +416,8 @@ final class AssetImporter extends Importer
 
         $data['pat_interval_months'] = $intervalNumber === null ? null : (int) $intervalNumber;
 
-        $loanable = self::parseBool(trim($row['is_loanable'] ?? ''));
-        $data['is_loanable'] = $loanable === false ? 0 : 1;
+        $hireable = self::parseBool(trim($row['is_hireable'] ?? ''));
+        $data['is_hireable'] = $hireable === false ? 0 : 1;
 
         // --- Manufacturer URL ---
         $url = trim($row['manufacturer_url'] ?? '');

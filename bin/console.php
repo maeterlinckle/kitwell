@@ -29,7 +29,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 use App\Core\Config;
 use App\Core\Database;
 use App\Models\ActivityLog;
-use App\Models\Loan;
+use App\Models\Hire;
 use App\Models\MaintenanceSchedule;
 use App\Models\PatRecord;
 use App\Models\Role;
@@ -713,11 +713,11 @@ function cmdPatMissingDetails(array $argv): int
 /** @param array<int,string> $argv */
 function cmdRefreshOverdue(array $argv): int
 {
-    $changed = Loan::refreshOverdue();
+    $changed = Hire::refreshOverdue();
 
     line($changed === 0
-        ? 'No loan statuses needed changing.'
-        : "Updated the stored status on {$changed} loan(s).");
+        ? 'No hire statuses needed changing.'
+        : "Updated the stored status on {$changed} hire(s).");
 
     return 0;
 }
@@ -725,7 +725,7 @@ function cmdRefreshOverdue(array $argv): int
 /** @param array<int,string> $argv */
 function cmdStats(array $argv): int
 {
-    $loans       = Loan::summary();
+    $hires       = Hire::summary();
     $maintenance = MaintenanceSchedule::summary();
     $pat         = PatRecord::summary();
 
@@ -751,9 +751,9 @@ function cmdStats(array $argv): int
 
     heading('Attention');
     table(['Metric', 'Count'], [
-        ['Loans out', (string) $loans['out']],
-        ['Loans overdue', (string) $loans['overdue']],
-        ['Loans due in ' . $loans['due_days'] . ' days', (string) $loans['due_soon']],
+        ['Hires out', (string) $hires['out']],
+        ['Hires overdue', (string) $hires['overdue']],
+        ['Hires due in ' . $hires['due_days'] . ' days', (string) $hires['due_soon']],
         ['Maintenance overdue', (string) $maintenance['overdue']],
         ['Maintenance due in ' . $maintenance['due_days'] . ' days', (string) $maintenance['due_soon']],
         ['PAT failed', (string) $pat['failed']],
@@ -761,14 +761,14 @@ function cmdStats(array $argv): int
     ], false);
 
     $activeUsers = (int) Database::scalar('SELECT COUNT(*) FROM users WHERE is_active = 1');
-    $borrowers   = (int) Database::scalar('SELECT COUNT(*) FROM borrowers');
+    $hirers   = (int) Database::scalar('SELECT COUNT(*) FROM hirers');
     $auditRows   = (int) Database::scalar('SELECT COUNT(*) FROM activity_log');
 
     heading('People and history');
     table(['Metric', 'Count'], [
         ['Users (active)', (string) $activeUsers],
         ['Administrators (active)', (string) User::countActiveAdmins()],
-        ['Borrowers', (string) $borrowers],
+        ['Hirers', (string) $hirers],
         ['Audit rows', (string) $auditRows],
     ], false);
 
@@ -802,7 +802,7 @@ function cmdDbCheck(array $argv): int
 /** @var array<string,array{0:string,1:callable}> $commands */
 $commands = [
     'doctor'                => ['Check PHP, configuration, storage and the database', 'cmdDoctor'],
-    'stats'                 => ['Counts from the register: assets, loans, maintenance, PAT', 'cmdStats'],
+    'stats'                 => ['Counts from the register: assets, hires, maintenance, PAT', 'cmdStats'],
     'db:check'              => ['Prove the database credentials in .env work', 'cmdDbCheck'],
     'user:list'             => ['List every user  [--active-only]', 'cmdUserList'],
     'user:create'           => ['Create a user  --name= --email= [--role=admin]', 'cmdUserCreate'],
@@ -815,7 +815,7 @@ $commands = [
     'setting:set'           => ['Change a setting  --key= --value=', 'cmdSettingSet'],
     'activity:prune'        => ['Delete old audit rows  --days=365 [--dry-run] [--force]', 'cmdActivityPrune'],
     'pat:missing-details'   => ['Assets needing an appliance class or fuse rating', 'cmdPatMissingDetails'],
-    'loans:refresh-overdue' => ['Recompute the stored overdue flag on loans', 'cmdRefreshOverdue'],
+    'hires:refresh-overdue' => ['Recompute the stored overdue flag on hires', 'cmdRefreshOverdue'],
 ];
 
 $command = $argv[1] ?? '';

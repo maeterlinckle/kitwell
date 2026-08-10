@@ -27,7 +27,7 @@ $accounts = [
     'admin'    => ['admin@example.com',        'Workshop!Demo2026'],
     'manager'  => ['manager@example.com',      'Workshop!Demo2026'],
     'viewer'   => ['viewer@example.com',       'Workshop!Demo2026'],
-    'borrower' => ['chris.portal@example.com', 'PortalTest!2026x'],
+    'hirer' => ['chris.portal@example.com', 'PortalTest!2026x'],
 ];
 
 /**
@@ -38,91 +38,91 @@ $accounts = [
  */
 $matrix = [
     // Everyone signed in
-    '/'                          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'allow'],
-    '/profile'                   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'allow'],
-    '/my-loans'                  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'allow'],
+    '/'                          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
+    '/profile'                   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
+    '/my-hires'                  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
 
     // The register
-    '/assets'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/assets/1'                  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/assets/create'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/assets/1/edit'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/assets/1/copy'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/assets/1/apply'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/assets/1/label'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/assets/labels?ids=1'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/assets/export'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/assets/1/photos'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/assets/1/pat'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/assets/1/maintenance/log'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
+    '/assets'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1'                  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/create'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/assets/1/edit'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/assets/1/copy'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/assets/1/apply'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/assets/1/label'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/labels?ids=1'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/export'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1/photos'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1/pat'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1/maintenance/log'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
     // Maintenance
-    '/maintenance'               => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/maintenance/history'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/maintenance/create'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/maintenance/1'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/maintenance/1/edit'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/maintenance/1/complete'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
+    '/maintenance'               => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/maintenance/history'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/maintenance/create'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/maintenance/1'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/maintenance/1/edit'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/maintenance/1/complete'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
     // PAT
-    '/pat'                       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/pat/create'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/pat/1'                     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/pat/1/edit'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
+    '/pat'                       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/pat/create'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/pat/1'                     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/pat/1/edit'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
-    // Loans and borrowers
-    '/loans'                     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/loans/1'                   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/loans/checkout'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/loans/1/return'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/borrowers'                 => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/borrowers/1'               => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/borrowers/create'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/borrowers/1/edit'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
+    // Hires and hirers
+    '/hires'                     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/hires/1'                   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/hires/checkout'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/hires/1/return'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/hirers'                 => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/hirers/1'               => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/hirers/create'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/hirers/1/edit'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
     // Scanning
-    '/scan'                      => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/scan/lookup?code=AST-0001' => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
+    '/scan'                      => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/scan/lookup?code=AST-0001' => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
 
     // Reports
-    '/reports'                   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/reports/all-assets'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/reports/pat-due'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/reports/loans-due-back'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
-    '/reports/all-assets?format=csv' => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'borrower' => 'deny'],
+    '/reports'                   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/reports/all-assets'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/reports/pat-due'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/reports/hires-due-back'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/reports/all-assets?format=csv' => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
 
     // Import
-    '/import'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/import/assets'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/import/pat'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
-    '/import/assets/template'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'borrower' => 'deny'],
+    '/import'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/import/assets'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/import/pat'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/import/assets/template'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
     // Administration
-    '/admin/users'               => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/users/create'        => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/users/1/edit'        => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/roles'               => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/settings'            => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/activity'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/categories'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/locations'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
+    '/admin/users'               => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/users/create'        => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/users/1/edit'        => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/roles'               => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/settings'            => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/activity'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/categories'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/locations'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
 ];
 
 /** State-changing routes, checked with a valid CSRF token for that session. */
 $writeMatrix = [
-    '/assets'                 => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/assets/1/archive'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/assets/1/delete'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/assets/1/photos'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/assets/1/manuals'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/maintenance'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/pat'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/loans/checkout'         => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/borrowers'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/users'            => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/settings'         => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'borrower' => 'deny'],
-    '/admin/categories'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
-    '/import/assets/preview'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'borrower' => 'deny'],
+    '/assets'                 => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/assets/1/archive'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/assets/1/delete'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/assets/1/photos'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/assets/1/manuals'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/maintenance'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/pat'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/hires/checkout'         => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/hirers'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/users'            => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/settings'         => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/categories'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/import/assets/preview'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
 ];
 
 final class Session
@@ -197,13 +197,13 @@ $problems = 0;
 $checks   = 0;
 
 echo "\nGET routes\n";
-printf("%-34s %-9s %-9s %-9s %-9s\n", 'route', 'admin', 'manager', 'viewer', 'borrower');
+printf("%-34s %-9s %-9s %-9s %-9s\n", 'route', 'admin', 'manager', 'viewer', 'hirer');
 echo str_repeat('-', 74) . "\n";
 
 foreach ($matrix as $path => $expectations) {
     $cells = [];
 
-    foreach (['admin', 'manager', 'viewer', 'borrower'] as $role) {
+    foreach (['admin', 'manager', 'viewer', 'hirer'] as $role) {
         $expected = $expectations[$role];
         $status   = $sessions[$role]->get($path)->status;
         $checks++;
@@ -224,13 +224,13 @@ foreach ($matrix as $path => $expectations) {
 }
 
 echo "\nPOST routes (with a valid CSRF token for that session)\n";
-printf("%-34s %-9s %-9s %-9s %-9s\n", 'route', 'admin', 'manager', 'viewer', 'borrower');
+printf("%-34s %-9s %-9s %-9s %-9s\n", 'route', 'admin', 'manager', 'viewer', 'hirer');
 echo str_repeat('-', 74) . "\n";
 
 foreach ($writeMatrix as $path => $expectations) {
     $cells = [];
 
-    foreach (['admin', 'manager', 'viewer', 'borrower'] as $role) {
+    foreach (['admin', 'manager', 'viewer', 'hirer'] as $role) {
         $expected = $expectations[$role];
         $session  = $sessions[$role];
         $token    = $session->token();

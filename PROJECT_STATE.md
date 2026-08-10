@@ -57,14 +57,18 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 | `003_create_assets.sql` | `assets`, `asset_photos`, `asset_manuals` |
 | `004_create_maintenance.sql` | `maintenance_schedules`, `maintenance_logs`, `maintenance_log_photos` |
 | `005_create_pat_records.sql` | `pat_records` |
-| `006_create_borrowers_and_loans.sql` | `borrowers`, `loans` |
+| `006_create_borrowers_and_loans.sql` | the tables now called `hirers` and `hires` (renamed by 017) |
 | `007_create_activity_log.sql` | `activity_log` |
 | `008_seed_roles_and_permissions.sql` | seeds 4 roles, all 30 permissions, role grants (re-runnable; leaves hand-edited grants alone) |
 | `009_seed_settings.sql` | `settings` table + asset-tag/label defaults |
 | `010_add_photo_thumbnails.sql` | `asset_photos.thumbnail_path` |
 | `011_maintenance_settings.sql` | `maintenance_due_days` setting |
 | `012_pat_settings.sql` | `pat_due_days`, `pat_default_interval_months` settings |
-| `013_loans_and_borrower_role.sql` | `loan_photos`; `loans` gains `idx_loans_open(asset_id, returned_at)`; seeds the three `loan_*` settings; **revokes every grant from the Borrower role except `loans.view_own`** (the permission itself is seeded in 008) |
+| `013_loans_and_borrower_role.sql` | `hire_photos`; `hires` gains `idx_hires_open(asset_id, returned_at)`; seeds the three `hire_*` settings; **revokes every grant from the Hirer role except `hires.view_own`** (the permission itself is seeded in 008) |
+| `014_asset_electrical_details.sql` | `assets` gains `appliance_class`, `load_rating_va`, `has_fuse`; backfills them from each asset's most recent PAT record |
+| `015_pat_step_results.sql` | `pat_records` gains the per-step verdicts and `extension_lead_metres` |
+| `016_pat_guideline_settings.sql` | the six `pat_guide_*` guideline settings |
+| `017_rename_loans_to_hires.sql` | **`loans`→`hires`, `borrowers`→`hirers`, `loan_photos`→`hire_photos`**, plus the columns, permissions, role, settings and `assets.status` value that carried the old words |
 
 Migrations are applied in filename order and recorded. **Never edit an applied
 file** — add a new numbered one.
@@ -134,7 +138,7 @@ categories globally by slug.
 | category_id | int unsigned | | |
 | location_id | int unsigned | | |
 | condition_rating | enum('Excellent','Good','Fair','Poor','Out of Service') | ✓ | 'Good' |
-| status | enum('In Stock','On Loan','In Maintenance','Retired') | ✓ | 'In Stock' |
+| status | enum('In Stock','On Hire','In Maintenance','Retired') | ✓ | 'In Stock' |
 | purchase_date | date | | |
 | purchase_cost | decimal(12,2) | | |
 | current_value | decimal(12,2) | | |
@@ -150,7 +154,7 @@ categories globally by slug.
 | pat_interval_months | smallint unsigned | | NULL = use the site default |
 | parent_asset_id | bigint unsigned | | set on sub-assets |
 | relationship_type | enum('sub-asset','accessory','related') | | only meaningful with a parent |
-| is_loanable | tinyint(1) | ✓ | 1 |
+| is_hireable | tinyint(1) | ✓ | 1 |
 | notes | text | | |
 | retired_on | date | | |
 | created_by / updated_by | int unsigned | | |
@@ -209,27 +213,27 @@ Indexes `(asset_id, test_date)`, `(asset_id, test_date, id)`, `pat_label_serial`
 
 Units are in the column names on purpose; the migration header documents them.
 
-#### `borrowers`
-`id`, `borrower_type` enum('Person','Company') NN 'Person', `name` varchar(191) NN,
+#### `hirers`
+`id`, `hirer_type` enum('Person','Company') NN 'Person', `name` varchar(191) NN,
 `company_name`, `reference` (staff/account number), `email`, `phone`, `address`,
-`user_id` (**unique** — optional link to a login for the Borrower role),
+`user_id` (**unique** — optional link to a login for the Hirer role),
 `is_active` NN 1, `notes`, `created_by`, timestamps.
-Indexes on `name`, `reference`, `borrower_type`.
+Indexes on `name`, `reference`, `hirer_type`.
 
-#### `loans`
-`id`, `reference` varchar(40) **unique**, `asset_id` NN, `borrower_id` NN,
+#### `hires`
+`id`, `reference` varchar(40) **unique**, `asset_id` NN, `hirer_id` NN,
 `checked_out_at` datetime NN, `due_back_date` date NN, `checked_out_by_user_id`,
 `condition_out` enum(condition ratings), `returned_at` datetime, `returned_to_user_id`,
 `condition_in` enum(condition ratings), `returned_condition_notes` text,
 `status` enum('Out','Overdue','Returned') NN 'Out', `purpose`, `hire_charge` decimal(10,2),
 `notes`, timestamps.
-Indexes `(asset_id, status)`, `(borrower_id, status)`, `due_back_date`,
+Indexes `(asset_id, status)`, `(hirer_id, status)`, `due_back_date`,
 **`(asset_id, returned_at)`** — the double-booking check — and `(status, due_back_date)`.
 
-#### `loan_photos`
-`id`, `loan_id` NN, `stage` enum('out','in') NN 'in', `file_path` NN,
+#### `hire_photos`
+`id`, `hire_id` NN, `stage` enum('out','in') NN 'in', `file_path` NN,
 `original_filename`, `mime_type` NN, `file_size_bytes` NN 0, `caption`,
-`uploaded_by`, `created_at`. Index `(loan_id, stage)`.
+`uploaded_by`, `created_at`. Index `(hire_id, stage)`.
 
 #### `activity_log`
 `id` bigint, `user_id` (SET NULL), `user_name` varchar(191) NN 'System' (**snapshot**),
@@ -246,30 +250,30 @@ Indexes `created_at`, `(entity_type, entity_id, created_at)`, `(user_id, created
 
 | Delete rule | Where it is used |
 |---|---|
-| **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `pat_records.asset_id`, `loan_photos.loan_id`, `role_permissions.role_id`, `role_permissions.permission_id` |
-| **RESTRICT** | `loans.asset_id`, `loans.borrower_id`, `users.role_id` |
-| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, `borrowers.user_id`, `activity_log.user_id`, `settings.updated_by` |
+| **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id` |
+| **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id` |
+| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by` |
 
 The shape is deliberate: deleting an asset takes its own media and records with
-it, but you cannot delete an asset or a borrower that has loan history, and
+it, but you cannot delete an asset or a hirer that has hire history, and
 deleting a user never destroys the records they touched.
 
 ### 2.4 Seeded reference data (verified from a fresh migrate)
 
 - **4 roles**: `admin` (Administrator, `is_superuser=1`), `manager` (Manager / Staff),
-  `viewer` (Read-only), `borrower` (Borrower). All four are `is_system=1`.
-- **30 permissions** in groups Assets, Borrowers, Loans & hire, Maintenance,
+  `viewer` (Read-only), `hirer` (Hirer). All four are `is_system=1`.
+- **30 permissions** in groups Assets, Hirers, Hires & hire, Maintenance,
   Photos & files, PAT testing, Reports, Administration:
-  `assets.view/create/edit/delete/export`, `borrowers.view/manage`,
-  `loans.view/view_own/create/return/manage`, `maintenance.view/manage/complete`,
+  `assets.view/create/edit/delete/export`, `hirers.view/manage`,
+  `hires.view/view_own/create/return/manage`, `maintenance.view/manage/complete`,
   `media.photo.upload/delete`, `media.manual.upload/delete`,
   `pat.view/manage/delete`, `reports.view`,
   `users.view/manage`, `roles.manage`, `categories.manage`, `locations.manage`,
   `settings.manage`, `audit.view`.
-- **62 role_permissions rows** — admin 30, manager 24, viewer 7, borrower 1.
-  - viewer: `assets.view`, `assets.export`, `borrowers.view`, `loans.view`,
+- **62 role_permissions rows** — admin 30, manager 24, viewer 7, hirer 1.
+  - viewer: `assets.view`, `assets.export`, `hirers.view`, `hires.view`,
     `maintenance.view`, `pat.view`, `reports.view`
-  - borrower: **`loans.view_own` and nothing else**
+  - hirer: **`hires.view_own` and nothing else**
 - **11 settings**:
 
   | Key | Default |
@@ -281,9 +285,9 @@ deleting a user never destroys the records they touched.
   | `maintenance_due_days` | `30` |
   | `pat_due_days` | `30` |
   | `pat_default_interval_months` | `12` |
-  | `loan_default_days` | `7` |
-  | `loan_due_soon_days` | `2` |
-  | `loan_reference_prefix` | `LN-` |
+  | `hire_default_days` | `7` |
+  | `hire_due_soon_days` | `2` |
+  | `hire_reference_prefix` | `LN-` |
   | `organisation_name` | *(empty)* |
 
 ### 2.5 Divergences from the original build brief
@@ -293,19 +297,19 @@ Nothing here is accidental, but a reader coming from the brief should know:
 1. **Sub-assets are not a separate table.** They are rows in `assets` with
    `parent_asset_id` set and `relationship_type` saying how they relate
    (`sub-asset` / `accessory` / `related`). A sub-asset therefore has every field
-   a top-level asset has — its own tag, photos, PAT record and loan history.
+   a top-level asset has — its own tag, photos, PAT record and hire history.
 2. **`condition` is `condition_rating`.** `condition` is a reserved word in
    MariaDB; the column and every enum reference use `condition_rating`.
-3. **`loan_photos` and `asset_photos.thumbnail_path` arrived later**
-   (migrations 013 and 010) rather than in the original asset/loan migrations.
+3. **`hire_photos` and `asset_photos.thumbnail_path` arrived later**
+   (migrations 013 and 010) rather than in the original asset/hire migrations.
 4. **Columns beyond the brief**, added where the workshop use case needed them:
    `assets.barcode` (a second, manufacturer barcode distinct from the printed tag),
    `current_value`, `supplier`, `warranty_expires_on`, `pat_interval_months`,
-   `is_loanable`, `retired_on`, `manufacturer_url`, `plug_fuse_rating_amps`,
+   `is_hireable`, `retired_on`, `manufacturer_url`, `plug_fuse_rating_amps`,
    `cable_csa_mm2`.
-5. **The Borrower role was narrowed after the fact.** It originally held
+5. **The Hirer role was narrowed after the fact.** It originally held
    `assets.view`, which exposes the whole register. Migration 013 revoked it and
-   gave borrowers a separate portal instead. **`borrower` must never regain
+   gave hirers a separate portal instead. **`hirer` must never regain
    `assets.view`.**
 6. **Keyword search is multi-term `LIKE`, not FULLTEXT.** FULLTEXT tokenises
    asset tags and serial numbers badly and ignores short words. This is a
@@ -361,17 +365,17 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        Env, Flash, Image, LoginThrottle, Migrator, Request,
 │   │                        Response, Router, Session, Upload, Validator, View
 │   ├── Controllers/         Controller (base) + Asset, AssetCopy, AssetExport,
-│   │                        Auth, Borrower, Dashboard, Import, Label, Loan,
-│   │                        Maintenance, Manual, MyLoans, Pat, Photo, Profile,
+│   │                        Auth, Hirer, Dashboard, Import, Label, Hire,
+│   │                        Maintenance, Manual, MyHires, Pat, Photo, Profile,
 │   │                        Report, Scan
 │   │   └── Admin/           Activity, Category, Location, Role, Settings, User
 │   ├── Middleware/          Auth, Csrf, Guest, Permission, MiddlewareRunner
-│   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto, Borrower,
-│   │                        Category, Loan, Location, MaintenanceLog,
+│   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto, Hirer,
+│   │                        Category, Hire, Location, MaintenanceLog,
 │   │                        MaintenanceSchedule, PatRecord, Permission, Role,
 │   │                        Setting, User
 │   ├── Reports/             Report (base), ReportRegistry, AllAssets,
-│   │                        MaintenanceDue, PatDue, AssetsOnLoan, LoansDueBack
+│   │                        MaintenanceDue, PatDue, AssetsOnHire, HiresDueBack
 │   ├── Imports/             Importer (base), ImportRegistry, AssetImporter,
 │   │                        PatImporter
 │   └── Services/            AssetTagger, AssetCopier
@@ -380,7 +384,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── logs/                app.log
 │   └── uploads/             assets/{id}/photos, .../photos/thumbs,
 │                            assets/{id}/manuals, maintenance/{logId},
-│                            loans/{loanId}, imports/
+│                            hires/{hireId}, imports/
 │
 ├── templates/               56 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
@@ -391,9 +395,9 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── auth/ dashboard/ errors/ profile/ scan/
 │   ├── maintenance/         index, show, form, complete, history
 │   ├── pat/                 index, show, form, history
-│   ├── loans/               index, show, checkout, return
-│   ├── borrowers/           index, show, form
-│   ├── my-loans/            index, show, unlinked
+│   ├── hires/               index, show, checkout, return
+│   ├── hirers/           index, show, form
+│   ├── my-hires/            index, show, unlinked
 │   ├── import/              index, show, preview
 │   ├── reports/             index, show, print
 │   └── admin/               users, roles, categories, locations, settings, activity
@@ -437,7 +441,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
   With native prepares a named placeholder cannot be reused, and a keyword
   search tests one term against ~11 columns. See `Asset::buildFilters()`.
 - Status rules that reports and screens must agree on live in **SQL constants on
-  the model** — `MaintenanceSchedule::STATUS_SQL`, `Loan::STATUS_SQL`, the PAT
+  the model** — `MaintenanceSchedule::STATUS_SQL`, `Hire::STATUS_SQL`, the PAT
   status expression — so they can be filtered, sorted and counted by the
   database and there is one definition, not two.
 - No variable is ever interpolated into a SQL string. Concatenation is limited
@@ -466,7 +470,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
   `guest`, `auth`, `csrf`, `can:<slug>`, `canany:<a>,<b>`.
   Every state-changing route carries `csrf`. Every route is authenticated except
   `/login` and `/health`. Every route carries a permission check except the three
-  that scope themselves to the signed-in user: `/`, `/profile`, `/my-loans`.
+  that scope themselves to the signed-in user: `/`, `/profile`, `/my-hires`.
 - Templates use the `can()` / `can_any()` helpers **to hide** controls. Hiding is
   never the control — the route middleware is.
 - CSRF: `Csrf` keeps a 32-byte hex token in `__csrf_token`, compares with
@@ -501,7 +505,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
   `columns()` / `filterDefinitions()`. Same shape for
   `ImportRegistry::IMPORTERS`. **Never add a bespoke report page.**
   Registered today: reports `all-assets`, `maintenance-due`, `pat-due`,
-  `assets-on-loan`, `loans-due-back`; importers `assets`, `pat`.
+  `assets-on-hire`, `hires-due-back`; importers `assets`, `pat`.
 
 ### 4.5 Barcodes
 
@@ -545,7 +549,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
   | Thumbnails | `assets/{assetId}/photos/thumbs` |
   | PDF manuals | `assets/{assetId}/manuals` |
   | Maintenance completion photos | `maintenance/{logId}` |
-  | Loan condition photos (out/in) | `loans/{loanId}` |
+  | Hire condition photos (out/in) | `hires/{hireId}` |
   | Uploaded CSVs awaiting preview/commit | `imports` |
 
 - Only the **relative path** is stored in the database. Never a BLOB, never an
@@ -578,6 +582,8 @@ Nothing here is accidental, but a reader coming from the brief should know:
 
 All nine prompts are **complete**. Nothing is partial or unstarted.
 
+> **Terminology:** the application says **Hires** and **Hirers**, never loans or borrowers. Migration 017 renamed the schema to match, so code and interface use the same words — there is no compatibility shim and nothing left calling it a loan. Only the filenames of migrations 006 and 013 still carry the old words, because an applied migration is never edited.
+
 > **Since the nine prompts:** an installer (`install.sh`), an administration
 > wrapper (`manage.sh`), an admin console (`bin/console.php`) and `INSTALL.md`
 > were added on **2026-08-07**. See §5.3.
@@ -589,7 +595,7 @@ All nine prompts are **complete**. Nothing is partial or unstarted.
 | 3 | Condition photos | complete | 2026-08-04 |
 | 4 | Maintenance schedules and logging | complete | 2026-08-04 |
 | 5 | PAT records | complete | 2026-08-05 |
-| 6 | Loans/hires, barcode scanning, Borrower role | complete | 2026-08-05 |
+| 6 | Hires, barcode scanning, Hirer role | complete | 2026-08-05 |
 | 7 | Reports | complete | 2026-08-05 |
 | 8 | CSV import and export | complete | 2026-08-05 |
 | 9 | Polish pass | complete | 2026-08-06 |
@@ -612,9 +618,9 @@ All nine prompts are **complete**. Nothing is partial or unstarted.
 5. **PAT** — `requires_pat` toggle, full per-asset test history, class-conditional
    readings, SQL-computed status in which `Failed` outranks the retest date,
    configurable window and default interval.
-6. **Loans** — checkout by scan or search, due dates, borrower records, return
+6. **Hires** — checkout by scan or search, due dates, hirer records, return
    flow with condition photos, automatic overdue, double-booking prevention,
-   quick-scan page, and the restricted Borrower self-service portal.
+   quick-scan page, and the restricted Hirer self-service portal.
 7. **Reports** — five registry-driven reports with generic filters, CSV and
    print, dashboard tiles linking through.
 8. **CSV** — asset and PAT importers with upload → preview → commit and
@@ -704,7 +710,7 @@ Verified on this Windows development box:
 |---|---|
 | `bash -n install.sh` / `manage.sh` | clean |
 | `php -l bin/console.php` | clean |
-| `bin/console.php` — `doctor`, `stats`, `user:list`, `setting:list`, `setting:set`, `db:check`, `activity:prune --dry-run`, `loans:refresh-overdue` | all correct against the live dev database |
+| `bin/console.php` — `doctor`, `stats`, `user:list`, `setting:list`, `setting:set`, `db:check`, `activity:prune --dry-run`, `hires:refresh-overdue` | all correct against the live dev database |
 | `bin/console.php` — `user:create`, `user:password`, `user:role`, `user:activate`, `user:deactivate`, `unlock`, all with `--stdin-password` | created, changed and removed a test account; short passwords, duplicate emails and unknown emails all rejected with exit 1 |
 | Last-administrator guard | demoting *and* deactivating the only admin both refused |
 | `manage.sh` — `help`, `config`, `users`, `settings`, `stats` | correct, including `.env` parsing of quoted values |
@@ -747,12 +753,12 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
    large table. `manage.sh prune-activity DAYS` exists for when a site does
    want one, and refuses to go below 30 days; `cron-install` deliberately does
    **not** schedule it, because the retention period is the operator's call.
-4. **Overdue loans are refreshed lazily, not by cron by default.**
+4. **Overdue hires are refreshed lazily, not by cron by default.**
    `manage.sh cron-install` adds an hourly `refresh-overdue`; without it,
-   `Loan::STATUS_SQL`
+   `Hire::STATUS_SQL`
    derives "Overdue" from the due date in SQL, so every screen is always correct.
-   `Loan::refreshOverdue()` then writes the stored `loans.status` to match, and is
-   called from the dashboard, the loans index and the borrower portal. If nobody
+   `Hire::refreshOverdue()` then writes the stored `hires.status` to match, and is
+   called from the dashboard, the hires index and the hirer portal. If nobody
    visits any of those, the stored column lags — **but nothing reads the stored
    column without the SQL expression available**, so this is cosmetic. A cron
    entry calling it would be tidier.
@@ -775,7 +781,7 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
 8. **No soft delete for assets.** There is archive (`status = 'Retired'`,
    `retired_on`) and there is hard delete, gated behind `assets.delete`. Deleting
    an asset cascades its photos, manuals, PAT records and maintenance history —
-   but `loans.asset_id` is RESTRICT, so anything with loan history cannot be
+   but `hires.asset_id` is RESTRICT, so anything with hire history cannot be
    deleted at all. That is intentional; the README explains archive vs delete.
 
 ### Traps that have already cost time — do not re-introduce

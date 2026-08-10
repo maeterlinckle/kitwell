@@ -163,8 +163,8 @@ $parentId = $value('parent_asset_id', $parent['id'] ?? '');
 
         <div class="field">
             <label class="checkbox">
-                <input type="checkbox" name="is_loanable" value="1" <?= $checked('is_loanable', true) ? 'checked' : '' ?>>
-                <span>Available to loan out<span class="field-hint">Untick for fixed machinery or anything that must not leave site.</span></span>
+                <input type="checkbox" name="is_hireable" value="1" <?= $checked('is_hireable', true) ? 'checked' : '' ?>>
+                <span>Available to hire out<span class="field-hint">Untick for fixed machinery or anything that must not leave site.</span></span>
             </label>
         </div>
     </div>

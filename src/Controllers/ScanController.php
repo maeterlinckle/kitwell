@@ -9,7 +9,7 @@ use App\Core\Flash;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Asset;
-use App\Models\Loan;
+use App\Models\Hire;
 
 /**
  * Quick scan, reachable from every page.
@@ -66,8 +66,8 @@ final class ScanController extends Controller
         }
 
         $assetId  = (int) $asset['id'];
-        $openLoan = Loan::openForAsset($assetId);
-        $blocked  = Loan::blockedReason($asset);
+        $openHire = Hire::openForAsset($assetId);
+        $blocked  = Hire::blockedReason($asset);
 
         Response::json([
             'found' => true,
@@ -81,20 +81,20 @@ final class ScanController extends Controller
                 'location'  => $asset['location_name'],
                 'url'       => url('/assets/' . $assetId),
             ],
-            'loan' => $openLoan === null ? null : [
-                'id'          => (int) $openLoan['id'],
-                'reference'   => $openLoan['reference'],
-                'borrower'    => $openLoan['borrower_name'],
-                'due'         => format_date($openLoan['due_back_date']),
-                'overdue'     => $openLoan['effective_status'] === 'Overdue',
-                'return_url'  => url('/loans/' . (int) $openLoan['id'] . '/return'),
+            'hire' => $openHire === null ? null : [
+                'id'          => (int) $openHire['id'],
+                'reference'   => $openHire['reference'],
+                'hirer'    => $openHire['hirer_name'],
+                'due'         => format_date($openHire['due_back_date']),
+                'overdue'     => $openHire['effective_status'] === 'Overdue',
+                'return_url'  => url('/hires/' . (int) $openHire['id'] . '/return'),
             ],
             'can' => [
-                'checkout' => Auth::can('loans.create') && $blocked === null,
-                'return'   => Auth::can('loans.return') && $openLoan !== null,
+                'checkout' => Auth::can('hires.create') && $blocked === null,
+                'return'   => Auth::can('hires.return') && $openHire !== null,
             ],
             'blocked'      => $blocked,
-            'checkout_url' => url('/loans/checkout?asset=' . $assetId),
+            'checkout_url' => url('/hires/checkout?asset=' . $assetId),
         ]);
     }
 
@@ -125,26 +125,26 @@ final class ScanController extends Controller
 
         $assetId = (int) $asset['id'];
 
-        if ($mode === 'checkout' && Auth::can('loans.create')) {
-            $blocked = Loan::blockedReason($asset);
+        if ($mode === 'checkout' && Auth::can('hires.create')) {
+            $blocked = Hire::blockedReason($asset);
 
             if ($blocked !== null) {
                 Flash::error($blocked);
                 Response::redirect('/assets/' . $assetId);
             }
 
-            Response::redirect('/loans/checkout?asset=' . $assetId);
+            Response::redirect('/hires/checkout?asset=' . $assetId);
         }
 
-        if ($mode === 'return' && Auth::can('loans.return')) {
-            $openLoan = Loan::openForAsset($assetId);
+        if ($mode === 'return' && Auth::can('hires.return')) {
+            $openHire = Hire::openForAsset($assetId);
 
-            if ($openLoan === null) {
-                Flash::warning($asset['asset_tag'] . ' is not currently out on loan.');
+            if ($openHire === null) {
+                Flash::warning($asset['asset_tag'] . ' is not currently out on hire.');
                 Response::redirect('/assets/' . $assetId);
             }
 
-            Response::redirect('/loans/' . (int) $openLoan['id'] . '/return');
+            Response::redirect('/hires/' . (int) $openHire['id'] . '/return');
         }
 
         Response::redirect('/assets/' . $assetId);

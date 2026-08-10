@@ -18,7 +18,7 @@ use App\Models\Asset;
  * own filters, so what you export is exactly what you were looking at.
  *
  * The core columns match the import format, so an export can be edited and fed
- * straight back in. The optional extras (latest PAT, current loan, next
+ * straight back in. The optional extras (latest PAT, current hire, next
  * maintenance) are appended after them, and are deliberately not part of the
  * import format — they are derived data, not asset fields.
  */
@@ -45,7 +45,7 @@ final class AssetExportController extends Controller
         'cable_csa_mm2'         => 'Cable CSA (mm2)',
         'requires_pat'          => 'Requires PAT',
         'pat_interval_months'   => 'PAT interval (months)',
-        'is_loanable'           => 'Available for loan',
+        'is_hireable'           => 'Available for hire',
         'notes'                 => 'Notes',
         'barcode'               => 'Secondary barcode',
         'warranty_expires_on'   => 'Warranty expires',
@@ -66,13 +66,13 @@ final class AssetExportController extends Controller
                 'pat_label'       => 'PAT label',
             ],
         ],
-        'loan' => [
-            'label'   => 'Current loan',
+        'hire' => [
+            'label'   => 'Current hire',
             'columns' => [
-                'loan_status'    => 'Loan status',
-                'loan_borrower'  => 'On loan to',
-                'loan_out_since' => 'Out since',
-                'loan_due_back'  => 'Due back',
+                'hire_status'    => 'Hire status',
+                'hire_hirer'  => 'On hire to',
+                'hire_out_since' => 'Out since',
+                'hire_due_back'  => 'Due back',
             ],
         ],
         'maintenance' => [
@@ -185,20 +185,20 @@ final class AssetExportController extends Controller
             }
         }
 
-        $loans = [];
-        if (in_array('loan', $extras, true)) {
+        $hires = [];
+        if (in_array('hire', $extras, true)) {
             $records = Database::select(
-                "SELECT l.asset_id, l.checked_out_at, l.due_back_date, b.name AS borrower_name,
-                        CASE WHEN l.due_back_date < CURDATE() THEN 'Overdue' ELSE 'Out' END AS loan_status
-                   FROM loans l
-                   INNER JOIN borrowers b ON b.id = l.borrower_id
+                "SELECT l.asset_id, l.checked_out_at, l.due_back_date, b.name AS hirer_name,
+                        CASE WHEN l.due_back_date < CURDATE() THEN 'Overdue' ELSE 'Out' END AS hire_status
+                   FROM hires l
+                   INNER JOIN hirers b ON b.id = l.hirer_id
                   WHERE l.asset_id IN (" . $placeholders . ') AND l.returned_at IS NULL
                   ORDER BY l.asset_id, l.id DESC',
                 $ids
             );
 
             foreach ($records as $record) {
-                $loans[(int) $record['asset_id']] ??= $record;
+                $hires[(int) $record['asset_id']] ??= $record;
             }
         }
 
@@ -230,13 +230,13 @@ final class AssetExportController extends Controller
                 $row['pat_status']     = self::patStatus($row, $record);
             }
 
-            if (in_array('loan', $extras, true)) {
-                $record = $loans[$assetId] ?? null;
+            if (in_array('hire', $extras, true)) {
+                $record = $hires[$assetId] ?? null;
 
-                $row['loan_status']    = $record['loan_status'] ?? 'Not on loan';
-                $row['loan_borrower']  = $record['borrower_name'] ?? null;
-                $row['loan_out_since'] = $record['checked_out_at'] ?? null;
-                $row['loan_due_back']  = $record['due_back_date'] ?? null;
+                $row['hire_status']    = $record['hire_status'] ?? 'Not on hire';
+                $row['hire_hirer']  = $record['hirer_name'] ?? null;
+                $row['hire_out_since'] = $record['checked_out_at'] ?? null;
+                $row['hire_due_back']  = $record['due_back_date'] ?? null;
             }
 
             if (in_array('maintenance', $extras, true)) {
@@ -283,11 +283,11 @@ final class AssetExportController extends Controller
             return '';
         }
 
-        if (in_array($field, ['requires_pat', 'is_loanable'], true)) {
+        if (in_array($field, ['requires_pat', 'is_hireable'], true)) {
             return ((int) $value === 1) ? 'Yes' : 'No';
         }
 
-        if (in_array($field, ['created_at', 'loan_out_since'], true)) {
+        if (in_array($field, ['created_at', 'hire_out_since'], true)) {
             return date('Y-m-d', (int) strtotime((string) $value));
         }
 

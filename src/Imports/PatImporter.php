@@ -422,7 +422,7 @@ final class PatImporter extends Importer
             if ($data['overall_result'] === 'Fail'
                 && !empty($options['withdraw_failures'])
                 && $asset['status'] !== 'Retired'
-                && $asset['status'] !== 'On Loan') {
+                && $asset['status'] !== 'On Hire') {
                 $changes['status'] = 'In Maintenance';
             }
 

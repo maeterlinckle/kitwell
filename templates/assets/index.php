@@ -28,7 +28,6 @@ $hasFilters = ($filters['q'] ?? '') !== ''
     </div>
     <div class="head-actions">
         <?php if (can('assets.create')): ?>
-            <a class="btn" href="<?= e(url('/import/assets')) ?>">Import CSV</a>
         <?php endif; ?>
         <?php if (can('assets.export')): ?>
             <a class="btn" href="<?= e(url('/assets/export' . ($queryString !== '' ? '?' . $queryString : ''))) ?>">

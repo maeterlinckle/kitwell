@@ -14,7 +14,7 @@ use App\Models\Asset;
 use App\Models\AssetManual;
 use App\Models\AssetPhoto;
 use App\Models\Category;
-use App\Models\Loan;
+use App\Models\Hire;
 use App\Models\Location;
 use App\Models\MaintenanceLog;
 use App\Models\MaintenanceSchedule;
@@ -67,9 +67,9 @@ final class AssetController extends Controller
             'maintenanceLogs' => Auth::can('maintenance.view') ? MaintenanceLog::forAsset($assetId, 5) : [],
             'patStatus'  => Auth::can('pat.view') ? PatRecord::statusForAsset($assetId) : null,
             'patRecords' => Auth::can('pat.view') ? PatRecord::forAsset($assetId, 3) : [],
-            'openLoan'   => Loan::openForAsset($assetId),
-            'loanBlocked'=> Loan::blockedReason($asset),
-            'loanHistory'=> Auth::can('loans.view') ? Loan::forAsset($assetId, 10) : [],
+            'openHire'   => Hire::openForAsset($assetId),
+            'hireBlocked'=> Hire::blockedReason($asset),
+            'hireHistory'=> Auth::can('hires.view') ? Hire::forAsset($assetId, 10) : [],
             'history'    => Auth::can('audit.view') ? ActivityLog::recent(15, ['entity_type' => 'asset', 'entity_id' => $assetId]) : [],
         ]);
     }
@@ -164,8 +164,8 @@ final class AssetController extends Controller
             $this->notFound();
         }
 
-        if ($asset['status'] === 'On Loan') {
-            Flash::error('This asset is out on loan. Check it back in before archiving it.');
+        if ($asset['status'] === 'On Hire') {
+            Flash::error('This asset is out on hire. Check it back in before archiving it.');
             Response::redirect('/assets/' . $assetId);
         }
 
@@ -372,7 +372,7 @@ final class AssetController extends Controller
             'pat_interval_months'   => $requiresPat ? self::nullIfBlank($data['pat_interval_months']) : null,
             'parent_asset_id'       => $parentId > 0 ? $parentId : null,
             'relationship_type'     => $parentId > 0 ? ($data['relationship_type'] !== '' ? $data['relationship_type'] : 'sub-asset') : null,
-            'is_loanable'           => Request::boolean('is_loanable') ? 1 : 0,
+            'is_hireable'           => Request::boolean('is_hireable') ? 1 : 0,
             'notes'                 => self::nullIfBlank($data['notes']),
             'retired_on'            => $data['status'] === 'Retired' ? ($existing['retired_on'] ?? date('Y-m-d')) : null,
         ];

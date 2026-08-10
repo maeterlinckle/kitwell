@@ -58,7 +58,7 @@ try {
         ['Alex Admin',      'admin@example.com',    'admin',    'Facilities Manager'],
         ['Sam Staff',       'manager@example.com',  'manager',  'Workshop Supervisor'],
         ['Val Viewer',      'viewer@example.com',   'viewer',   'Office Administrator'],
-        ['Bailey Borrower', 'borrower@example.com', 'borrower',  null],
+        ['Bailey Hirer', 'hirer@example.com', 'hirer',  null],
     ];
 
     $userIds = [];
@@ -169,7 +169,7 @@ try {
             'asset_tag' => 'AST-0005', 'name' => 'Fluke 1663 Multifunction Tester',
             'description' => 'Installation tester used for periodic inspection work.',
             'category_id' => $categoryIds['test-equipment'], 'location_id' => $locationIds['van'],
-            'condition_rating' => 'Excellent', 'status' => 'On Loan',
+            'condition_rating' => 'Excellent', 'status' => 'On Hire',
             'purchase_date' => '2024-11-11', 'purchase_cost' => 1120.00, 'current_value' => 900.00,
             'serial_number' => 'FLK-1663-00921', 'manufacturer' => 'Fluke', 'model' => '1663 GB',
             'manufacturer_url' => 'https://www.fluke.com/en-gb/product/electrical-testing/installation-testers/fluke-1663',
@@ -209,7 +209,7 @@ try {
             'purchase_date' => '2020-03-15', 'purchase_cost' => 425.00, 'current_value' => 200.00,
             'manufacturer' => 'Axminster', 'model' => 'AT16B',
             'requires_pat' => 1, 'plug_fuse_rating_amps' => 13.00, 'appliance_class' => 'Class I', 'has_fuse' => 1, 'load_rating_va' => 700, 'cable_csa_mm2' => 1.50,
-            'is_loanable' => 0, 'notes' => 'Fixed to the bench — not available for loan.',
+            'is_hireable' => 0, 'notes' => 'Fixed to the bench — not available for hire.',
         ],
         [
             'key' => 'chair',
@@ -218,7 +218,7 @@ try {
             'category_id' => $categoryIds['furniture'], 'location_id' => $locationIds['office'],
             'condition_rating' => 'Poor', 'status' => 'Retired',
             'purchase_date' => '2018-01-09', 'purchase_cost' => 145.00,
-            'requires_pat' => 0, 'is_loanable' => 0, 'retired_on' => '2026-05-30',
+            'requires_pat' => 0, 'is_hireable' => 0, 'retired_on' => '2026-05-30',
             'notes' => 'Gas strut failed. Retired and awaiting disposal.',
         ],
         [
@@ -226,7 +226,7 @@ try {
             'asset_tag' => 'AST-0010', 'name' => 'DeWalt D25133K SDS Hammer Drill',
             'description' => '800W SDS-plus rotary hammer with carry case.',
             'category_id' => $categoryIds['power-tools'], 'location_id' => $locationIds['van'],
-            'condition_rating' => 'Good', 'status' => 'On Loan',
+            'condition_rating' => 'Good', 'status' => 'On Hire',
             'purchase_date' => '2023-10-05', 'purchase_cost' => 189.00, 'current_value' => 130.00,
             'serial_number' => 'DW-25133-4471', 'manufacturer' => 'DeWalt', 'model' => 'D25133K',
             'manufacturer_url' => 'https://www.dewalt.co.uk/product/d25133k-gb/',
@@ -431,20 +431,20 @@ try {
         );
     }
 
-    // --- Borrowers ---------------------------------------------------------
-    $borrowerPerson = Database::insert('borrowers', [
-        'borrower_type' => 'Person',
-        'name'          => 'Bailey Borrower',
+    // --- Hirers ---------------------------------------------------------
+    $hirerPerson = Database::insert('hirers', [
+        'hirer_type' => 'Person',
+        'name'          => 'Bailey Hirer',
         'company_name'  => 'Northfield Electrical Ltd',
         'reference'     => 'EMP-0042',
-        'email'         => 'borrower@example.com',
+        'email'         => 'hirer@example.com',
         'phone'         => '07700 900042',
-        'user_id'       => $userIds['borrower'],
+        'user_id'       => $userIds['hirer'],
         'created_by'    => $manager,
     ]);
 
-    $borrowerCompany = Database::insert('borrowers', [
-        'borrower_type' => 'Company',
+    $hirerCompany = Database::insert('hirers', [
+        'hirer_type' => 'Company',
         'name'          => 'Harding & Sons Contractors',
         'reference'     => 'ACC-1187',
         'email'         => 'plant@hardingandsons.example',
@@ -453,11 +453,11 @@ try {
         'created_by'    => $manager,
     ]);
 
-    // --- Loans -------------------------------------------------------------
-    Database::insert('loans', [
+    // --- Hires -------------------------------------------------------------
+    Database::insert('hires', [
         'reference'              => 'LN-2026-0001',
         'asset_id'               => $assetIds['mft'],
-        'borrower_id'            => $borrowerPerson,
+        'hirer_id'            => $hirerPerson,
         'checked_out_at'         => $today->modify('-6 days')->format('Y-m-d 08:15:00'),
         'due_back_date'          => $today->modify('+8 days')->format('Y-m-d'),
         'checked_out_by_user_id' => $manager,
@@ -466,10 +466,10 @@ try {
         'purpose'                => 'Periodic inspection at Eastway site.',
     ]);
 
-    Database::insert('loans', [
+    Database::insert('hires', [
         'reference'              => 'LN-2026-0002',
         'asset_id'               => $assetIds['sds'],
-        'borrower_id'            => $borrowerCompany,
+        'hirer_id'            => $hirerCompany,
         'checked_out_at'         => $today->modify('-24 days')->format('Y-m-d 14:40:00'),
         'due_back_date'          => $today->modify('-3 days')->format('Y-m-d'),
         'checked_out_by_user_id' => $manager,
@@ -479,10 +479,10 @@ try {
         'purpose'                => 'Chased-in conduit work.',
     ]);
 
-    Database::insert('loans', [
+    Database::insert('hires', [
         'reference'              => 'LN-2025-0148',
         'asset_id'               => $assetIds['drill'],
-        'borrower_id'            => $borrowerPerson,
+        'hirer_id'            => $hirerPerson,
         'checked_out_at'         => $today->modify('-70 days')->format('Y-m-d 09:00:00'),
         'due_back_date'          => $today->modify('-56 days')->format('Y-m-d'),
         'checked_out_by_user_id' => $manager,
@@ -514,5 +514,5 @@ echo "\nDone. Demo accounts (password: " . DEMO_PASSWORD . "):\n";
 echo "  admin@example.com     Administrator\n";
 echo "  manager@example.com   Manager / Staff\n";
 echo "  viewer@example.com    Read-only\n";
-echo "  borrower@example.com  Borrower\n";
+echo "  hirer@example.com  Hirer\n";
 echo "\nChange or remove these before the system is used for real.\n";

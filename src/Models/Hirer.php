@@ -6,17 +6,17 @@ namespace App\Models;
 
 use App\Core\Database;
 
-final class Borrower
+final class Hirer
 {
     public const TYPES = ['Person', 'Company'];
 
     private const SELECT = 'SELECT b.*,
                                    u.name AS user_name, u.email AS user_email, u.is_active AS user_is_active,
                                    r.slug AS user_role,
-                                   (SELECT COUNT(*) FROM loans l WHERE l.borrower_id = b.id AND l.returned_at IS NULL) AS open_loans,
-                                   (SELECT COUNT(*) FROM loans l WHERE l.borrower_id = b.id AND l.returned_at IS NULL AND l.due_back_date < CURDATE()) AS overdue_loans,
-                                   (SELECT COUNT(*) FROM loans l WHERE l.borrower_id = b.id) AS total_loans
-                              FROM borrowers b
+                                   (SELECT COUNT(*) FROM hires l WHERE l.hirer_id = b.id AND l.returned_at IS NULL) AS open_hires,
+                                   (SELECT COUNT(*) FROM hires l WHERE l.hirer_id = b.id AND l.returned_at IS NULL AND l.due_back_date < CURDATE()) AS overdue_hires,
+                                   (SELECT COUNT(*) FROM hires l WHERE l.hirer_id = b.id) AS total_hires
+                              FROM hirers b
                               LEFT JOIN users u ON u.id = b.user_id
                               LEFT JOIN roles r ON r.id = u.role_id';
 
@@ -27,9 +27,9 @@ final class Borrower
     }
 
     /**
-     * The borrower record linked to a login.
+     * The hirer record linked to a login.
      *
-     * This is the single hinge of the borrower portal: no link, no loans.
+     * This is the single hinge of the hirer portal: no link, no hires.
      */
     public static function findByUserId(int $userId): ?array
     {
@@ -61,7 +61,7 @@ final class Borrower
         }
 
         if (!empty($filters['type'])) {
-            $where[]  = 'b.borrower_type = ?';
+            $where[]  = 'b.hirer_type = ?';
             $params[] = (string) $filters['type'];
         }
 
@@ -70,8 +70,8 @@ final class Borrower
             $params[] = (int) $filters['is_active'];
         }
 
-        if (!empty($filters['with_open_loans'])) {
-            $where[] = 'EXISTS (SELECT 1 FROM loans l WHERE l.borrower_id = b.id AND l.returned_at IS NULL)';
+        if (!empty($filters['with_open_hires'])) {
+            $where[] = 'EXISTS (SELECT 1 FROM hires l WHERE l.hirer_id = b.id AND l.returned_at IS NULL)';
         }
 
         if ($where !== []) {
@@ -81,65 +81,65 @@ final class Borrower
         return Database::select($sql . ' ORDER BY b.is_active DESC, b.name ASC', $params);
     }
 
-    /** Active borrowers, for the checkout picker. */
+    /** Active hirers, for the checkout picker. */
     public static function forSelect(): array
     {
         return Database::select(
-            'SELECT id, name, company_name, borrower_type, reference
-               FROM borrowers WHERE is_active = 1 ORDER BY name'
+            'SELECT id, name, company_name, hirer_type, reference
+               FROM hirers WHERE is_active = 1 ORDER BY name'
         );
     }
 
     /** @param array<string,mixed> $data */
     public static function create(array $data): int
     {
-        return Database::insert('borrowers', $data);
+        return Database::insert('hirers', $data);
     }
 
     /** @param array<string,mixed> $data */
     public static function update(int $id, array $data): void
     {
-        Database::update('borrowers', $data, $id);
+        Database::update('hirers', $data, $id);
     }
 
     public static function delete(int $id): void
     {
-        Database::run('DELETE FROM borrowers WHERE id = ?', [$id]);
+        Database::run('DELETE FROM hirers WHERE id = ?', [$id]);
     }
 
-    public static function hasLoans(int $id): bool
+    public static function hasHires(int $id): bool
     {
-        return (int) Database::scalar('SELECT COUNT(*) FROM loans WHERE borrower_id = ?', [$id]) > 0;
+        return (int) Database::scalar('SELECT COUNT(*) FROM hires WHERE hirer_id = ?', [$id]) > 0;
     }
 
     /**
-     * Users who could be linked to a borrower record: anyone not already
+     * Users who could be linked to a hirer record: anyone not already
      * linked to a different one.
      *
      * @return array<int,array<string,mixed>>
      */
-    public static function linkableUsers(int $currentBorrowerId = 0): array
+    public static function linkableUsers(int $currentHirerId = 0): array
     {
         return Database::select(
             'SELECT u.id, u.name, u.email, r.name AS role_name, r.slug AS role_slug
                FROM users u
                INNER JOIN roles r ON r.id = u.role_id
               WHERE u.is_active = 1
-                AND (u.id NOT IN (SELECT user_id FROM borrowers WHERE user_id IS NOT NULL) OR u.id = (
-                        SELECT user_id FROM borrowers WHERE id = ?
+                AND (u.id NOT IN (SELECT user_id FROM hirers WHERE user_id IS NOT NULL) OR u.id = (
+                        SELECT user_id FROM hirers WHERE id = ?
                     ))
               ORDER BY r.sort_order, u.name',
-            [$currentBorrowerId]
+            [$currentHirerId]
         );
     }
 
     /** Display label: "Jo Bloggs (Northfield Electrical)". */
-    public static function label(array $borrower): string
+    public static function label(array $hirer): string
     {
-        $name = (string) $borrower['name'];
+        $name = (string) $hirer['name'];
 
-        if (!empty($borrower['company_name']) && $borrower['company_name'] !== $name) {
-            return $name . ' (' . $borrower['company_name'] . ')';
+        if (!empty($hirer['company_name']) && $hirer['company_name'] !== $name) {
+            return $name . ' (' . $hirer['company_name'] . ')';
         }
 
         return $name;

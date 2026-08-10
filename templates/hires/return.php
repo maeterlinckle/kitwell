@@ -5,33 +5,33 @@ use App\Models\Asset;
 /**
  * Book an item back in.
  *
- * @var array<string,mixed> $loan
+ * @var array<string,mixed> $hire
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
-$overdue = $loan['effective_status'] === 'Overdue';
+$overdue = $hire['effective_status'] === 'Overdue';
 ?>
 <div class="page-head">
     <div>
         <h1>Book in</h1>
         <p class="muted">
-            <a href="<?= e(url('/assets/' . $loan['asset_id'])) ?>"><span class="mono"><?= e($loan['asset_tag']) ?></span></a>
-            — <?= e($loan['asset_name']) ?> · out with <?= e($loan['borrower_name']) ?>
+            <a href="<?= e(url('/assets/' . $hire['asset_id'])) ?>"><span class="mono"><?= e($hire['asset_tag']) ?></span></a>
+            — <?= e($hire['asset_name']) ?> · out with <?= e($hire['hirer_name']) ?>
         </p>
     </div>
-    <a class="btn btn-ghost" href="<?= e(url('/loans/' . $loan['id'])) ?>">Cancel</a>
+    <a class="btn btn-ghost" href="<?= e(url('/hires/' . $hire['id'])) ?>">Cancel</a>
 </div>
 
 <?php if ($overdue): ?>
     <div class="flash flash-warning">
         <span class="flash-text">
-            This loan was due back on <?= e(format_date($loan['due_back_date'])) ?> —
-            <?= abs((int) $loan['days_until_due']) ?> day<?= abs((int) $loan['days_until_due']) === 1 ? '' : 's' ?> ago.
+            This hire was due back on <?= e(format_date($hire['due_back_date'])) ?> —
+            <?= abs((int) $hire['days_until_due']) ?> day<?= abs((int) $hire['days_until_due']) === 1 ? '' : 's' ?> ago.
         </span>
     </div>
 <?php endif; ?>
 
-<form method="post" action="<?= e(url('/loans/' . $loan['id'] . '/return')) ?>" enctype="multipart/form-data" class="form form-wide" novalidate>
+<form method="post" action="<?= e(url('/hires/' . $hire['id'] . '/return')) ?>" enctype="multipart/form-data" class="form form-wide" novalidate>
     <?= csrf_field() ?>
 
     <div class="card">
@@ -49,7 +49,7 @@ $overdue = $loan['effective_status'] === 'Overdue';
             <div class="field">
                 <label class="label" for="condition_in">Condition on return</label>
                 <select class="input" id="condition_in" name="condition_in">
-                    <option value="">Unchanged (<?= e($loan['asset_condition']) ?>)</option>
+                    <option value="">Unchanged (<?= e($hire['asset_condition']) ?>)</option>
                     <?php foreach (Asset::CONDITIONS as $condition): ?>
                         <option value="<?= e($condition) ?>" <?= old($old, 'condition_in') === $condition ? 'selected' : '' ?>>
                             <?= e($condition) ?>
@@ -57,7 +57,7 @@ $overdue = $loan['effective_status'] === 'Overdue';
                     <?php endforeach; ?>
                 </select>
                 <p class="field-hint">
-                    Went out as <strong><?= e($loan['condition_out'] ?? 'not recorded') ?></strong>.
+                    Went out as <strong><?= e($hire['condition_out'] ?? 'not recorded') ?></strong>.
                     Setting this updates the asset's condition.
                 </p>
             </div>
@@ -72,7 +72,7 @@ $overdue = $loan['effective_status'] === 'Overdue';
         <div class="field">
             <label class="label" for="photos">Photos on return <span class="optional">(optional)</span></label>
             <input class="input" type="file" id="photos" name="photos[]" accept="image/*" multiple>
-            <p class="field-hint">Kept against this loan, so the state it came back in is on record.</p>
+            <p class="field-hint">Kept against this hire, so the state it came back in is on record.</p>
         </div>
 
         <div class="field">
@@ -81,7 +81,7 @@ $overdue = $loan['effective_status'] === 'Overdue';
                 <label class="radio-card">
                     <input type="radio" name="asset_status" value="In Stock"
                         <?= old($old, 'asset_status', 'In Stock') === 'In Stock' ? 'checked' : '' ?>>
-                    <span><strong>Back in stock</strong><span class="muted">Available to loan again.</span></span>
+                    <span><strong>Back in stock</strong><span class="muted">Available to hire again.</span></span>
                 </label>
 
                 <label class="radio-card">
@@ -96,6 +96,6 @@ $overdue = $loan['effective_status'] === 'Overdue';
     <div class="form-actions sticky-actions">
         <button type="submit" class="btn btn-primary btn-lg">Book in</button>
         <button type="submit" name="and_scan_next" value="1" class="btn btn-lg">Book in &amp; scan next</button>
-        <a class="btn btn-ghost" href="<?= e(url('/loans/' . $loan['id'])) ?>">Cancel</a>
+        <a class="btn btn-ghost" href="<?= e(url('/hires/' . $hire['id'])) ?>">Cancel</a>
     </div>
 </form>

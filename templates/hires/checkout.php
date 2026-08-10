@@ -1,14 +1,14 @@
 <?php
 
 use App\Models\Asset;
-use App\Models\Borrower;
+use App\Models\Hirer;
 
 /**
  * Check an asset out.
  *
  * @var array<string,mixed>|null $asset
  * @var string|null $blocked
- * @var array<int,array<string,mixed>> $borrowers
+ * @var array<int,array<string,mixed>> $hirers
  * @var string $defaultDue
  * @var int $defaultDays
  * @var array<string,string> $errors
@@ -27,7 +27,7 @@ use App\Models\Borrower;
     </div>
     <div class="head-actions">
         <a class="btn" href="<?= e(url('/scan?mode=checkout')) ?>">Scan an item</a>
-        <a class="btn btn-ghost" href="<?= e(url('/loans')) ?>">Cancel</a>
+        <a class="btn btn-ghost" href="<?= e(url('/hires')) ?>">Cancel</a>
     </div>
 </div>
 
@@ -66,7 +66,7 @@ use App\Models\Borrower;
     <?php return; ?>
 <?php endif; ?>
 
-<form method="post" action="<?= e(url('/loans/checkout')) ?>" enctype="multipart/form-data" class="form form-wide" novalidate>
+<form method="post" action="<?= e(url('/hires/checkout')) ?>" enctype="multipart/form-data" class="form form-wide" novalidate>
     <?= csrf_field() ?>
     <input type="hidden" name="asset_id" value="<?= (int) $asset['id'] ?>">
 
@@ -74,18 +74,18 @@ use App\Models\Borrower;
         <h2>Who is taking it?</h2>
 
         <div class="field">
-            <label class="label" for="borrower_id">Borrower</label>
-            <select class="input<?= isset($errors['borrower_id']) ? ' has-error' : '' ?>" id="borrower_id" name="borrower_id" required>
-                <option value="">Choose a borrower…</option>
-                <?php foreach ($borrowers as $borrower): ?>
-                    <option value="<?= (int) $borrower['id'] ?>" <?= old($old, 'borrower_id') === (string) $borrower['id'] ? 'selected' : '' ?>>
-                        <?= e(Borrower::label($borrower)) ?><?= !empty($borrower['reference']) ? ' · ' . e($borrower['reference']) : '' ?>
+            <label class="label" for="hirer_id">Hirer</label>
+            <select class="input<?= isset($errors['hirer_id']) ? ' has-error' : '' ?>" id="hirer_id" name="hirer_id" required>
+                <option value="">Choose a hirer…</option>
+                <?php foreach ($hirers as $hirer): ?>
+                    <option value="<?= (int) $hirer['id'] ?>" <?= old($old, 'hirer_id') === (string) $hirer['id'] ? 'selected' : '' ?>>
+                        <?= e(Hirer::label($hirer)) ?><?= !empty($hirer['reference']) ? ' · ' . e($hirer['reference']) : '' ?>
                     </option>
                 <?php endforeach; ?>
             </select>
-            <?php if (isset($errors['borrower_id'])): ?><p class="field-error"><?= e($errors['borrower_id']) ?></p><?php endif; ?>
-            <?php if (can('borrowers.manage')): ?>
-                <p class="field-hint"><a href="<?= e(url('/borrowers/create')) ?>">Add a new borrower</a></p>
+            <?php if (isset($errors['hirer_id'])): ?><p class="field-error"><?= e($errors['hirer_id']) ?></p><?php endif; ?>
+            <?php if (can('hirers.manage')): ?>
+                <p class="field-hint"><a href="<?= e(url('/hirers/create')) ?>">Add a new hirer</a></p>
             <?php endif; ?>
         </div>
     </div>

@@ -9,14 +9,14 @@ use App\Core\Database;
 use RuntimeException;
 
 /**
- * Loans and hires.
+ * Hires and hirers.
  *
  * "Overdue" is derived from the due date in SQL, so it is always right without
  * anything having to run on a schedule. The stored `status` column is kept in
  * step by refreshOverdue() purely so that anything querying the database
  * directly sees the same thing.
  */
-final class Loan
+final class Hire
 {
     public const STATUSES = ['Out', 'Overdue', 'Returned'];
 
@@ -33,14 +33,14 @@ final class Loan
                        DATEDIFF(l.due_back_date, CURDATE()) AS days_until_due,
                        a.asset_tag, a.name AS asset_name, a.status AS asset_status,
                        a.condition_rating AS asset_condition, a.requires_pat,
-                       b.name AS borrower_name, b.borrower_type, b.company_name,
-                       b.email AS borrower_email, b.phone AS borrower_phone,
+                       b.name AS hirer_name, b.hirer_type, b.company_name,
+                       b.email AS hirer_email, b.phone AS hirer_phone,
                        ou.name AS checked_out_by_name,
                        ru.name AS returned_to_name,
-                       (SELECT COUNT(*) FROM loan_photos lp WHERE lp.loan_id = l.id) AS photo_count
-                  FROM loans l
+                       (SELECT COUNT(*) FROM hire_photos lp WHERE lp.hire_id = l.id) AS photo_count
+                  FROM hires l
                   INNER JOIN assets a ON a.id = l.asset_id
-                  INNER JOIN borrowers b ON b.id = l.borrower_id
+                  INNER JOIN hirers b ON b.id = l.hirer_id
                   LEFT JOIN users ou ON ou.id = l.checked_out_by_user_id
                   LEFT JOIN users ru ON ru.id = l.returned_to_user_id';
     }
@@ -51,7 +51,7 @@ final class Loan
         return Database::selectOne(self::selectSql() . ' WHERE l.id = ?', [$id]);
     }
 
-    /** The open loan for an asset, if it has one. */
+    /** The open hire for an asset, if it has one. */
     public static function openForAsset(int $assetId): ?array
     {
         return Database::selectOne(
@@ -73,13 +73,13 @@ final class Loan
     }
 
     /**
-     * Loans belonging to one borrower.
+     * Hires belonging to one hirer.
      *
      * @return array<int,array<string,mixed>>
      */
-    public static function forBorrower(int $borrowerId, bool $openOnly = false): array
+    public static function forHirer(int $hirerId, bool $openOnly = false): array
     {
-        $sql = self::selectSql() . ' WHERE l.borrower_id = ?';
+        $sql = self::selectSql() . ' WHERE l.hirer_id = ?';
 
         if ($openOnly) {
             $sql .= ' AND l.returned_at IS NULL';
@@ -87,20 +87,20 @@ final class Loan
 
         $sql .= ' ORDER BY l.returned_at IS NOT NULL, l.due_back_date ASC, l.id DESC';
 
-        return Database::select($sql, [$borrowerId]);
+        return Database::select($sql, [$hirerId]);
     }
 
     /**
-     * A single loan, but only if it belongs to this borrower.
+     * A single hire, but only if it belongs to this hirer.
      *
-     * The scoping lives here rather than in the controller so the borrower
+     * The scoping lives here rather than in the controller so the hirer
      * portal cannot accidentally be given an unscoped lookup.
      */
-    public static function findForBorrower(int $loanId, int $borrowerId): ?array
+    public static function findForHirer(int $hireId, int $hirerId): ?array
     {
         return Database::selectOne(
-            self::selectSql() . ' WHERE l.id = ? AND l.borrower_id = ?',
-            [$loanId, $borrowerId]
+            self::selectSql() . ' WHERE l.id = ? AND l.hirer_id = ?',
+            [$hireId, $hirerId]
         );
     }
 
@@ -115,9 +115,9 @@ final class Loan
         $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
 
         $total = (int) Database::scalar(
-            'SELECT COUNT(*) FROM loans l
+            'SELECT COUNT(*) FROM hires l
                INNER JOIN assets a ON a.id = l.asset_id
-               INNER JOIN borrowers b ON b.id = l.borrower_id' . $whereSql,
+               INNER JOIN hirers b ON b.id = l.hirer_id' . $whereSql,
             $params
         );
 
@@ -142,7 +142,7 @@ final class Loan
     }
 
     /**
-     * Every matching loan, ignoring pagination — for reports and exports.
+     * Every matching hire, ignoring pagination — for reports and exports.
      *
      * @param array<string,mixed> $filters
      * @return array<int,array<string,mixed>>
@@ -167,7 +167,7 @@ final class Loan
             'due'      => 'l.returned_at IS NOT NULL, l.due_back_date ASC',
             'recent'   => 'l.checked_out_at DESC',
             'asset'    => 'a.asset_tag ASC',
-            'borrower' => 'b.name ASC',
+            'hirer' => 'b.name ASC',
         ];
 
         return $sorts[(string) ($filters['sort'] ?? 'due')] ?? $sorts['due'];
@@ -207,9 +207,9 @@ final class Loan
             }
         }
 
-        if (!empty($filters['borrower_id'])) {
-            $where[]  = 'l.borrower_id = ?';
-            $params[] = (int) $filters['borrower_id'];
+        if (!empty($filters['hirer_id'])) {
+            $where[]  = 'l.hirer_id = ?';
+            $params[] = (int) $filters['hirer_id'];
         }
 
         if (!empty($filters['asset_id'])) {
@@ -227,7 +227,7 @@ final class Loan
             $params[] = $filters['to'] . ' 23:59:59';
         }
 
-        // Open loans only — used by the "on loan" and "due back" reports.
+        // Open hires only — used by the "on hire" and "due back" reports.
         if (!empty($filters['open_only'])) {
             $where[] = 'l.returned_at IS NULL';
         }
@@ -246,7 +246,7 @@ final class Loan
      */
     public static function summary(): array
     {
-        $dueSoon = max(0, min(90, Setting::int('loan_due_soon_days', 2)));
+        $dueSoon = max(0, min(90, Setting::int('hire_due_soon_days', 2)));
 
         $row = Database::selectOne(
             'SELECT
@@ -255,7 +255,7 @@ final class Loan
                 SUM(CASE WHEN l.returned_at IS NULL AND l.due_back_date >= CURDATE()
                           AND l.due_back_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY) THEN 1 ELSE 0 END) AS due_soon,
                 SUM(CASE WHEN l.returned_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS returned_30
-               FROM loans l',
+               FROM hires l',
             [$dueSoon]
         );
 
@@ -278,13 +278,13 @@ final class Loan
     public static function refreshOverdue(): int
     {
         $flagged = Database::run(
-            "UPDATE loans SET status = 'Overdue'
+            "UPDATE hires SET status = 'Overdue'
               WHERE returned_at IS NULL AND due_back_date < CURDATE() AND status <> 'Overdue'"
         )->rowCount();
 
-        // A loan whose due date was extended is no longer overdue.
+        // A hire whose due date was extended is no longer overdue.
         $cleared = Database::run(
-            "UPDATE loans SET status = 'Out'
+            "UPDATE hires SET status = 'Out'
               WHERE returned_at IS NULL AND due_back_date >= CURDATE() AND status <> 'Out'"
         )->rowCount();
 
@@ -299,22 +299,22 @@ final class Loan
     public static function blockedReason(array $asset): ?string
     {
         if ($asset['status'] === 'Retired') {
-            return 'This asset has been archived, so it cannot be loaned out.';
+            return 'This asset has been archived, so it cannot be hired out.';
         }
 
-        if ((int) $asset['is_loanable'] !== 1) {
-            return 'This asset is marked as not available for loan (fixed plant, or must not leave site).';
+        if ((int) $asset['is_hireable'] !== 1) {
+            return 'This asset is marked as not available for hire (fixed plant, or must not leave site).';
         }
 
         if ($asset['status'] === 'In Maintenance') {
-            return 'This asset is in maintenance. Complete or close the maintenance before loaning it out.';
+            return 'This asset is in maintenance. Complete or close the maintenance before hiring it out.';
         }
 
         $open = self::openForAsset((int) $asset['id']);
         if ($open !== null) {
             return sprintf(
                 'This asset is already out with %s until %s (%s).',
-                $open['borrower_name'],
+                $open['hirer_name'],
                 format_date($open['due_back_date']),
                 $open['reference'] ?? 'no reference'
             );
@@ -332,7 +332,7 @@ final class Loan
      *
      * @param array<string,mixed> $data
      */
-    public static function checkout(int $assetId, int $borrowerId, array $data): int
+    public static function checkout(int $assetId, int $hirerId, array $data): int
     {
         Database::beginTransaction();
 
@@ -343,23 +343,23 @@ final class Loan
                 throw new RuntimeException('That asset no longer exists.');
             }
 
-            $openLoan = Database::selectOne(
-                'SELECT id FROM loans WHERE asset_id = ? AND returned_at IS NULL LIMIT 1',
+            $openHire = Database::selectOne(
+                'SELECT id FROM hires WHERE asset_id = ? AND returned_at IS NULL LIMIT 1',
                 [$assetId]
             );
 
-            if ($openLoan !== null) {
+            if ($openHire !== null) {
                 throw new RuntimeException('That asset was checked out by someone else a moment ago.');
             }
 
-            if ($asset['status'] === 'Retired' || (int) $asset['is_loanable'] !== 1 || $asset['status'] === 'In Maintenance') {
-                throw new RuntimeException('That asset is not available to loan.');
+            if ($asset['status'] === 'Retired' || (int) $asset['is_hireable'] !== 1 || $asset['status'] === 'In Maintenance') {
+                throw new RuntimeException('That asset is not available to hire.');
             }
 
-            $loanId = Database::insert('loans', [
+            $hireId = Database::insert('hires', [
                 'reference'              => self::nextReference(),
                 'asset_id'               => $assetId,
-                'borrower_id'            => $borrowerId,
+                'hirer_id'            => $hirerId,
                 'checked_out_at'         => $data['checked_out_at'],
                 'due_back_date'          => $data['due_back_date'],
                 'checked_out_by_user_id' => Auth::id(),
@@ -371,13 +371,13 @@ final class Loan
             ]);
 
             Database::update('assets', [
-                'status'     => 'On Loan',
+                'status'     => 'On Hire',
                 'updated_by' => Auth::id(),
             ], $assetId);
 
             Database::commit();
 
-            return $loanId;
+            return $hireId;
         } catch (\Throwable $e) {
             Database::rollBack();
             throw $e;
@@ -389,28 +389,28 @@ final class Loan
      *
      * @param array<string,mixed> $data
      */
-    public static function markReturned(int $loanId, array $data): void
+    public static function markReturned(int $hireId, array $data): void
     {
         Database::beginTransaction();
 
         try {
-            $loan = Database::selectOne('SELECT * FROM loans WHERE id = ? FOR UPDATE', [$loanId]);
+            $hire = Database::selectOne('SELECT * FROM hires WHERE id = ? FOR UPDATE', [$hireId]);
 
-            if ($loan === null) {
-                throw new RuntimeException('That loan no longer exists.');
+            if ($hire === null) {
+                throw new RuntimeException('That hire no longer exists.');
             }
 
-            if ($loan['returned_at'] !== null) {
-                throw new RuntimeException('That loan has already been booked back in.');
+            if ($hire['returned_at'] !== null) {
+                throw new RuntimeException('That hire has already been booked back in.');
             }
 
-            Database::update('loans', [
+            Database::update('hires', [
                 'returned_at'              => $data['returned_at'],
                 'returned_to_user_id'      => Auth::id(),
                 'condition_in'             => $data['condition_in'],
                 'returned_condition_notes' => $data['returned_condition_notes'],
                 'status'                   => 'Returned',
-            ], $loanId);
+            ], $hireId);
 
             $assetChanges = [
                 'status'     => $data['asset_status'],
@@ -421,7 +421,7 @@ final class Loan
                 $assetChanges['condition_rating'] = $data['condition_in'];
             }
 
-            Database::update('assets', $assetChanges, (int) $loan['asset_id']);
+            Database::update('assets', $assetChanges, (int) $hire['asset_id']);
 
             Database::commit();
         } catch (\Throwable $e) {
@@ -430,25 +430,25 @@ final class Loan
         }
     }
 
-    /** Extend an open loan's due date. */
-    public static function extend(int $loanId, string $newDueDate): void
+    /** Extend an open hire's due date. */
+    public static function extend(int $hireId, string $newDueDate): void
     {
-        Database::update('loans', [
+        Database::update('hires', [
             'due_back_date' => $newDueDate,
             'status'        => $newDueDate < date('Y-m-d') ? 'Overdue' : 'Out',
-        ], $loanId);
+        ], $hireId);
     }
 
-    /** Human-friendly loan reference, e.g. LN-2026-0001. */
+    /** Human-friendly hire reference, e.g. LN-2026-0001. */
     public static function nextReference(): string
     {
-        $prefix = (string) Setting::get('loan_reference_prefix', 'LN-');
+        $prefix = (string) Setting::get('hire_reference_prefix', 'LN-');
         $year   = date('Y');
         $stem   = $prefix . $year . '-';
 
         $max = Database::scalar(
             "SELECT MAX(CAST(SUBSTRING(reference, ?) AS UNSIGNED))
-               FROM loans
+               FROM hires
               WHERE reference LIKE ? ESCAPE '!'",
             [strlen($stem) + 1, str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $stem) . '%']
         );
@@ -458,7 +458,7 @@ final class Loan
         for ($attempt = 0; $attempt < 50; $attempt++) {
             $candidate = $stem . str_pad((string) ($number + $attempt), 4, '0', STR_PAD_LEFT);
 
-            $exists = (int) Database::scalar('SELECT COUNT(*) FROM loans WHERE reference = ?', [$candidate]);
+            $exists = (int) Database::scalar('SELECT COUNT(*) FROM hires WHERE reference = ?', [$candidate]);
 
             if ($exists === 0) {
                 return $candidate;
@@ -469,13 +469,13 @@ final class Loan
     }
 
     /** @return array<int,array<string,mixed>> */
-    public static function photos(int $loanId, ?string $stage = null): array
+    public static function photos(int $hireId, ?string $stage = null): array
     {
         $sql    = 'SELECT p.*, u.name AS uploaded_by_name
-                     FROM loan_photos p
+                     FROM hire_photos p
                      LEFT JOIN users u ON u.id = p.uploaded_by
-                    WHERE p.loan_id = ?';
-        $params = [$loanId];
+                    WHERE p.hire_id = ?';
+        $params = [$hireId];
 
         if ($stage !== null) {
             $sql     .= ' AND p.stage = ?';
@@ -488,12 +488,12 @@ final class Loan
     /** @return array<string,mixed>|null */
     public static function findPhoto(int $photoId): ?array
     {
-        return Database::selectOne('SELECT * FROM loan_photos WHERE id = ?', [$photoId]);
+        return Database::selectOne('SELECT * FROM hire_photos WHERE id = ?', [$photoId]);
     }
 
     /** @param array<string,mixed> $data */
     public static function addPhoto(array $data): int
     {
-        return Database::insert('loan_photos', $data);
+        return Database::insert('hire_photos', $data);
     }
 }

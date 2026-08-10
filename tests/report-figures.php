@@ -81,14 +81,14 @@ $checks = [
                       WHERE s.is_active = 1 AND a.status <> 'Retired' AND s.next_due_date < CURDATE()",
     ],
     [
-        'report' => '/reports/assets-on-loan',
-        'label'  => 'Assets currently on loan',
-        'sql'    => 'SELECT COUNT(*) FROM loans WHERE returned_at IS NULL',
+        'report' => '/reports/assets-on-hire',
+        'label'  => 'Assets currently on hire',
+        'sql'    => 'SELECT COUNT(*) FROM hires WHERE returned_at IS NULL',
     ],
     [
-        'report' => '/reports/loans-due-back?window=all',
-        'label'  => 'All open loans',
-        'sql'    => 'SELECT COUNT(*) FROM loans WHERE returned_at IS NULL',
+        'report' => '/reports/hires-due-back?window=all',
+        'label'  => 'All open hires',
+        'sql'    => 'SELECT COUNT(*) FROM hires WHERE returned_at IS NULL',
     ],
     [
         'report' => '/reports/pat-due?window=all',

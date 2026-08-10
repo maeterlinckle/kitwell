@@ -35,7 +35,7 @@
         <h2>No photos yet</h2>
         <p class="muted">
             Photos added here build a dated record of this asset's condition — useful when
-            something comes back from a loan in a different state than it went out.
+            something comes back from a hire in a different state than it went out.
         </p>
     </div>
 <?php else: ?>

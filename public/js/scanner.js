@@ -335,13 +335,13 @@
             + (data.asset.location ? '<span class="badge badge-muted">' + escapeHtml(data.asset.location) + '</span>' : '')
             + '</p>';
 
-        if (data.loan) {
-            html += '<p class="' + (data.loan.overdue ? 'scan-warn' : 'muted') + '">'
-                + 'Out with ' + escapeHtml(data.loan.borrower) + ', due ' + escapeHtml(data.loan.due)
-                + (data.loan.overdue ? ' — overdue' : '') + '</p>';
+        if (data.hire) {
+            html += '<p class="' + (data.hire.overdue ? 'scan-warn' : 'muted') + '">'
+                + 'Out with ' + escapeHtml(data.hire.hirer) + ', due ' + escapeHtml(data.hire.due)
+                + (data.hire.overdue ? ' — overdue' : '') + '</p>';
         }
 
-        if (data.blocked && !data.loan) {
+        if (data.blocked && !data.hire) {
             html += '<p class="scan-warn">' + escapeHtml(data.blocked) + '</p>';
         }
 
@@ -352,7 +352,7 @@
         }
 
         if (mode === 'return' && data.can.return) {
-            html += '<a class="btn btn-primary btn-lg" href="' + escapeHtml(data.loan.return_url) + '">Book in</a>';
+            html += '<a class="btn btn-primary btn-lg" href="' + escapeHtml(data.hire.return_url) + '">Book in</a>';
         }
 
         if (mode !== 'checkout' && data.can.checkout) {
@@ -360,7 +360,7 @@
         }
 
         if (mode !== 'return' && data.can.return) {
-            html += '<a class="btn" href="' + escapeHtml(data.loan.return_url) + '">Book in</a>';
+            html += '<a class="btn" href="' + escapeHtml(data.hire.return_url) + '">Book in</a>';
         }
 
         html += '<a class="btn' + (mode === 'view' ? ' btn-primary btn-lg' : '') + '" href="'

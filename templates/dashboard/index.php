@@ -46,9 +46,9 @@ $canReport = can('reports.view');
         <?= $tile(number_format((int) $stats['assets']['in_stock']), 'In stock',
             $canReport ? '/reports/all-assets?status=In+Stock' : '/assets?status%5B%5D=In+Stock') ?>
 
-        <?= $tile(number_format((int) $stats['assets']['on_loan']), 'On loan',
-            can('loans.view') && $canReport ? '/reports/assets-on-loan' : '/assets?status%5B%5D=On+Loan',
-            ((int) $stats['assets']['on_loan']) > 0 ? 'info' : '') ?>
+        <?= $tile(number_format((int) $stats['assets']['on_hire']), 'On hire',
+            can('hires.view') && $canReport ? '/reports/assets-on-hire' : '/assets?status%5B%5D=On+Hire',
+            ((int) $stats['assets']['on_hire']) > 0 ? 'info' : '') ?>
 
         <?= $tile(number_format((int) $stats['assets']['in_maintenance']), 'In maintenance',
             $canReport ? '/reports/all-assets?status=In+Maintenance' : '/assets?status%5B%5D=In+Maintenance',
@@ -56,7 +56,7 @@ $canReport = can('reports.view');
     </div>
 <?php endif; ?>
 
-<?php if (isset($stats['maintenance']) || isset($stats['pat']) || isset($stats['loans'])): ?>
+<?php if (isset($stats['maintenance']) || isset($stats['pat']) || isset($stats['hires'])): ?>
     <h2 class="section-title">Needs attention</h2>
     <div class="stat-grid">
         <?php if (isset($stats['maintenance'])): ?>
@@ -86,18 +86,18 @@ $canReport = can('reports.view');
                 ((int) $stats['pat']['failed'] + (int) $stats['pat']['never_tested']) > 0 ? 'danger' : '') ?>
         <?php endif; ?>
 
-        <?php if (isset($stats['loans'])): ?>
-            <?= $tile((string) (int) $stats['loans']['out'], 'Items out on loan',
-                $canReport ? '/reports/assets-on-loan' : '/loans?status%5B%5D=Out', 'info') ?>
+        <?php if (isset($stats['hires'])): ?>
+            <?= $tile((string) (int) $stats['hires']['out'], 'Items out on hire',
+                $canReport ? '/reports/assets-on-hire' : '/hires?status%5B%5D=Out', 'info') ?>
 
-            <?= $tile((string) (int) $stats['loans']['overdue'], 'Returns overdue',
-                $canReport ? '/reports/loans-due-back?window=overdue' : '/loans?status%5B%5D=Overdue',
-                ((int) $stats['loans']['overdue']) > 0 ? 'danger' : '') ?>
+            <?= $tile((string) (int) $stats['hires']['overdue'], 'Returns overdue',
+                $canReport ? '/reports/hires-due-back?window=overdue' : '/hires?status%5B%5D=Overdue',
+                ((int) $stats['hires']['overdue']) > 0 ? 'danger' : '') ?>
 
-            <?= $tile((string) (int) $stats['loans']['due_soon'],
-                'Due back within ' . (int) $stats['loans']['due_days'] . ' day' . ($stats['loans']['due_days'] === 1 ? '' : 's'),
-                $canReport ? '/reports/loans-due-back?window=soon' : '/loans',
-                ((int) $stats['loans']['due_soon']) > 0 ? 'warn' : '') ?>
+            <?= $tile((string) (int) $stats['hires']['due_soon'],
+                'Due back within ' . (int) $stats['hires']['due_days'] . ' day' . ($stats['hires']['due_days'] === 1 ? '' : 's'),
+                $canReport ? '/reports/hires-due-back?window=soon' : '/hires',
+                ((int) $stats['hires']['due_soon']) > 0 ? 'warn' : '') ?>
         <?php endif; ?>
     </div>
 <?php endif; ?>
@@ -107,10 +107,10 @@ $canReport = can('reports.view');
         <h2>Quick actions</h2>
         <div class="quick-action-row">
             <a class="btn btn-primary btn-lg" href="<?= e(url('/scan')) ?>">Scan an asset</a>
-            <?php if (can('loans.create')): ?>
+            <?php if (can('hires.create')): ?>
                 <a class="btn btn-lg" href="<?= e(url('/scan?mode=checkout')) ?>">Check out</a>
             <?php endif; ?>
-            <?php if (can('loans.return')): ?>
+            <?php if (can('hires.return')): ?>
                 <a class="btn btn-lg" href="<?= e(url('/scan?mode=return')) ?>">Book in</a>
             <?php endif; ?>
             <?php if (can('assets.create')): ?>

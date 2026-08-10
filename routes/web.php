@@ -20,11 +20,11 @@ use App\Controllers\AssetCopyController;
 use App\Controllers\AssetExportController;
 use App\Controllers\ImportController;
 use App\Controllers\AuthController;
-use App\Controllers\BorrowerController;
+use App\Controllers\HirerController;
 use App\Controllers\DashboardController;
 use App\Controllers\LabelController;
-use App\Controllers\LoanController;
-use App\Controllers\MyLoansController;
+use App\Controllers\HireController;
+use App\Controllers\MyHiresController;
 use App\Controllers\ScanController;
 use App\Controllers\MaintenanceController;
 use App\Controllers\ManualController;
@@ -133,26 +133,26 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/assets/{assetId:\d+}/pat/toggle', [PatController::class, 'toggleRequirement'], ['can:assets.edit', 'csrf']);
 });
 
-// --- Loans and hires ------------------------------------------------------
+// --- Hires and hirers ------------------------------------------------------
 $router->group(['auth'], static function (Router $router): void {
-    $router->get('/loans',          [LoanController::class, 'index'],        ['can:loans.view'], 'loans');
-    $router->get('/loans/checkout', [LoanController::class, 'checkoutForm'], ['can:loans.create']);
-    $router->post('/loans/checkout',[LoanController::class, 'checkout'],     ['can:loans.create', 'csrf']);
+    $router->get('/hires',          [HireController::class, 'index'],        ['can:hires.view'], 'hires');
+    $router->get('/hires/checkout', [HireController::class, 'checkoutForm'], ['can:hires.create']);
+    $router->post('/hires/checkout',[HireController::class, 'checkout'],     ['can:hires.create', 'csrf']);
 
-    $router->get('/loans/{id:\d+}',           [LoanController::class, 'show'],       ['can:loans.view']);
-    $router->get('/loans/{id:\d+}/return',    [LoanController::class, 'returnForm'], ['can:loans.return']);
-    $router->post('/loans/{id:\d+}/return',   [LoanController::class, 'returnLoan'], ['can:loans.return', 'csrf']);
-    $router->post('/loans/{id:\d+}/extend',   [LoanController::class, 'extend'],     ['can:loans.manage', 'csrf']);
-    $router->get('/loans/{loanId:\d+}/photos/{photoId:\d+}', [LoanController::class, 'photo'], ['can:loans.view']);
+    $router->get('/hires/{id:\d+}',           [HireController::class, 'show'],       ['can:hires.view']);
+    $router->get('/hires/{id:\d+}/return',    [HireController::class, 'returnForm'], ['can:hires.return']);
+    $router->post('/hires/{id:\d+}/return',   [HireController::class, 'returnHire'], ['can:hires.return', 'csrf']);
+    $router->post('/hires/{id:\d+}/extend',   [HireController::class, 'extend'],     ['can:hires.manage', 'csrf']);
+    $router->get('/hires/{hireId:\d+}/photos/{photoId:\d+}', [HireController::class, 'photo'], ['can:hires.view']);
 
-    // Borrowers
-    $router->get('/borrowers',                 [BorrowerController::class, 'index'],   ['can:borrowers.view'], 'borrowers');
-    $router->get('/borrowers/create',          [BorrowerController::class, 'create'],  ['can:borrowers.manage']);
-    $router->post('/borrowers',                [BorrowerController::class, 'store'],   ['can:borrowers.manage', 'csrf']);
-    $router->get('/borrowers/{id:\d+}',        [BorrowerController::class, 'show'],    ['can:borrowers.view']);
-    $router->get('/borrowers/{id:\d+}/edit',   [BorrowerController::class, 'edit'],    ['can:borrowers.manage']);
-    $router->post('/borrowers/{id:\d+}',       [BorrowerController::class, 'update'],  ['can:borrowers.manage', 'csrf']);
-    $router->post('/borrowers/{id:\d+}/delete',[BorrowerController::class, 'destroy'], ['can:borrowers.manage', 'csrf']);
+    // Hirers
+    $router->get('/hirers',                 [HirerController::class, 'index'],   ['can:hirers.view'], 'hirers');
+    $router->get('/hirers/create',          [HirerController::class, 'create'],  ['can:hirers.manage']);
+    $router->post('/hirers',                [HirerController::class, 'store'],   ['can:hirers.manage', 'csrf']);
+    $router->get('/hirers/{id:\d+}',        [HirerController::class, 'show'],    ['can:hirers.view']);
+    $router->get('/hirers/{id:\d+}/edit',   [HirerController::class, 'edit'],    ['can:hirers.manage']);
+    $router->post('/hirers/{id:\d+}',       [HirerController::class, 'update'],  ['can:hirers.manage', 'csrf']);
+    $router->post('/hirers/{id:\d+}/delete',[HirerController::class, 'destroy'], ['can:hirers.manage', 'csrf']);
 
     // Quick scan, reachable from anywhere.
     $router->get('/scan',        [ScanController::class, 'index'],  ['can:assets.view'], 'scan');
@@ -177,14 +177,14 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/reports/{key:[a-z0-9-]+}',[ReportController::class, 'show'],  ['can:reports.view']);
 });
 
-// --- Borrower self-service ------------------------------------------------
-// Auth only: every query is scoped to the borrower record linked to the
+// --- Hirer self-service ------------------------------------------------
+// Auth only: every query is scoped to the hirer record linked to the
 // signed-in user, so there is nothing here that is not already theirs.
 $router->group(['auth'], static function (Router $router): void {
-    $router->get('/my-loans',                  [MyLoansController::class, 'index'], [], 'my-loans');
-    $router->get('/my-loans/{loanId:\d+}',     [MyLoansController::class, 'show']);
-    $router->get('/my-loans/{loanId:\d+}/photo', [MyLoansController::class, 'photo']);
-    $router->get('/my-loans/{loanId:\d+}/manuals/{manualId:\d+}', [MyLoansController::class, 'manual']);
+    $router->get('/my-hires',                  [MyHiresController::class, 'index'], [], 'my-hires');
+    $router->get('/my-hires/{hireId:\d+}',     [MyHiresController::class, 'show']);
+    $router->get('/my-hires/{hireId:\d+}/photo', [MyHiresController::class, 'photo']);
+    $router->get('/my-hires/{hireId:\d+}/manuals/{manualId:\d+}', [MyHiresController::class, 'manual']);
 });
 
 // --- Administration -------------------------------------------------------

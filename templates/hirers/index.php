@@ -1,23 +1,23 @@
 <?php
 
-use App\Models\Borrower;
+use App\Models\Hirer;
 
 /**
- * @var array<int,array<string,mixed>> $borrowers
+ * @var array<int,array<string,mixed>> $hirers
  * @var array<string,mixed> $filters
  */
 ?>
 <div class="page-head">
     <div>
-        <h1>Borrowers</h1>
-        <p class="muted"><?= count($borrowers) ?> record<?= count($borrowers) === 1 ? '' : 's' ?></p>
+        <h1>Hirers</h1>
+        <p class="muted"><?= count($hirers) ?> record<?= count($hirers) === 1 ? '' : 's' ?></p>
     </div>
-    <?php if (can('borrowers.manage')): ?>
-        <a class="btn btn-primary" href="<?= e(url('/borrowers/create')) ?>">Add borrower</a>
+    <?php if (can('hirers.manage')): ?>
+        <a class="btn btn-primary" href="<?= e(url('/hirers/create')) ?>">Add hirer</a>
     <?php endif; ?>
 </div>
 
-<form method="get" action="<?= e(url('/borrowers')) ?>" class="filter-bar">
+<form method="get" action="<?= e(url('/hirers')) ?>" class="filter-bar">
     <div class="field field-inline">
         <label class="sr-only" for="q">Search</label>
         <input class="input" type="search" id="q" name="q" placeholder="Search name, company, email…"
@@ -28,7 +28,7 @@ use App\Models\Borrower;
         <label class="sr-only" for="type">Type</label>
         <select class="input" id="type" name="type">
             <option value="">People and companies</option>
-            <?php foreach (Borrower::TYPES as $type): ?>
+            <?php foreach (Hirer::TYPES as $type): ?>
                 <option value="<?= e($type) ?>" <?= $filters['type'] === $type ? 'selected' : '' ?>><?= e($type) ?></option>
             <?php endforeach; ?>
         </select>
@@ -44,20 +44,20 @@ use App\Models\Borrower;
     </div>
 
     <label class="checkbox checkbox-compact">
-        <input type="checkbox" name="out" value="1" <?= !empty($filters['with_open_loans']) ? 'checked' : '' ?>>
+        <input type="checkbox" name="out" value="1" <?= !empty($filters['with_open_hires']) ? 'checked' : '' ?>>
         <span>Has items out</span>
     </label>
 
     <button class="btn" type="submit">Filter</button>
-    <a class="btn btn-ghost" href="<?= e(url('/borrowers')) ?>">Clear</a>
+    <a class="btn btn-ghost" href="<?= e(url('/hirers')) ?>">Clear</a>
 </form>
 
-<?php if ($borrowers === []): ?>
+<?php if ($hirers === []): ?>
     <div class="card empty-state">
-        <h2>No borrowers</h2>
+        <h2>No hirers</h2>
         <p class="muted">Add the people and companies who take items out.</p>
-        <?php if (can('borrowers.manage')): ?>
-            <a class="btn btn-primary" href="<?= e(url('/borrowers/create')) ?>">Add the first borrower</a>
+        <?php if (can('hirers.manage')): ?>
+            <a class="btn btn-primary" href="<?= e(url('/hirers/create')) ?>">Add the first hirer</a>
         <?php endif; ?>
     </div>
 <?php else: ?>
@@ -74,46 +74,46 @@ use App\Models\Borrower;
             </tr>
             </thead>
             <tbody>
-            <?php foreach ($borrowers as $borrower): ?>
-                <tr class="<?= (int) $borrower['is_active'] === 1 ? '' : 'row-muted' ?>">
+            <?php foreach ($hirers as $hirer): ?>
+                <tr class="<?= (int) $hirer['is_active'] === 1 ? '' : 'row-muted' ?>">
                     <td>
-                        <a href="<?= e(url('/borrowers/' . $borrower['id'])) ?>"><strong><?= e($borrower['name']) ?></strong></a>
-                        <?php if (!empty($borrower['company_name']) && $borrower['company_name'] !== $borrower['name']): ?>
-                            <div class="cell-sub"><?= e($borrower['company_name']) ?></div>
+                        <a href="<?= e(url('/hirers/' . $hirer['id'])) ?>"><strong><?= e($hirer['name']) ?></strong></a>
+                        <?php if (!empty($hirer['company_name']) && $hirer['company_name'] !== $hirer['name']): ?>
+                            <div class="cell-sub"><?= e($hirer['company_name']) ?></div>
                         <?php endif; ?>
-                        <?php if (!empty($borrower['reference'])): ?>
-                            <div class="cell-sub mono"><?= e($borrower['reference']) ?></div>
+                        <?php if (!empty($hirer['reference'])): ?>
+                            <div class="cell-sub mono"><?= e($hirer['reference']) ?></div>
                         <?php endif; ?>
                     </td>
-                    <td><span class="badge badge-muted"><?= e($borrower['borrower_type']) ?></span></td>
+                    <td><span class="badge badge-muted"><?= e($hirer['hirer_type']) ?></span></td>
                     <td class="break">
-                        <?php if (!empty($borrower['email'])): ?>
-                            <a href="mailto:<?= e($borrower['email']) ?>"><?= e($borrower['email']) ?></a><br>
+                        <?php if (!empty($hirer['email'])): ?>
+                            <a href="mailto:<?= e($hirer['email']) ?>"><?= e($hirer['email']) ?></a><br>
                         <?php endif; ?>
-                        <?= e($borrower['phone'] ?? '') ?>
+                        <?= e($hirer['phone'] ?? '') ?>
                     </td>
                     <td>
-                        <?php if (!empty($borrower['user_name'])): ?>
+                        <?php if (!empty($hirer['user_name'])): ?>
                             <span class="badge badge-ok">Linked</span>
-                            <div class="cell-sub"><?= e($borrower['user_name']) ?></div>
+                            <div class="cell-sub"><?= e($hirer['user_name']) ?></div>
                         <?php else: ?>
                             <span class="badge badge-muted">No login</span>
                         <?php endif; ?>
                     </td>
                     <td class="nowrap">
-                        <?php if ((int) $borrower['open_loans'] > 0): ?>
-                            <strong><?= (int) $borrower['open_loans'] ?></strong>
-                            <?php if ((int) $borrower['overdue_loans'] > 0): ?>
-                                <span class="badge loan-overdue"><?= (int) $borrower['overdue_loans'] ?> overdue</span>
+                        <?php if ((int) $hirer['open_hires'] > 0): ?>
+                            <strong><?= (int) $hirer['open_hires'] ?></strong>
+                            <?php if ((int) $hirer['overdue_hires'] > 0): ?>
+                                <span class="badge hire-overdue"><?= (int) $hirer['overdue_hires'] ?> overdue</span>
                             <?php endif; ?>
                         <?php else: ?>
                             —
                         <?php endif; ?>
                     </td>
                     <td class="actions">
-                        <a class="btn btn-sm" href="<?= e(url('/borrowers/' . $borrower['id'])) ?>">Open</a>
-                        <?php if (can('borrowers.manage')): ?>
-                            <a class="btn btn-sm btn-ghost" href="<?= e(url('/borrowers/' . $borrower['id'] . '/edit')) ?>">Edit</a>
+                        <a class="btn btn-sm" href="<?= e(url('/hirers/' . $hirer['id'])) ?>">Open</a>
+                        <?php if (can('hirers.manage')): ?>
+                            <a class="btn btn-sm btn-ghost" href="<?= e(url('/hirers/' . $hirer['id'] . '/edit')) ?>">Edit</a>
                         <?php endif; ?>
                     </td>
                 </tr>

@@ -2,7 +2,7 @@
 
 Self-hosted asset register for a workshop/office: assets and sub-assets, condition
 photos, PDF manuals, maintenance scheduling, PAT (Portable Appliance Testing)
-records, and loan/hire tracking — usable on a phone in the workshop as well as on
+records, and hire tracking — usable on a phone in the workshop as well as on
 a desktop.
 
 PHP 8.1+ and MariaDB 10.4+, no framework. Server-rendered PHP templates
@@ -20,9 +20,9 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
   parts, cost and photos, and a clear view of what is overdue or coming up.
 - **PAT testing** — full test history per asset with every reading and its
   unit, and an at-a-glance status that treats a failure as a failure.
-- **Loans and hire** — check out by barcode scan or by hand, due dates, returns
+- **Hires** — check out by barcode scan or by hand, due dates, returns
   with condition notes and photos, and no way to double-book an item.
-- **Borrower self-service** — a borrower signs in and sees only what they hold.
+- **Hirer self-service** — a hirer signs in and sees only what they hold.
 - **Reports** — five built in, each filterable, printable and exportable.
 - **CSV** — import an existing register or a contractor's PAT results with a
   preview before anything is written; export what you are looking at.
@@ -187,7 +187,7 @@ php bin/seed.php
 ```
 
 Adds sample categories, locations, ten assets (including a sub-assembly and an
-accessory), maintenance schedules, PAT history, borrowers and loans, plus one
+accessory), maintenance schedules, PAT history, hirers and hires, plus one
 user per role. Demo accounts all use the password `Workshop!Demo2026`:
 
 | Email | Role |
@@ -195,7 +195,7 @@ user per role. Demo accounts all use the password `Workshop!Demo2026`:
 | `admin@example.com` | Administrator |
 | `manager@example.com` | Manager / Staff |
 | `viewer@example.com` | Read-only |
-| `borrower@example.com` | Borrower |
+| `hirer@example.com` | Hirer |
 
 The script refuses to run when `APP_ENV=production` unless you pass `--force`.
 **Delete or deactivate these accounts before real use.**
@@ -475,9 +475,9 @@ Four roles ship with the system:
 | Role | Intended for |
 |------|--------------|
 | **Administrator** | Full access, including users, roles and settings |
-| **Manager / Staff** | Day-to-day asset, maintenance, PAT and loan management |
+| **Manager / Staff** | Day-to-day asset, maintenance, PAT and hire management |
 | **Read-only** | Can see the register and reports, changes nothing |
-| **Borrower** | Can look up items and see their own loans |
+| **Hirer** | Can look up items and see their own hires |
 
 Permissions are **data, not code**: `roles` → `role_permissions` → `permissions`.
 Adding a permission or a whole new role is an `INSERT`, never a schema change.
@@ -559,7 +559,7 @@ noticeable.
 
 Photos can be added to any asset — including sub-assets — at any point in its
 life, building a dated visual record. That is the point: a photo taken when an
-item goes out on loan and another when it comes back settles an argument in
+item goes out on hire and another when it comes back settles an argument in
 seconds.
 
 The gallery on the asset page shows the 12 most recent, newest first, each with
@@ -613,7 +613,7 @@ Two distinct workflows, both driven by explicit tick-boxes:
 **Copy asset** (`assets.create`) creates 1–50 new assets from an existing one.
 Pick which details carry over; each copy gets its own generated tag. Asset tag,
 secondary barcode, serial number, status, photos, PAT results, maintenance and
-loan history are never copied — they belong to one physical item. Serial numbers
+hire history are never copied — they belong to one physical item. Serial numbers
 are only carried over for a single copy, never a batch. A batch of more than one
 lands on the label sheet, ready to print.
 
@@ -819,7 +819,7 @@ asset can override it.
 As with maintenance, status is computed in SQL. `PatRecord::summary()` and
 `PatRecord::assetSearch($filters)` are what the reports module (stage 7) calls.
 
-### Loans and hires
+### Hires
 
 Check an asset out to a person or company, set a due-back date, and book it
 back in. Photos can be taken at both ends, so the condition going out and
@@ -827,16 +827,16 @@ coming back is evidenced rather than argued about.
 
 **Overdue is derived from the due date in SQL**, so it is always correct with
 nothing running on a schedule — no cron job to forget. The stored `status`
-column is kept in step by `Loan::refreshOverdue()` (two cheap indexed updates,
-run when the loans list or dashboard loads), purely so that anything reporting
+column is kept in step by `Hire::refreshOverdue()` (two cheap indexed updates,
+run when the hires list or dashboard loads), purely so that anything reporting
 straight off the database sees the same thing.
 
 **Double-booking is not possible.** An asset that is already out, retired, not
-loanable, or in maintenance is refused, with the reason given. The check runs
+hireable, or in maintenance is refused, with the reason given. The check runs
 twice: once for the form, and again inside the checkout transaction with the
 asset row locked (`SELECT … FOR UPDATE`), so two people scanning the same item
 at the same moment cannot both succeed. On checkout the asset moves to *On
-Loan*; on return it goes back to *In Stock* or straight into maintenance if it
+Hire*; on return it goes back to *In Stock* or straight into maintenance if it
 came back needing work.
 
 ### Scanning
@@ -851,7 +851,7 @@ sits at the end of every field that takes an asset tag or barcode:
 | Asset register | Search | fills and searches |
 | PAT register | Search | fills and searches |
 | Record a PAT test | Asset lookup | fills and jumps to the asset |
-| Loan checkout | "Which asset?" | fills and finds the asset |
+| Hire checkout | "Which asset?" | fills and finds the asset |
 
 Where the field is the whole question — a search or a lookup — a successful scan
 submits it rather than making you press another button.
@@ -894,14 +894,14 @@ roughly horizontal. Where the browser has a native detector, that is used
 instead and handles far more formats. If a code will not read, type it —
 nothing is lost.
 
-### The Borrower role
+### The Hirer role
 
-Setting one up is three ordinary steps: create the user with the **Borrower**
-role, create (or open) the borrower record, and pick the login under
-**Self-service login**. One login links to one borrower record; that link is
+Setting one up is three ordinary steps: create the user with the **Hirer**
+role, create (or open) the hirer record, and pick the login under
+**Self-service login**. One login links to one hirer record; that link is
 what scopes everything they see.
 
-A borrower signing in lands on **My loans** — a card per item with its photo,
+A hirer signing in lands on **My hires** — a card per item with its photo,
 tag, name, checkout date, due date, and any overdue clearly flagged. Opening
 one shows the description, condition, manuals (view or download), the
 manufacturer link and the **latest** PAT result if the item is tested.
@@ -909,19 +909,19 @@ manufacturer link and the **latest** PAT result if the item is tested.
 Everything else is closed to them, and the restriction is *structural* rather
 than a list of things remembered to be hidden:
 
-- The Borrower role holds exactly one permission, `loans.view_own`. It no
+- The Hirer role holds exactly one permission, `hires.view_own`. It no
   longer has `assets.view`, which would have opened the whole register.
 - The portal is a separate controller that never calls the asset controllers.
   Assets are reduced to an allow-list of visible fields, so a column added to
   `assets` in future cannot leak into it by accident.
-- Every query is scoped through the borrower record linked to the signed-in
-  user. Another borrower's loan returns **404, not 403** — no confirmation that
+- Every query is scoped through the hirer record linked to the signed-in
+  user. Another hirer's hire returns **404, not 403** — no confirmation that
   it exists.
 
-They cannot see other people's loans, other assets, maintenance, full PAT
+They cannot see other people's hires, other assets, maintenance, full PAT
 history, financial fields, internal notes, supplier, serial numbers or the
 storage location, and there is no add/edit/delete anywhere. Their navigation
-contains only *My loans* and their own profile.
+contains only *My hires* and their own profile.
 
 ### CSV import and export
 
@@ -969,7 +969,7 @@ export can be edited in a spreadsheet and fed straight back in; the test suite
 verifies that round trip.
 
 Three optional column groups can be appended: **latest PAT result**, **current
-loan**, and **next maintenance**. These are derived data rather than asset
+hire**, and **next maintenance**. These are derived data rather than asset
 fields, so they are ignored on re-import.
 
 Every import and export is recorded in the activity log with who, which file,
@@ -1002,12 +1002,12 @@ spellings work too, and any column can be left out.
 | Cable CSA (mm2) | | Square millimetres, e.g. 0.75, 1.5 | csa, cable size |
 | Requires PAT | | Yes/No, True/False, 1/0. Default No | pat, needs pat |
 | PAT interval (months) | | Blank uses the site default | retest interval |
-| Available for loan | | Yes/No. Default Yes | loanable |
+| Available for hire | | Yes/No. Default Yes | hireable |
 | Notes | | Free text | comments |
 | Secondary barcode | | A barcode the item already carries | other barcode |
 | Warranty expires | | Date | warranty |
 
-*Status `On Loan` is rejected with a warning — a loan needs a borrower, so
+*Status `On Hire` is rejected with a warning — a hire needs a hirer, so
 check the item out afterwards instead.* Three further columns (`Part of`,
 `Relationship`, `Added`) appear in exports and are recognised but ignored on
 import, so an exported file re-imports without complaint.
@@ -1049,7 +1049,7 @@ columns when exporting** appends any of:
 | Group | Columns |
 |-------|---------|
 | Latest PAT result | PAT status, last tested, result, retest due, PAT label |
-| Current loan | Loan status, on loan to, out since, due back |
+| Current hire | Hire status, on hire to, out since, due back |
 | Next maintenance | Next job, next due, last done |
 
 These are derived from other records rather than asset fields, so they are
@@ -1064,13 +1064,13 @@ Five reports ship, grouped on `/reports`:
 | **All assets** | The whole register, filterable, with cost and value totals |
 | **Assets needing maintenance** | What is overdue or due soon, and who it is assigned to |
 | **Assets needing PAT** | Overdue, failed, never tested, or due soon |
-| **Assets currently on loan** | What is out, with whom, and when it is due |
-| **Assets due back** | The chase list — overdue and imminent, with borrower phone and email |
+| **Assets currently on hire** | What is out, with whom, and when it is due |
+| **Assets due back** | The chase list — overdue and imminent, with hirer phone and email |
 
 Every report has filters, headline figures, a **print view** and a **CSV
 export**. Reports reuse the same model queries as the screens they mirror
 (`MaintenanceSchedule::searchAll()`, `PatRecord::assetSearchAll()`,
-`Loan::searchAll()`), so a figure in a report and the same figure on its
+`Hire::searchAll()`), so a figure in a report and the same figure on its
 screen cannot drift apart — they are the same query.
 
 Access needs `reports.view` **plus** the permission for the underlying data, so
@@ -1112,7 +1112,7 @@ which hides it from the pickers but leaves existing assets intact.
 
 Archiving sets an asset to *Retired*, keeps every record, and is reversible.
 Permanent deletion is available to `assets.delete` holders but is refused
-whenever the asset has loan, PAT or maintenance history, or attached items — the
+whenever the asset has hire, PAT or maintenance history, or attached items — the
 audit trail wins over tidiness.
 
 ---

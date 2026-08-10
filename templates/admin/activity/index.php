@@ -18,7 +18,7 @@
         <label class="sr-only" for="type">Entity</label>
         <select class="input" id="type" name="type">
             <option value="">All entities</option>
-            <?php foreach (['user', 'role', 'asset', 'loan', 'pat_record', 'maintenance_log', 'system'] as $type): ?>
+            <?php foreach (['user', 'role', 'asset', 'hire', 'pat_record', 'maintenance_log', 'system'] as $type): ?>
                 <option value="<?= e($type) ?>" <?= $filters['entity_type'] === $type ? 'selected' : '' ?>><?= e($type) ?></option>
             <?php endforeach; ?>
         </select>

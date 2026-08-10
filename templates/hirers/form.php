@@ -1,23 +1,23 @@
 <?php
 
-use App\Models\Borrower;
+use App\Models\Hirer;
 
 /**
- * @var array<string,mixed>|null $borrower
+ * @var array<string,mixed>|null $hirer
  * @var array<int,array<string,mixed>> $users
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
-$isEdit = $borrower !== null;
-$action = $isEdit ? url('/borrowers/' . $borrower['id']) : url('/borrowers');
+$isEdit = $hirer !== null;
+$action = $isEdit ? url('/hirers/' . $hirer['id']) : url('/hirers');
 
-$value = static function (string $field, mixed $default = '') use ($old, $borrower): string {
+$value = static function (string $field, mixed $default = '') use ($old, $hirer): string {
     if (array_key_exists($field, $old)) {
         return (string) $old[$field];
     }
 
-    if ($borrower !== null && array_key_exists($field, $borrower) && $borrower[$field] !== null) {
-        return (string) $borrower[$field];
+    if ($hirer !== null && array_key_exists($field, $hirer) && $hirer[$field] !== null) {
+        return (string) $hirer[$field];
     }
 
     return (string) $default;
@@ -25,12 +25,12 @@ $value = static function (string $field, mixed $default = '') use ($old, $borrow
 ?>
 <div class="page-head">
     <div>
-        <h1><?= $isEdit ? 'Edit borrower' : 'Add borrower' ?></h1>
+        <h1><?= $isEdit ? 'Edit hirer' : 'Add hirer' ?></h1>
         <?php if ($isEdit): ?>
-            <p class="muted"><?= (int) $borrower['total_loans'] ?> loan<?= (int) $borrower['total_loans'] === 1 ? '' : 's' ?> on record</p>
+            <p class="muted"><?= (int) $hirer['total_hires'] ?> hire<?= (int) $hirer['total_hires'] === 1 ? '' : 's' ?> on record</p>
         <?php endif; ?>
     </div>
-    <a class="btn btn-ghost" href="<?= e($isEdit ? url('/borrowers/' . $borrower['id']) : url('/borrowers')) ?>">Cancel</a>
+    <a class="btn btn-ghost" href="<?= e($isEdit ? url('/hirers/' . $hirer['id']) : url('/hirers')) ?>">Cancel</a>
 </div>
 
 <form method="post" action="<?= e($action) ?>" class="form form-wide" novalidate>
@@ -42,10 +42,10 @@ $value = static function (string $field, mixed $default = '') use ($old, $borrow
         <div class="field">
             <span class="label">Type</span>
             <div class="radio-cards radio-cards-inline">
-                <?php foreach (Borrower::TYPES as $type): ?>
+                <?php foreach (Hirer::TYPES as $type): ?>
                     <label class="radio-card">
-                        <input type="radio" name="borrower_type" value="<?= e($type) ?>"
-                            <?= $value('borrower_type', 'Person') === $type ? 'checked' : '' ?>>
+                        <input type="radio" name="hirer_type" value="<?= e($type) ?>"
+                            <?= $value('hirer_type', 'Person') === $type ? 'checked' : '' ?>>
                         <span>
                             <strong><?= e($type) ?></strong>
                             <span class="muted"><?= $type === 'Person' ? 'An individual who takes items out.' : 'An organisation hiring items.' ?></span>
@@ -104,9 +104,9 @@ $value = static function (string $field, mixed $default = '') use ($old, $borrow
     <div class="card">
         <h2>Self-service login <span class="optional">(optional)</span></h2>
         <p class="muted">
-            Linking a login lets this borrower sign in and see what they have out — and nothing else.
+            Linking a login lets this hirer sign in and see what they have out — and nothing else.
             Create the user first under <a href="<?= e(url('/admin/users')) ?>">Users</a> with the
-            <strong>Borrower</strong> role, then pick them here.
+            <strong>Hirer</strong> role, then pick them here.
         </p>
 
         <div class="field">
@@ -119,15 +119,15 @@ $value = static function (string $field, mixed $default = '') use ($old, $borrow
                     </option>
                 <?php endforeach; ?>
             </select>
-            <p class="field-hint">Each login can be linked to one borrower record.</p>
+            <p class="field-hint">Each login can be linked to one hirer record.</p>
             <?php if (isset($errors['user_id'])): ?><p class="field-error"><?= e($errors['user_id']) ?></p><?php endif; ?>
         </div>
 
         <?php if ($isEdit): ?>
             <div class="field">
                 <label class="checkbox">
-                    <input type="checkbox" name="is_active" value="1" <?= (int) $borrower['is_active'] === 1 ? 'checked' : '' ?>>
-                    <span>Active<span class="field-hint">Inactive borrowers stay in the history but drop out of the checkout list.</span></span>
+                    <input type="checkbox" name="is_active" value="1" <?= (int) $hirer['is_active'] === 1 ? 'checked' : '' ?>>
+                    <span>Active<span class="field-hint">Inactive hirers stay in the history but drop out of the checkout list.</span></span>
                 </label>
             </div>
         <?php endif; ?>
@@ -142,7 +142,7 @@ $value = static function (string $field, mixed $default = '') use ($old, $borrow
     </div>
 
     <div class="form-actions sticky-actions">
-        <button type="submit" class="btn btn-primary btn-lg"><?= $isEdit ? 'Save borrower' : 'Add borrower' ?></button>
-        <a class="btn btn-ghost" href="<?= e($isEdit ? url('/borrowers/' . $borrower['id']) : url('/borrowers')) ?>">Cancel</a>
+        <button type="submit" class="btn btn-primary btn-lg"><?= $isEdit ? 'Save hirer' : 'Add hirer' ?></button>
+        <a class="btn btn-ghost" href="<?= e($isEdit ? url('/hirers/' . $hirer['id']) : url('/hirers')) ?>">Cancel</a>
     </div>
 </form>

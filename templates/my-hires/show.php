@@ -3,36 +3,36 @@
 use App\Core\Upload;
 
 /**
- * Read-only detail of one item a borrower currently holds.
+ * Read-only detail of one item a hirer currently holds.
  *
- * $asset has already been reduced to the fields a borrower may see, so there
+ * $asset has already been reduced to the fields a hirer may see, so there
  * is nothing here to accidentally print.
  *
- * @var array<string,mixed> $loan
+ * @var array<string,mixed> $hire
  * @var array<string,mixed> $asset
  * @var array<int,array<string,mixed>> $manuals
  * @var array<string,mixed>|null $photo
  * @var array{result:string,test_date:string,retest_due:?string,status:string}|null $pat
  */
-$overdue = $loan['effective_status'] === 'Overdue';
-$days    = (int) $loan['days_until_due'];
+$overdue = $hire['effective_status'] === 'Overdue';
+$days    = (int) $hire['days_until_due'];
 ?>
 <div class="page-head">
     <div>
         <p class="eyebrow mono"><?= e($asset['asset_tag']) ?></p>
         <h1><?= e($asset['name']) ?></h1>
     </div>
-    <a class="btn btn-ghost" href="<?= e(url('/my-loans')) ?>">Back to my loans</a>
+    <a class="btn btn-ghost" href="<?= e(url('/my-hires')) ?>">Back to my hires</a>
 </div>
 
-<div class="card loan-summary <?= $overdue ? 'is-overdue' : '' ?>">
+<div class="card hire-summary <?= $overdue ? 'is-overdue' : '' ?>">
     <div>
         <span class="label">Taken out</span>
-        <strong><?= e(format_date($loan['checked_out_at'])) ?></strong>
+        <strong><?= e(format_date($hire['checked_out_at'])) ?></strong>
     </div>
     <div>
         <span class="label">Due back</span>
-        <strong><?= e(format_date($loan['due_back_date'])) ?></strong>
+        <strong><?= e(format_date($hire['due_back_date'])) ?></strong>
         <span class="muted">
             <?php if ($overdue): ?>
                 <?= abs($days) ?> day<?= abs($days) === 1 ? '' : 's' ?> overdue
@@ -53,9 +53,9 @@ $days    = (int) $loan['days_until_due'];
     <div class="detail-main">
         <?php if ($photo !== null): ?>
             <div class="card">
-                <a class="my-loan-photo" href="<?= e(url('/my-loans/' . $loan['id'] . '/photo')) ?>"
+                <a class="my-hire-photo" href="<?= e(url('/my-hires/' . $hire['id'] . '/photo')) ?>"
                    data-lightbox data-caption="<?= e($asset['name']) ?>" data-meta="<?= e($asset['asset_tag']) ?>">
-                    <img src="<?= e(url('/my-loans/' . $loan['id'] . '/photo')) ?>"
+                    <img src="<?= e(url('/my-hires/' . $hire['id'] . '/photo')) ?>"
                          alt="Photo of <?= e($asset['name']) ?>" loading="lazy" decoding="async">
                 </a>
             </div>
@@ -102,12 +102,12 @@ $days    = (int) $loan['days_until_due'];
                         <li class="file-item">
                             <span class="file-icon" aria-hidden="true">PDF</span>
                             <span class="file-body">
-                                <a class="file-title" href="<?= e(url('/my-loans/' . $loan['id'] . '/manuals/' . $manual['id'])) ?>"
+                                <a class="file-title" href="<?= e(url('/my-hires/' . $hire['id'] . '/manuals/' . $manual['id'])) ?>"
                                    target="_blank" rel="noopener"><?= e($manual['title']) ?></a>
                                 <span class="file-meta muted"><?= e(Upload::formatBytes((int) $manual['file_size_bytes'])) ?></span>
                             </span>
                             <span class="file-actions">
-                                <a class="btn btn-sm" href="<?= e(url('/my-loans/' . $loan['id'] . '/manuals/' . $manual['id'] . '?download=1')) ?>">Download</a>
+                                <a class="btn btn-sm" href="<?= e(url('/my-hires/' . $hire['id'] . '/manuals/' . $manual['id'] . '?download=1')) ?>">Download</a>
                             </span>
                         </li>
                     <?php endforeach; ?>
@@ -139,10 +139,10 @@ $days    = (int) $loan['days_until_due'];
         <div class="card">
             <h2>Returning this</h2>
             <p class="muted">
-                Bring the item back to the workshop by <strong><?= e(format_date($loan['due_back_date'])) ?></strong>.
+                Bring the item back to the workshop by <strong><?= e(format_date($hire['due_back_date'])) ?></strong>.
                 A member of staff will book it in and check it over.
             </p>
-            <?php if (!empty($loan['borrower_email'])): ?>
+            <?php if (!empty($hire['hirer_email'])): ?>
                 <p class="field-hint">Any problems, get in touch before the due date.</p>
             <?php endif; ?>
         </div>

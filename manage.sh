@@ -53,7 +53,7 @@ Checking
 
 Users
   users                       list every account
-  create-user [ROLE]          create a user (admin, manager, viewer, borrower)
+  create-user [ROLE]          create a user (admin, manager, viewer, hirer)
   reset-password [EMAIL]      set a new password and lift any lockout
   unlock [EMAIL]              clear sign-in lockouts (all accounts if no email)
   activate EMAIL              re-enable an account
@@ -66,7 +66,7 @@ Application
   config KEY [VALUE]          read or change a value in .env
   migrate [--status]          apply pending database migrations
   seed                        load the demo data (never on a live system)
-  refresh-overdue             recompute the stored overdue flag on loans
+  refresh-overdue             recompute the stored overdue flag on hires
   prune-activity [DAYS]       delete audit rows older than DAYS (default 365)
 
 Server
@@ -311,7 +311,7 @@ cmd_activate()   { [ -n "${1:-}" ] || die "Which account? Usage: $0 activate EMA
 cmd_deactivate() { [ -n "${1:-}" ] || die "Which account? Usage: $0 deactivate EMAIL"; console user:deactivate --email="$1"; }
 
 cmd_set_role() {
-    [ -n "${2:-}" ] || die "Usage: $0 set-role EMAIL ROLE   (admin, manager, viewer, borrower)"
+    [ -n "${2:-}" ] || die "Usage: $0 set-role EMAIL ROLE   (admin, manager, viewer, hirer)"
     console user:role --email="$1" --role="$2"
 }
 
@@ -348,7 +348,7 @@ cmd_seed() {
     ( cd "$APP_DIR" && run_as_web "$PHP_BIN" bin/seed.php --force )
 }
 
-cmd_refresh_overdue() { console loans:refresh-overdue; }
+cmd_refresh_overdue() { console hires:refresh-overdue; }
 
 cmd_prune_activity() {
     local days="${1:-365}"
@@ -580,7 +580,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # Nightly backup of the database and the uploads.
 15 2 * * * root ${APP_DIR}/manage.sh backup --quiet
 
-# Keep the stored loan status in step with the due dates. Every screen already
+# Keep the stored hire status in step with the due dates. Every screen already
 # derives this in SQL, so this only tidies the column itself.
 5 * * * * root ${APP_DIR}/manage.sh refresh-overdue --quiet
 CRON

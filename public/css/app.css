@@ -811,7 +811,7 @@ textarea.input { min-height: 120px; resize: vertical; }
 /* Status and condition colouring: the badge text always says what it means,
    so colour is reinforcement rather than the only signal. */
 .status-in-stock       { background: var(--ok-soft); color: var(--ok); }
-.status-on-loan        { background: var(--info-soft); color: var(--info); }
+.status-on-hire        { background: var(--info-soft); color: var(--info); }
 .status-in-maintenance { background: var(--warn-soft); color: var(--warn); }
 .status-retired        { background: var(--bg-sunken); color: var(--text-muted); }
 
@@ -1103,12 +1103,12 @@ tr.preview-warning td { background: var(--warn-soft); }
     .table-report tr { break-inside: avoid; }
 }
 
-/* --- Loans ---------------------------------------------------------------- */
-.loan-out      { background: var(--info-soft); color: var(--info); }
-.loan-overdue  { background: var(--danger-soft); color: var(--danger); font-weight: 700; }
-.loan-returned { background: var(--ok-soft); color: var(--ok); }
+/* --- Hires ---------------------------------------------------------------- */
+.hire-out      { background: var(--info-soft); color: var(--info); }
+.hire-overdue  { background: var(--danger-soft); color: var(--danger); font-weight: 700; }
+.hire-returned { background: var(--ok-soft); color: var(--ok); }
 
-.loan-banner {
+.hire-banner {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1121,40 +1121,35 @@ tr.preview-warning td { background: var(--warn-soft); }
     border-radius: var(--radius);
     background: var(--info-soft);
 }
-.loan-banner.is-overdue { border-left-color: var(--danger); background: var(--danger-soft); }
-.loan-banner-main { display: grid; gap: 2px; min-width: 0; }
-.loan-banner-label {
+.hire-banner.is-overdue { border-left-color: var(--danger); background: var(--danger-soft); }
+.hire-banner-main { display: grid; gap: 2px; min-width: 0; }
+.hire-banner-label {
     font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em;
     text-transform: uppercase; opacity: 0.75;
 }
-.loan-banner-headline { font-size: 1.1rem; font-weight: 700; }
-.loan-banner-detail { font-size: 0.9rem; }
-.loan-banner-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.hire-banner-headline { font-size: 1.1rem; font-weight: 700; }
+.hire-banner-detail { font-size: 0.9rem; }
+.hire-banner-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
-.loan-summary {
+.hire-summary {
     display: grid;
     gap: var(--space-3);
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
-.loan-summary.is-overdue { border-left: 5px solid var(--danger); }
-.loan-summary > div { display: grid; gap: 2px; }
-.loan-summary .label { font-size: 0.78rem; color: var(--text-muted); margin: 0; }
-.loan-summary strong { font-size: 1.1rem; }
+.hire-summary.is-overdue { border-left: 5px solid var(--danger); }
+.hire-summary > div { display: grid; gap: 2px; }
+.hire-summary .label { font-size: 0.78rem; color: var(--text-muted); margin: 0; }
+.hire-summary strong { font-size: 1.1rem; }
 
 .quick-actions .quick-action-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 
 /* --- Scanning ------------------------------------------------------------- */
-.btn-scan { flex: 0 0 auto; gap: var(--space-2); }
 .scan-icon {
     display: block;
     width: 18px; height: 14px;
     border-left: 3px solid currentColor;
     border-right: 3px solid currentColor;
     box-shadow: inset 0 0 0 1px transparent, 6px 0 0 -5px currentColor, -6px 0 0 -5px currentColor;
-}
-
-@media (max-width: 899px) {
-    .btn-scan .btn-label { display: inline; }
 }
 
 .scan-page { display: grid; gap: var(--space-4); }
@@ -1196,19 +1191,19 @@ tr.preview-warning td { background: var(--warn-soft); }
 .scan-hit h2 { margin: var(--space-1) 0 var(--space-2); }
 .scan-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 
-/* --- Borrower portal ------------------------------------------------------ */
-.my-loans { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
+/* --- Hirer portal ------------------------------------------------------ */
+.my-hires { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
 
-.my-loan {
+.my-hire {
     border: 1px solid var(--border);
     border-left: 5px solid var(--info);
     border-radius: var(--radius);
     background: var(--bg-raised);
     overflow: hidden;
 }
-.my-loan.is-overdue { border-left-color: var(--danger); }
+.my-hire.is-overdue { border-left-color: var(--danger); }
 
-.my-loan-link {
+.my-hire-link {
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -1217,31 +1212,31 @@ tr.preview-warning td { background: var(--warn-soft); }
     color: var(--text);
     min-height: 84px;
 }
-.my-loan-link:hover { background: var(--bg-hover); }
+.my-hire-link:hover { background: var(--bg-hover); }
 
-.my-loan-media { flex: 0 0 auto; }
-.my-loan-media img,
-.my-loan-media-empty {
+.my-hire-media { flex: 0 0 auto; }
+.my-hire-media img,
+.my-hire-media-empty {
     display: block;
     width: 72px; height: 72px;
     object-fit: cover;
     border-radius: var(--radius-sm);
     background: var(--bg-sunken);
 }
-.my-loan-media-empty {
+.my-hire-media-empty {
     background: var(--bg-sunken) linear-gradient(135deg, transparent 45%, var(--border) 45%, var(--border) 55%, transparent 55%);
 }
 
-.my-loan-body { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
-.my-loan-tag { font-weight: 700; color: var(--accent); font-size: 0.85rem; }
-.my-loan-name { font-weight: 600; font-size: 1.05rem; }
-.my-loan-dates { display: grid; gap: 1px; font-size: 0.88rem; color: var(--text-muted); }
-.my-loan-due { font-weight: 600; color: var(--text); }
-.my-loan-due.is-overdue { color: var(--danger); }
-.my-loan-chevron { font-size: 1.6rem; color: var(--text-muted); flex: 0 0 auto; }
+.my-hire-body { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.my-hire-tag { font-weight: 700; color: var(--accent); font-size: 0.85rem; }
+.my-hire-name { font-weight: 600; font-size: 1.05rem; }
+.my-hire-dates { display: grid; gap: 1px; font-size: 0.88rem; color: var(--text-muted); }
+.my-hire-due { font-weight: 600; color: var(--text); }
+.my-hire-due.is-overdue { color: var(--danger); }
+.my-hire-chevron { font-size: 1.6rem; color: var(--text-muted); flex: 0 0 auto; }
 
-.my-loan-photo { display: block; }
-.my-loan-photo img { width: 100%; height: auto; border-radius: var(--radius-sm); display: block; }
+.my-hire-photo { display: block; }
+.my-hire-photo img { width: 100%; height: auto; border-radius: var(--radius-sm); display: block; }
 
 .pat-simple.is-pass { border-left: 4px solid var(--ok); }
 .pat-simple.is-fail { border-left: 4px solid var(--danger); }
@@ -1282,8 +1277,8 @@ tr.preview-warning td { background: var(--warn-soft); }
    colour: the standard muted grey does not hold 4.5:1 against these
    backgrounds. Hierarchy comes from size instead. */
 .pat-status .muted,
-.loan-banner .muted,
-.loan-summary .muted { color: inherit; }
+.hire-banner .muted,
+.hire-summary .muted { color: inherit; }
 
 .pat-status-main { display: grid; gap: 2px; min-width: 0; }
 .pat-status-label {
@@ -1819,3 +1814,97 @@ tr.preview-warning td { background: var(--warn-soft); }
     color: var(--text);
 }
 .link-list a:hover { background: var(--bg-hover); }
+
+/* ==========================================================================
+   Navigation: grouped menu and the scan quick-action (prompt 11)
+
+   One set of markup drives both layouts. A group is a <details>; below 900px
+   it is an accordion inside the slide-out menu, above it the same element
+   becomes a drop-down. Nothing here duplicates a mobile-only structure.
+   ========================================================================== */
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;          /* pins the scan button to the right */
+    flex: 0 0 auto;
+}
+
+/* Scanning is a persistent quick-action, deliberately not a menu item. */
+.scan-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-width: var(--tap);
+    min-height: var(--tap);
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-text);
+    text-decoration: none;
+    font-weight: 600;
+}
+.scan-action:hover { background: var(--accent-hover); color: var(--accent-text); }
+.scan-action-label { display: none; }
+
+/* --- Groups -------------------------------------------------------------- */
+.nav-group summary { list-style: none; cursor: pointer; }
+.nav-group summary::-webkit-details-marker { display: none; }
+
+.nav-group-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    width: 100%;
+}
+
+.nav-caret {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid currentColor;
+    flex: 0 0 auto;
+    transition: transform 120ms ease;
+}
+.nav-group[open] > summary .nav-caret { transform: rotate(180deg); }
+
+.nav-sublist {
+    list-style: none;
+    margin: var(--space-1) 0 var(--space-2);
+    padding: 0 0 0 var(--space-4);
+    display: grid;
+    gap: 2px;
+    border-left: 2px solid var(--border);
+}
+.nav-sublink { font-weight: 500; }
+
+@media (min-width: 900px) {
+    .scan-action-label { display: inline; }
+
+    .nav-item-group { position: relative; }
+
+    /* The panel floats over the page rather than pushing the bar taller. */
+    .nav-group > .nav-sublist {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        z-index: 50;
+        min-width: 15rem;
+        margin: 0;
+        padding: var(--space-2);
+        border: 1px solid var(--border);
+        border-left: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg-raised);
+        box-shadow: var(--shadow);
+    }
+
+    .nav-group-toggle { width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-caret { transition: none; }
+}

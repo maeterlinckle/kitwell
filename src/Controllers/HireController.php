@@ -13,43 +13,43 @@ use App\Core\Response;
 use App\Core\Upload;
 use App\Models\ActivityLog;
 use App\Models\Asset;
-use App\Models\Borrower;
-use App\Models\Loan;
+use App\Models\Hirer;
+use App\Models\Hire;
 use App\Models\Setting;
 
-final class LoanController extends Controller
+final class HireController extends Controller
 {
     public function index(): void
     {
         // Keep the stored status column honest for anything querying the
         // database directly; display uses the derived status regardless.
-        Loan::refreshOverdue();
+        Hire::refreshOverdue();
 
         $filters = self::filtersFromRequest();
 
-        $this->view('loans/index', [
-            'pageTitle'   => 'Loans',
-            'result'      => Loan::search($filters, max(1, (int) Request::query('page', 1)), 25),
+        $this->view('hires/index', [
+            'pageTitle'   => 'Hires',
+            'result'      => Hire::search($filters, max(1, (int) Request::query('page', 1)), 25),
             'filters'     => $filters,
-            'summary'     => Loan::summary(),
-            'borrowers'   => Borrower::forSelect(),
+            'summary'     => Hire::summary(),
+            'hirers'   => Hirer::forSelect(),
             'queryString' => self::queryString($filters),
         ]);
     }
 
     public function show(string $id): void
     {
-        $loan = Loan::find((int) $id);
+        $hire = Hire::find((int) $id);
 
-        if ($loan === null) {
+        if ($hire === null) {
             $this->notFound();
         }
 
-        $this->view('loans/show', [
-            'pageTitle' => 'Loan ' . ($loan['reference'] ?? '#' . $loan['id']),
-            'loan'      => $loan,
-            'photosOut' => Loan::photos((int) $loan['id'], 'out'),
-            'photosIn'  => Loan::photos((int) $loan['id'], 'in'),
+        $this->view('hires/show', [
+            'pageTitle' => 'Hire ' . ($hire['reference'] ?? '#' . $hire['id']),
+            'hire'      => $hire,
+            'photosOut' => Hire::photos((int) $hire['id'], 'out'),
+            'photosIn'  => Hire::photos((int) $hire['id'], 'in'),
         ]);
     }
 
@@ -58,15 +58,15 @@ final class LoanController extends Controller
     {
         $assetId = (int) Request::query('asset', 0);
         $asset   = $assetId > 0 ? Asset::find($assetId) : null;
-        $blocked = $asset === null ? null : Loan::blockedReason($asset);
+        $blocked = $asset === null ? null : Hire::blockedReason($asset);
 
-        $defaultDays = max(1, min(365, Setting::int('loan_default_days', 7)));
+        $defaultDays = max(1, min(365, Setting::int('hire_default_days', 7)));
 
-        $this->view('loans/checkout', [
+        $this->view('hires/checkout', [
             'pageTitle'   => $asset !== null ? 'Check out ' . $asset['asset_tag'] : 'Check out an asset',
             'asset'       => $asset,
             'blocked'     => $blocked,
-            'borrowers'   => Borrower::forSelect(),
+            'hirers'   => Hirer::forSelect(),
             'defaultDue'  => date('Y-m-d', strtotime('+' . $defaultDays . ' days')),
             'defaultDays' => $defaultDays,
         ]);
@@ -76,7 +76,7 @@ final class LoanController extends Controller
     {
         $data = $this->validate([
             'asset_id'      => 'required|integer|exists:assets,id',
-            'borrower_id'   => 'required|integer|exists:borrowers,id',
+            'hirer_id'   => 'required|integer|exists:hirers,id',
             'due_back_date' => 'required|date',
             'condition_out' => 'in:' . implode(',', Asset::CONDITIONS),
             'purpose'       => 'max:255',
@@ -84,12 +84,12 @@ final class LoanController extends Controller
             'notes'         => 'max:5000',
         ], [
             'asset_id'      => 'Asset',
-            'borrower_id'   => 'Borrower',
+            'hirer_id'   => 'Hirer',
             'due_back_date' => 'Due back date',
-        ], '/loans/checkout');
+        ], '/hires/checkout');
 
         $assetId  = (int) $data['asset_id'];
-        $redirect = '/loans/checkout?asset=' . $assetId;
+        $redirect = '/hires/checkout?asset=' . $assetId;
         $asset    = Asset::find($assetId);
 
         if ($asset === null) {
@@ -100,14 +100,14 @@ final class LoanController extends Controller
             $this->failValidation(['due_back_date' => 'The due-back date cannot be in the past.'], $redirect);
         }
 
-        $blocked = Loan::blockedReason($asset);
+        $blocked = Hire::blockedReason($asset);
         if ($blocked !== null) {
             Flash::error($blocked);
             Response::redirect('/assets/' . $assetId);
         }
 
         try {
-            $loanId = Loan::checkout($assetId, (int) $data['borrower_id'], [
+            $hireId = Hire::checkout($assetId, (int) $data['hirer_id'], [
                 'checked_out_at' => date('Y-m-d H:i:s'),
                 'due_back_date'  => $data['due_back_date'],
                 'condition_out'  => $data['condition_out'] !== '' ? $data['condition_out'] : $asset['condition_rating'],
@@ -120,23 +120,23 @@ final class LoanController extends Controller
             Response::redirect('/assets/' . $assetId);
         }
 
-        $this->attachPhotos($loanId, 'out');
+        $this->attachPhotos($hireId, 'out');
 
-        $loan     = Loan::find($loanId);
-        $borrower = Borrower::find((int) $data['borrower_id']);
+        $hire     = Hire::find($hireId);
+        $hirer = Hirer::find((int) $data['hirer_id']);
 
         ActivityLog::record(
             'checked_out',
             'asset',
             $assetId,
             sprintf('%s checked out to %s, due back %s (%s)',
-                $asset['asset_tag'], $borrower['name'] ?? '', format_date($data['due_back_date']), $loan['reference'] ?? '')
+                $asset['asset_tag'], $hirer['name'] ?? '', format_date($data['due_back_date']), $hire['reference'] ?? '')
         );
 
         Flash::success(sprintf(
             '%s is now with %s until %s.',
             $asset['asset_tag'],
-            Borrower::label($borrower ?? []),
+            Hirer::label($hirer ?? []),
             format_date($data['due_back_date'])
         ));
 
@@ -145,39 +145,39 @@ final class LoanController extends Controller
             Response::redirect('/scan?mode=checkout');
         }
 
-        Response::redirect('/loans/' . $loanId);
+        Response::redirect('/hires/' . $hireId);
     }
 
     /** Step 1 of return: confirm condition and add photos. */
     public function returnForm(string $id): void
     {
-        $loan = Loan::find((int) $id);
+        $hire = Hire::find((int) $id);
 
-        if ($loan === null) {
+        if ($hire === null) {
             $this->notFound();
         }
 
-        if ($loan['returned_at'] !== null) {
-            Flash::info('That loan was already booked back in on ' . format_date($loan['returned_at']) . '.');
-            Response::redirect('/loans/' . (int) $id);
+        if ($hire['returned_at'] !== null) {
+            Flash::info('That hire was already booked back in on ' . format_date($hire['returned_at']) . '.');
+            Response::redirect('/hires/' . (int) $id);
         }
 
-        $this->view('loans/return', [
-            'pageTitle' => 'Book in ' . $loan['asset_tag'],
-            'loan'      => $loan,
+        $this->view('hires/return', [
+            'pageTitle' => 'Book in ' . $hire['asset_tag'],
+            'hire'      => $hire,
         ]);
     }
 
-    public function returnLoan(string $id): void
+    public function returnHire(string $id): void
     {
-        $loanId = (int) $id;
-        $loan   = Loan::find($loanId);
+        $hireId = (int) $id;
+        $hire   = Hire::find($hireId);
 
-        if ($loan === null) {
+        if ($hire === null) {
             $this->notFound();
         }
 
-        $redirect = '/loans/' . $loanId . '/return';
+        $redirect = '/hires/' . $hireId . '/return';
 
         $data = $this->validate([
             'returned_on'              => 'required|date',
@@ -193,21 +193,21 @@ final class LoanController extends Controller
             $this->failValidation(['returned_on' => 'The return date cannot be in the future.'], $redirect);
         }
 
-        if ($data['returned_on'] < substr((string) $loan['checked_out_at'], 0, 10)) {
+        if ($data['returned_on'] < substr((string) $hire['checked_out_at'], 0, 10)) {
             $this->failValidation(
-                ['returned_on' => 'The return date cannot be before the item was checked out (' . format_date($loan['checked_out_at']) . ').'],
+                ['returned_on' => 'The return date cannot be before the item was checked out (' . format_date($hire['checked_out_at']) . ').'],
                 $redirect
             );
         }
 
-        // Preserve the time of day when booking in today, so same-day loans
+        // Preserve the time of day when booking in today, so same-day hires
         // read sensibly in the history.
         $returnedAt = $data['returned_on'] === date('Y-m-d')
             ? date('Y-m-d H:i:s')
             : $data['returned_on'] . ' 12:00:00';
 
         try {
-            Loan::markReturned($loanId, [
+            Hire::markReturned($hireId, [
                 'returned_at'              => $returnedAt,
                 'condition_in'             => $data['condition_in'] !== '' ? $data['condition_in'] : null,
                 'returned_condition_notes' => $data['returned_condition_notes'] !== '' ? $data['returned_condition_notes'] : null,
@@ -215,83 +215,83 @@ final class LoanController extends Controller
             ]);
         } catch (\RuntimeException $e) {
             Flash::error($e->getMessage());
-            Response::redirect('/loans/' . $loanId);
+            Response::redirect('/hires/' . $hireId);
         }
 
-        $this->attachPhotos($loanId, 'in');
+        $this->attachPhotos($hireId, 'in');
 
         ActivityLog::record(
             'checked_in',
             'asset',
-            (int) $loan['asset_id'],
+            (int) $hire['asset_id'],
             sprintf('%s returned by %s%s',
-                $loan['asset_tag'],
-                $loan['borrower_name'],
+                $hire['asset_tag'],
+                $hire['hirer_name'],
                 $data['condition_in'] !== '' ? ' in ' . strtolower((string) $data['condition_in']) . ' condition' : '')
         );
 
-        Flash::success($loan['asset_tag'] . ' has been booked back in.');
+        Flash::success($hire['asset_tag'] . ' has been booked back in.');
 
         if (Request::post('and_scan_next') !== null) {
             Response::redirect('/scan?mode=return');
         }
 
-        Response::redirect('/loans/' . $loanId);
+        Response::redirect('/hires/' . $hireId);
     }
 
-    /** Push an open loan's due date back. */
+    /** Push an open hire's due date back. */
     public function extend(string $id): void
     {
-        $loanId = (int) $id;
-        $loan   = Loan::find($loanId);
+        $hireId = (int) $id;
+        $hire   = Hire::find($hireId);
 
-        if ($loan === null) {
+        if ($hire === null) {
             $this->notFound();
         }
 
-        if ($loan['returned_at'] !== null) {
-            Flash::error('That loan has already been returned.');
-            Response::redirect('/loans/' . $loanId);
+        if ($hire['returned_at'] !== null) {
+            Flash::error('That hire has already been returned.');
+            Response::redirect('/hires/' . $hireId);
         }
 
         $data = $this->validate([
             'due_back_date' => 'required|date',
-        ], ['due_back_date' => 'New due-back date'], '/loans/' . $loanId);
+        ], ['due_back_date' => 'New due-back date'], '/hires/' . $hireId);
 
         if ($data['due_back_date'] < date('Y-m-d')) {
-            $this->failValidation(['due_back_date' => 'The new due date must be today or later.'], '/loans/' . $loanId);
+            $this->failValidation(['due_back_date' => 'The new due date must be today or later.'], '/hires/' . $hireId);
         }
 
-        Loan::extend($loanId, $data['due_back_date']);
+        Hire::extend($hireId, $data['due_back_date']);
 
         ActivityLog::record(
-            'loan_extended',
+            'hire_extended',
             'asset',
-            (int) $loan['asset_id'],
-            sprintf('Loan %s extended from %s to %s',
-                $loan['reference'] ?? '#' . $loanId,
-                format_date($loan['due_back_date']),
+            (int) $hire['asset_id'],
+            sprintf('Hire %s extended from %s to %s',
+                $hire['reference'] ?? '#' . $hireId,
+                format_date($hire['due_back_date']),
                 format_date($data['due_back_date']))
         );
 
         Flash::success('Due back date moved to ' . format_date($data['due_back_date']) . '.');
-        Response::redirect('/loans/' . $loanId);
+        Response::redirect('/hires/' . $hireId);
     }
 
     /** Stream a photo taken at checkout or return. */
-    public function photo(string $loanId, string $photoId): void
+    public function photo(string $hireId, string $photoId): void
     {
-        $photo = Loan::findPhoto((int) $photoId);
+        $photo = Hire::findPhoto((int) $photoId);
 
-        if ($photo === null || (int) $photo['loan_id'] !== (int) $loanId) {
-            $this->notFound('That photo is no longer attached to this loan.');
+        if ($photo === null || (int) $photo['hire_id'] !== (int) $hireId) {
+            $this->notFound('That photo is no longer attached to this hire.');
         }
 
         self::streamImage($photo);
     }
 
     /**
-     * Shared image streaming for loan photos.
+     * Shared image streaming for hire photos.
      *
      * @param array<string,mixed> $photo
      */
@@ -319,7 +319,7 @@ final class LoanController extends Controller
         exit;
     }
 
-    private function attachPhotos(int $loanId, string $stage): void
+    private function attachPhotos(int $hireId, string $stage): void
     {
         $files = Upload::files('photos');
 
@@ -348,15 +348,15 @@ final class LoanController extends Controller
                 default      => 'jpg',
             };
 
-            $path     = Upload::store($file, 'loans/' . $loanId, $extension);
+            $path     = Upload::store($file, 'hires/' . $hireId, $extension);
             $absolute = Upload::absolutePath($path);
 
             if ($absolute !== null) {
                 Image::normalise($absolute, $mime);
             }
 
-            Loan::addPhoto([
-                'loan_id'           => $loanId,
+            Hire::addPhoto([
+                'hire_id'           => $hireId,
                 'stage'             => $stage,
                 'file_path'         => $path,
                 'original_filename' => Upload::displayName($file['name']),
@@ -374,7 +374,7 @@ final class LoanController extends Controller
         return [
             'q'           => (string) Request::query('q', ''),
             'status'      => array_values(array_filter((array) (Request::query('status', []) ?? []), 'is_string')),
-            'borrower_id' => (string) Request::query('borrower', ''),
+            'hirer_id' => (string) Request::query('hirer', ''),
             'from'        => (string) Request::query('from', ''),
             'to'          => (string) Request::query('to', ''),
             'sort'        => (string) Request::query('sort', 'due'),
@@ -386,7 +386,7 @@ final class LoanController extends Controller
     {
         $params = array_filter([
             'q'        => $filters['q'] ?? '',
-            'borrower' => $filters['borrower_id'] ?? '',
+            'hirer' => $filters['hirer_id'] ?? '',
             'from'     => $filters['from'] ?? '',
             'to'       => $filters['to'] ?? '',
             'sort'     => ($filters['sort'] ?? 'due') !== 'due' ? $filters['sort'] : '',

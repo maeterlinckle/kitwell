@@ -10,26 +10,26 @@ use App\Core\Upload;
 use App\Models\Asset;
 use App\Models\AssetManual;
 use App\Models\AssetPhoto;
-use App\Models\Borrower;
-use App\Models\Loan;
+use App\Models\Hirer;
+use App\Models\Hire;
 use App\Models\PatRecord;
 
 /**
- * The borrower self-service portal.
+ * The hirer self-service portal.
  *
- * Deliberately a separate surface from the asset controllers. A borrower never
+ * Deliberately a separate surface from the asset controllers. A hirer never
  * reaches AssetController, so there is no route by which they could see the
  * register, financial fields, internal notes, maintenance or the full PAT
  * history — the restriction is structural rather than a list of things
  * remembered to be hidden.
  *
- * Everything is scoped through the borrower record linked to the signed-in
- * user. No borrower record, no data.
+ * Everything is scoped through the hirer record linked to the signed-in
+ * user. No hirer record, no data.
  */
-final class MyLoansController extends Controller
+final class MyHiresController extends Controller
 {
     /**
-     * Fields a borrower is allowed to see about an asset they hold.
+     * Fields a hirer is allowed to see about an asset they hold.
      *
      * An allow-list, not a deny-list: a new column added to `assets` in future
      * cannot leak here by accident.
@@ -41,40 +41,40 @@ final class MyLoansController extends Controller
 
     public function index(): void
     {
-        $borrower = self::borrowerForCurrentUser();
+        $hirer = self::hirerForCurrentUser();
 
-        if ($borrower === null) {
-            $this->view('my-loans/unlinked', ['pageTitle' => 'My loans']);
+        if ($hirer === null) {
+            $this->view('my-hires/unlinked', ['pageTitle' => 'My hires']);
 
             return;
         }
 
-        Loan::refreshOverdue();
+        Hire::refreshOverdue();
 
-        $loans     = Loan::forBorrower((int) $borrower['id']);
-        $open      = array_values(array_filter($loans, static fn (array $l): bool => $l['returned_at'] === null));
-        $returned  = array_values(array_filter($loans, static fn (array $l): bool => $l['returned_at'] !== null));
+        $hires     = Hire::forHirer((int) $hirer['id']);
+        $open      = array_values(array_filter($hires, static fn (array $l): bool => $l['returned_at'] === null));
+        $returned  = array_values(array_filter($hires, static fn (array $l): bool => $l['returned_at'] !== null));
 
         // One query for the thumbnails of everything they hold.
         $photos = AssetPhoto::primaryForMany(
             array_map(static fn (array $l): int => (int) $l['asset_id'], $open)
         );
 
-        $this->view('my-loans/index', [
-            'pageTitle' => 'My loans',
-            'borrower'  => $borrower,
-            'openLoans' => $open,
-            'pastLoans' => array_slice($returned, 0, 10),
+        $this->view('my-hires/index', [
+            'pageTitle' => 'My hires',
+            'hirer'  => $hirer,
+            'openHires' => $open,
+            'pastHires' => array_slice($returned, 0, 10),
             'photos'    => $photos,
         ]);
     }
 
-    /** Read-only detail for one item the borrower currently holds. */
-    public function show(string $loanId): void
+    /** Read-only detail for one item the hirer currently holds. */
+    public function show(string $hireId): void
     {
-        [$borrower, $loan] = $this->requireOwnLoan((int) $loanId);
+        [$hirer, $hire] = $this->requireOwnHire((int) $hireId);
 
-        $assetId = (int) $loan['asset_id'];
+        $assetId = (int) $hire['asset_id'];
         $asset   = Asset::find($assetId);
 
         if ($asset === null) {
@@ -97,10 +97,10 @@ final class MyLoansController extends Controller
             }
         }
 
-        $this->view('my-loans/show', [
+        $this->view('my-hires/show', [
             'pageTitle' => $asset['asset_tag'] . ' · ' . $asset['name'],
-            'borrower'  => $borrower,
-            'loan'      => $loan,
+            'hirer'  => $hirer,
+            'hire'      => $hire,
             'asset'     => self::visibleAsset($asset),
             'manuals'   => AssetManual::forAsset($assetId),
             'photo'     => AssetPhoto::primaryFor($assetId),
@@ -108,12 +108,12 @@ final class MyLoansController extends Controller
         ]);
     }
 
-    /** The asset's main photo, scoped to a loan the borrower holds. */
-    public function photo(string $loanId): void
+    /** The asset's main photo, scoped to a hire the hirer holds. */
+    public function photo(string $hireId): void
     {
-        [, $loan] = $this->requireOwnLoan((int) $loanId);
+        [, $hire] = $this->requireOwnHire((int) $hireId);
 
-        $photo = AssetPhoto::primaryFor((int) $loan['asset_id']);
+        $photo = AssetPhoto::primaryFor((int) $hire['asset_id']);
 
         if ($photo === null) {
             $this->notFound('No photo is available for this item.');
@@ -145,13 +145,13 @@ final class MyLoansController extends Controller
     }
 
     /** A manual for an item they hold — view in the browser or download. */
-    public function manual(string $loanId, string $manualId): void
+    public function manual(string $hireId, string $manualId): void
     {
-        [, $loan] = $this->requireOwnLoan((int) $loanId);
+        [, $hire] = $this->requireOwnHire((int) $hireId);
 
         $manual = AssetManual::find((int) $manualId);
 
-        if ($manual === null || (int) $manual['asset_id'] !== (int) $loan['asset_id']) {
+        if ($manual === null || (int) $manual['asset_id'] !== (int) $hire['asset_id']) {
             $this->notFound('That document is not available for this item.');
         }
 
@@ -184,40 +184,40 @@ final class MyLoansController extends Controller
     }
 
     /**
-     * Resolve the signed-in user's borrower record and one of their loans,
-     * or stop with a 404 that reveals nothing about other people's loans.
+     * Resolve the signed-in user's hirer record and one of their hires,
+     * or stop with a 404 that reveals nothing about other people's hires.
      *
      * @return array{0:array<string,mixed>,1:array<string,mixed>}
      */
-    private function requireOwnLoan(int $loanId): array
+    private function requireOwnHire(int $hireId): array
     {
-        $borrower = self::borrowerForCurrentUser();
+        $hirer = self::hirerForCurrentUser();
 
-        if ($borrower === null) {
-            $this->notFound('No loans are linked to your account.');
+        if ($hirer === null) {
+            $this->notFound('No hires are linked to your account.');
         }
 
-        $loan = Loan::findForBorrower($loanId, (int) $borrower['id']);
+        $hire = Hire::findForHirer($hireId, (int) $hirer['id']);
 
-        // Deliberately the same message whether the loan does not exist or
+        // Deliberately the same message whether the hire does not exist or
         // belongs to someone else.
-        if ($loan === null) {
-            $this->notFound('That item is not on loan to you.');
+        if ($hire === null) {
+            $this->notFound('That item is not on hire to you.');
         }
 
-        return [$borrower, $loan];
+        return [$hirer, $hire];
     }
 
     /** @return array<string,mixed>|null */
-    private static function borrowerForCurrentUser(): ?array
+    private static function hirerForCurrentUser(): ?array
     {
         $userId = Auth::id();
 
-        return $userId === null ? null : Borrower::findByUserId($userId);
+        return $userId === null ? null : Hirer::findByUserId($userId);
     }
 
     /**
-     * Strip an asset down to the fields a borrower may see.
+     * Strip an asset down to the fields a hirer may see.
      *
      * @param array<string,mixed> $asset
      * @return array<string,mixed>

@@ -1,6 +1,6 @@
 {
     "name": "workshop/asset-register",
-    "description": "Self-hosted asset register for workshop/office environments: assets, sub-assets, photos, manuals, maintenance, PAT testing and loans.",
+    "description": "Self-hosted asset register for workshop/office environments: assets, sub-assets, photos, manuals, maintenance, PAT testing and hires.",
     "type": "project",
     "license": "proprietary",
     "require": {

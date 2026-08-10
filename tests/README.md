@@ -24,7 +24,7 @@ asserts the invariants the application depends on:
 - every POST/PUT/DELETE route verifies CSRF;
 - every route is authenticated, apart from `/login` and `/health`;
 - every route carries a permission check, apart from a documented list of
-  self-scoping ones (`/`, `/profile`, `/my-loans`);
+  self-scoping ones (`/`, `/profile`, `/my-hires`);
 - no page that only displays data is gated behind a write permission;
 - no variable is interpolated into a SQL string, and concatenation is limited
   to controlled fragments (placeholder lists, integer limits, whitelisted
@@ -70,7 +70,7 @@ prints doubles as the written specification of who can see what.
 > php bin/migrate.php && php bin/seed.php
 > ```
 
-It expects the demo accounts from `bin/seed.php`, plus a borrower login; adjust
+It expects the demo accounts from `bin/seed.php`, plus a hirer login; adjust
 the `$accounts` array at the top if your test data differs.
 
 ## Adding to these

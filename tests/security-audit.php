@@ -128,8 +128,8 @@ check('every non-public route requires a session', $unauthed === [], implode("\n
 //    that is self-scoping or applies to any signed-in user.
 $permissionExempt = [
     '/login', '/logout', '/health', '/', '/profile', '/profile/password',
-    '/my-loans', '/my-loans/{loanId:\d+}', '/my-loans/{loanId:\d+}/photo',
-    '/my-loans/{loanId:\d+}/manuals/{manualId:\d+}',
+    '/my-hires', '/my-hires/{hireId:\d+}', '/my-hires/{hireId:\d+}/photo',
+    '/my-hires/{hireId:\d+}/manuals/{manualId:\d+}',
 ];
 
 $noPermission = [];

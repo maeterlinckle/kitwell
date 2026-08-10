@@ -25,7 +25,7 @@ $display = static function (string $field) use ($source): string {
     return match ($field) {
         'category_id'  => (string) ($source['category_name'] ?? '—'),
         'location_id'  => (string) ($source['location_name'] ?? '—'),
-        'requires_pat', 'is_loanable' => ((int) $value === 1 ? 'Yes' : 'No'),
+        'requires_pat', 'is_hireable' => ((int) $value === 1 ? 'Yes' : 'No'),
         'purchase_cost', 'current_value' => format_money($value),
         'purchase_date', 'warranty_expires_on' => format_date((string) $value),
         default => str_limit((string) $value, 70),

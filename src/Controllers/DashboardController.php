@@ -8,7 +8,7 @@ use App\Core\Auth;
 use App\Core\Database;
 use App\Core\Response;
 use App\Models\ActivityLog;
-use App\Models\Loan;
+use App\Models\Hire;
 use App\Models\MaintenanceSchedule;
 use App\Models\PatRecord;
 
@@ -16,10 +16,10 @@ final class DashboardController extends Controller
 {
     public function index(): void
     {
-        // A borrower has no dashboard to speak of — send them straight to the
+        // A hirer has no dashboard to speak of — send them straight to the
         // only thing they can see.
-        if (!Auth::can('assets.view') && !Auth::can('loans.view') && Auth::can('loans.view_own')) {
-            Response::redirect('/my-loans');
+        if (!Auth::can('assets.view') && !Auth::can('hires.view') && Auth::can('hires.view_own')) {
+            Response::redirect('/my-hires');
         }
 
         // Foundation-stage dashboard: enough to prove auth, roles and the schema
@@ -31,7 +31,7 @@ final class DashboardController extends Controller
                 'total'          => (int) Database::scalar('SELECT COUNT(*) FROM assets WHERE parent_asset_id IS NULL'),
                 'sub_assets'     => (int) Database::scalar('SELECT COUNT(*) FROM assets WHERE parent_asset_id IS NOT NULL'),
                 'in_stock'       => (int) Database::scalar("SELECT COUNT(*) FROM assets WHERE status = 'In Stock'"),
-                'on_loan'        => (int) Database::scalar("SELECT COUNT(*) FROM assets WHERE status = 'On Loan'"),
+                'on_hire'        => (int) Database::scalar("SELECT COUNT(*) FROM assets WHERE status = 'On Hire'"),
                 'in_maintenance' => (int) Database::scalar("SELECT COUNT(*) FROM assets WHERE status = 'In Maintenance'"),
             ];
         }
@@ -48,9 +48,9 @@ final class DashboardController extends Controller
             $stats['pat'] = PatRecord::summary();
         }
 
-        if (Auth::can('loans.view')) {
-            Loan::refreshOverdue();
-            $stats['loans'] = Loan::summary();
+        if (Auth::can('hires.view')) {
+            Hire::refreshOverdue();
+            $stats['hires'] = Hire::summary();
         }
 
         $this->view('dashboard/index', [

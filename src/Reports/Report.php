@@ -18,7 +18,7 @@ namespace App\Reports;
  *   label   string  heading text (required)
  *   type    string  text|date|datetime|money|number|badge|bool  (default text)
  *   align   string  left|right
- *   link    string  'asset' | 'loan' | 'maintenance' | 'borrower' — makes the
+ *   link    string  'asset' | 'hire' | 'maintenance' | 'hirer' — makes the
  *                   cell a link, using the row's <link>_id (or id) value
  *   badge   string  CSS class prefix for a badge cell, e.g. 'due-'
  *   csv     bool    include in the CSV export (default true)

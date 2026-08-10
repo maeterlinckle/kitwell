@@ -16,9 +16,9 @@ $linked  = $linked ?? true;
 $hrefFor = static function (string $link, array $row): ?string {
     $id = match ($link) {
         'asset'       => $row['asset_id'] ?? $row['id'] ?? null,
-        'loan'        => $row['loan_id'] ?? $row['id'] ?? null,
+        'hire'        => $row['hire_id'] ?? $row['id'] ?? null,
         'maintenance' => $row['schedule_id'] ?? $row['id'] ?? null,
-        'borrower'    => $row['borrower_id'] ?? null,
+        'hirer'    => $row['hirer_id'] ?? null,
         default       => null,
     };
 
@@ -28,9 +28,9 @@ $hrefFor = static function (string $link, array $row): ?string {
 
     return match ($link) {
         'asset'       => url('/assets/' . (int) $id),
-        'loan'        => url('/loans/' . (int) $id),
+        'hire'        => url('/hires/' . (int) $id),
         'maintenance' => url('/maintenance/' . (int) $id),
-        'borrower'    => url('/borrowers/' . (int) $id),
+        'hirer'    => url('/hirers/' . (int) $id),
         default       => null,
     };
 };

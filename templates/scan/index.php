@@ -24,10 +24,10 @@ $blurbs = [
     <div class="head-actions">
         <?php foreach (['view' => 'Look up', 'checkout' => 'Check out', 'return' => 'Book in'] as $option => $label): ?>
             <?php
-            if ($option === 'checkout' && !can('loans.create')) {
+            if ($option === 'checkout' && !can('hires.create')) {
                 continue;
             }
-            if ($option === 'return' && !can('loans.return')) {
+            if ($option === 'return' && !can('hires.return')) {
                 continue;
             }
             ?>

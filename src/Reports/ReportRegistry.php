@@ -24,8 +24,8 @@ final class ReportRegistry
         AllAssetsReport::class,
         MaintenanceDueReport::class,
         PatDueReport::class,
-        AssetsOnLoanReport::class,
-        LoansDueBackReport::class,
+        AssetsOnHireReport::class,
+        HiresDueBackReport::class,
     ];
 
     /** @var array<string,Report>|null */

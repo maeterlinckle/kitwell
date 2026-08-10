@@ -9,7 +9,7 @@ use App\Core\Database;
 final class Asset
 {
     public const CONDITIONS = ['Excellent', 'Good', 'Fair', 'Poor', 'Out of Service'];
-    public const STATUSES   = ['In Stock', 'On Loan', 'In Maintenance', 'Retired'];
+    public const STATUSES   = ['In Stock', 'On Hire', 'In Maintenance', 'Retired'];
     public const RELATIONSHIPS = ['sub-asset', 'accessory', 'related'];
 
     /**
@@ -405,7 +405,7 @@ final class Asset
     public static function historyCounts(int $id): array
     {
         return [
-            'loans'       => (int) Database::scalar('SELECT COUNT(*) FROM loans WHERE asset_id = ?', [$id]),
+            'hires'       => (int) Database::scalar('SELECT COUNT(*) FROM hires WHERE asset_id = ?', [$id]),
             'pat'         => (int) Database::scalar('SELECT COUNT(*) FROM pat_records WHERE asset_id = ?', [$id]),
             'maintenance' => (int) Database::scalar('SELECT COUNT(*) FROM maintenance_logs WHERE asset_id = ?', [$id]),
             'children'    => self::childCount($id),

@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace App\Reports;
 
-use App\Models\Loan;
+use App\Models\Hire;
 use App\Models\Setting;
 
 /**
  * The chase list: what is overdue, and what is about to be.
  */
-final class LoansDueBackReport extends Report
+final class HiresDueBackReport extends Report
 {
     public function key(): string
     {
-        return 'loans-due-back';
+        return 'hires-due-back';
     }
 
     public function name(): string
@@ -24,30 +24,30 @@ final class LoansDueBackReport extends Report
 
     public function description(): string
     {
-        return 'Loans that are overdue or coming due, with borrower contact details so they can be chased.';
+        return 'Hires that are overdue or coming due, with hirer contact details so they can be chased.';
     }
 
     public function permission(): string
     {
-        return 'loans.view';
+        return 'hires.view';
     }
 
     public function group(): string
     {
-        return 'Loans & hire';
+        return 'Hires & hire';
     }
 
     public function columns(): array
     {
         return [
-            'effective_status' => ['label' => 'Status', 'type' => 'badge', 'badge' => 'loan-'],
+            'effective_status' => ['label' => 'Status', 'type' => 'badge', 'badge' => 'hire-'],
             'due_back_date'    => ['label' => 'Due back', 'type' => 'date', 'sub' => 'due_in_words'],
             'asset_tag'        => ['label' => 'Asset tag', 'link' => 'asset'],
             'asset_name'       => ['label' => 'Asset'],
-            'borrower_name'    => ['label' => 'Borrower', 'link' => 'borrower', 'sub' => 'company_name'],
-            'borrower_phone'   => ['label' => 'Phone'],
-            'borrower_email'   => ['label' => 'Email'],
-            'reference'        => ['label' => 'Reference', 'link' => 'loan'],
+            'hirer_name'    => ['label' => 'Hirer', 'link' => 'hirer', 'sub' => 'company_name'],
+            'hirer_phone'   => ['label' => 'Phone'],
+            'hirer_email'   => ['label' => 'Email'],
+            'reference'        => ['label' => 'Reference', 'link' => 'hire'],
             'checked_out_at'   => ['label' => 'Out since', 'type' => 'date'],
         ];
     }
@@ -59,7 +59,7 @@ final class LoansDueBackReport extends Report
                 'due'     => 'Overdue and due soon',
                 'overdue' => 'Overdue only',
                 'soon'    => 'Due soon only',
-                'all'     => 'All open loans',
+                'all'     => 'All open hires',
             ]],
             'days' => ['label' => 'Days ahead', 'type' => 'select', 'default' => '', 'options' => [
                 ''   => 'Site default',
@@ -69,7 +69,7 @@ final class LoansDueBackReport extends Report
                 '14' => 'Next 14 days',
                 '30' => 'Next 30 days',
             ]],
-            'q' => ['label' => 'Search', 'type' => 'search', 'placeholder' => 'Asset, borrower, reference…'],
+            'q' => ['label' => 'Search', 'type' => 'search', 'placeholder' => 'Asset, hirer, reference…'],
         ];
     }
 
@@ -96,7 +96,7 @@ final class LoansDueBackReport extends Report
             $modelFilters['due_within_days'] = $days;
         }
 
-        $rows = Loan::searchAll($modelFilters);
+        $rows = Hire::searchAll($modelFilters);
 
         foreach ($rows as &$row) {
             $row['due_in_words'] = MaintenanceDueReport::dueInWords($row['days_until_due']);
@@ -128,7 +128,7 @@ final class LoansDueBackReport extends Report
 
     public function subtitle(array $rows, array $filters): string
     {
-        return count($rows) . ' loan' . (count($rows) === 1 ? '' : 's')
+        return count($rows) . ' hire' . (count($rows) === 1 ? '' : 's')
             . ' overdue or due back within ' . self::defaultWindowDays() . ' days.';
     }
 
@@ -139,6 +139,6 @@ final class LoansDueBackReport extends Report
 
     private static function defaultWindowDays(): int
     {
-        return max(0, min(90, Setting::int('loan_due_soon_days', 2)));
+        return max(0, min(90, Setting::int('hire_due_soon_days', 2)));
     }
 }

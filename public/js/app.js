@@ -480,3 +480,47 @@
         }, 0);
     });
 })();
+
+/* --- Navigation groups ----------------------------------------------------
+   The menu groups are <details> elements, so they open and close on their own
+   with no JavaScript at all. This only adds the two desktop manners a
+   drop-down is expected to have: shut when you click away, and shut on Escape.
+   On a phone they stay as a plain accordion, where leaving one open is the
+   helpful behaviour, not a bug. */
+(function () {
+    'use strict';
+
+    var groups = document.querySelectorAll('[data-nav-group]');
+    if (!groups.length) return;
+
+    var desktop = window.matchMedia('(min-width: 900px)');
+
+    function closeAll(except) {
+        Array.prototype.forEach.call(groups, function (group) {
+            if (group !== except) group.open = false;
+        });
+    }
+
+    Array.prototype.forEach.call(groups, function (group) {
+        group.addEventListener('toggle', function () {
+            if (group.open && desktop.matches) closeAll(group);
+        });
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!desktop.matches) return;
+        if (event.target.closest('[data-nav-group]')) return;
+        closeAll(null);
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape' || !desktop.matches) return;
+
+        var open = document.querySelector('[data-nav-group][open]');
+        if (!open) return;
+
+        open.open = false;
+        var summary = open.querySelector('summary');
+        if (summary) summary.focus();
+    });
+})();
