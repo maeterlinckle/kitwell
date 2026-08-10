@@ -226,8 +226,22 @@ Then sign in and confirm:
 
 ## Administration: manage.sh
 
-Once installed, `manage.sh` in the project root is the front door for
-everything an administrator does from the server.
+Once installed, `manage.sh` is the front door for everything an administrator
+does from the server. The installer links it onto `PATH`, so this works from
+anywhere:
+
+```bash
+sudo asset-register help
+```
+
+> **Run the installed copy, not the one in your checkout.** `manage.sh` travels
+> with the source, so `~/kitwell/manage.sh` exists too — but it manages nothing,
+> because a checkout has no `.env`, and the web server user usually cannot even
+> read a directory under `/root`. Run it from the install directory (or use the
+> `asset-register` link above). It will tell you, and point at the real install,
+> if you get this wrong.
+
+The full path always works too:
 
 ```bash
 sudo /var/www/asset-register/manage.sh help

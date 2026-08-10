@@ -993,6 +993,14 @@ for script in install.sh manage.sh; do
     [ -f "$INSTALL_DIR/$script" ] && chmod 750 "$INSTALL_DIR/$script"
 done
 
+# A copy of manage.sh travels with the source, and running that one instead of
+# the installed one is an easy mistake — it manages nothing, because the source
+# tree has no .env. Put the real one on PATH so there is an unambiguous way in.
+if [ -d /usr/local/sbin ] && [ -f "$INSTALL_DIR/manage.sh" ]; then
+    ln -sf "$INSTALL_DIR/manage.sh" /usr/local/sbin/asset-register
+    ok "Linked /usr/local/sbin/asset-register -> $INSTALL_DIR/manage.sh"
+fi
+
 ok "Application files: root:$WEB_GROUP, directories 750, files 640"
 ok "storage/: $WEB_USER:$WEB_GROUP, 2775/664 — the only writable tree"
 
@@ -1403,6 +1411,7 @@ if [ "$DB_PASSWORD_GENERATED" = yes ]; then
 fi
 
 say "  Day-to-day administration:"
+say "    sudo asset-register status            # anywhere on the system"
 say "    sudo ${INSTALL_DIR}/manage.sh status"
 say "    sudo ${INSTALL_DIR}/manage.sh reset-password ${ADMIN_EMAIL}"
 say "    sudo ${INSTALL_DIR}/manage.sh backup"

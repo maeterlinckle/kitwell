@@ -153,6 +153,43 @@ WEB_GROUP="$(id -gn "$WEB_USER" 2>/dev/null || printf '%s' "$WEB_USER")"
 DB_CLIENT="$(command -v mariadb || command -v mysql || true)"
 DUMP_BIN="$(command -v mariadb-dump || command -v mysqldump || true)"
 
+WEB_READ_CHECKED=no
+
+# PHP runs as the web user, so the web user has to be able to read the tree.
+# It cannot if the app sits somewhere only root can traverse — a checkout under
+# /root being the usual way that happens. Say so once, plainly, instead of
+# letting PHP fail to open src/bootstrap.php over and over.
+assert_web_can_read() {
+    [ "$WEB_READ_CHECKED" = yes ] && return 0
+    WEB_READ_CHECKED=yes
+
+    [ "$(id -u)" -eq 0 ] || return 0
+    id -u "$WEB_USER" >/dev/null 2>&1 || return 0
+
+    if run_as_web test -r "$APP_DIR/src/bootstrap.php" 2>/dev/null; then
+        return 0
+    fi
+
+    say "" >&2
+    printf '%sThe web server user cannot read this installation.%s\n' "$C_BOLD" "$C_RESET" >&2
+    say "" >&2
+    warn "$WEB_USER cannot read $APP_DIR/src/bootstrap.php"
+    say "" >&2
+    say "  PHP runs as $WEB_USER, so it needs to read the application files." >&2
+    say "  A directory only root can enter — anything under /root, typically —" >&2
+    say "  will always fail this way." >&2
+    say "" >&2
+    say "  Fix the ownership and modes:" >&2
+    say "" >&2
+    say "      sudo $APP_DIR/manage.sh permissions" >&2
+    say "" >&2
+    say "  If the application really does live under /root, move it somewhere" >&2
+    say "  the web server can reach, such as /var/www/asset-register." >&2
+    say "" >&2
+
+    exit 1
+}
+
 run_as_web() {
     if [ "$(id -u)" -ne 0 ]; then
         "$@"
@@ -167,7 +204,10 @@ run_as_web() {
     fi
 }
 
-console() { ( cd "$APP_DIR" && run_as_web "$PHP_BIN" bin/console.php "$@" ); }
+console() {
+    assert_web_can_read
+    ( cd "$APP_DIR" && run_as_web "$PHP_BIN" bin/console.php "$@" )
+}
 
 confirm() {
     local question="$1" answer
@@ -225,6 +265,7 @@ cmd_status() {
     console db:check || warn "The database could not be reached — run: $0 doctor"
 
     step "Migrations"
+    assert_web_can_read
     ( cd "$APP_DIR" && run_as_web "$PHP_BIN" bin/migrate.php --status ) | tail -3
 }
 
@@ -296,12 +337,14 @@ cmd_config() {
 
 cmd_migrate() {
     step "Migrations"
+    assert_web_can_read
     ( cd "$APP_DIR" && run_as_web "$PHP_BIN" bin/migrate.php "$@" )
 }
 
 cmd_seed() {
     warn "The demo data adds example assets and four accounts that share a published password."
     confirm "Load it anyway?" || die "Nothing was changed."
+    assert_web_can_read
     ( cd "$APP_DIR" && run_as_web "$PHP_BIN" bin/seed.php --force )
 }
 
@@ -588,12 +631,51 @@ set -- "${ARGS[@]:-}"
 COMMAND="${1:-help}"
 shift || true
 
+# A copy of this script travels with the source, so it is easy to run it from a
+# checkout (~/kitwell) rather than from the installation it manages
+# (/var/www/asset-register). That directory has no .env, and on top of that the
+# web user usually cannot even read a checkout under /root — which used to
+# surface as a wall of "Failed opening required src/bootstrap.php" instead of
+# the actual problem. Stop here, and point at the real install.
 case "$COMMAND" in
-    help|--help|-h|"") : ;;
+    # These are the only commands meaningful from a source tree.
+    help|--help|-h|""|package) : ;;
     *)
         if [ ! -f "$ENV_FILE" ]; then
-            warn "No .env at $ENV_FILE — has install.sh been run?"
-        elif [ ! -r "$ENV_FILE" ]; then
+            say ""
+            printf '%sThis is not an installation.%s\n' "$C_BOLD" "$C_RESET" >&2
+            say ""
+            say "  $APP_DIR has no .env, so it is a copy of the source rather than"
+            say "  a site this script can manage."
+            say ""
+
+            found=""
+            for candidate in /var/www/asset-register /var/www/kitwell /var/www/html/asset-register /srv/asset-register /opt/asset-register; do
+                if [ -f "$candidate/.env" ] && [ -x "$candidate/manage.sh" ]; then
+                    found="$candidate"
+                    break
+                fi
+            done
+
+            if [ -n "$found" ]; then
+                say "  The installation is at ${C_BOLD}${found}${C_RESET}. Run it from there:"
+                say ""
+                say "      sudo ${found}/manage.sh ${COMMAND}${*:+ $*}"
+            else
+                say "  No installation was found in the usual places. Either run the"
+                say "  installer first:"
+                say ""
+                say "      sudo ${APP_DIR}/install.sh"
+                say ""
+                say "  or, if it is installed somewhere unusual, run the manage.sh that"
+                say "  sits next to its .env."
+            fi
+
+            say ""
+            exit 1
+        fi
+
+        if [ ! -r "$ENV_FILE" ]; then
             die "$ENV_FILE is not readable by $(id -un). Run this with sudo."
         fi
         ;;
