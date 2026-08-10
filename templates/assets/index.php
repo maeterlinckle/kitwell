@@ -47,6 +47,7 @@ $hasFilters = ($filters['q'] ?? '') !== ''
         <input class="input input-search" type="search" id="q" name="q" enterkeyhint="search"
                placeholder="Search tag, name, serial, manufacturer…"
                value="<?= e($filters['q']) ?>" autocomplete="off">
+        <?= partial('partials/scan-button', ['target' => 'q', 'submit' => true]) ?>
         <button class="btn btn-primary" type="submit">Search</button>
     </div>
 

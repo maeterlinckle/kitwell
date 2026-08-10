@@ -661,6 +661,55 @@ function cmdActivityPrune(array $argv): int
     return 0;
 }
 
+/**
+ * Assets the 014 backfill could not complete.
+ *
+ * Migration 014 moved appliance class, load and fuse details onto the asset and
+ * filled them in from each asset's most recent PAT record. Anything never
+ * tested had nothing to copy from, so it needs a human. The guided PAT flow
+ * refuses to start without an appliance class, because it cannot tell which
+ * electrical tests apply.
+ *
+ * @param array<int,string> $argv
+ */
+function cmdPatMissingDetails(array $argv): int
+{
+    $rows = App\Models\Asset::missingElectricalDetails();
+
+    if ($rows === []) {
+        line('Every asset that requires PAT has an appliance class, and every fused one has a rating.');
+
+        return 0;
+    }
+
+    $table = [];
+    foreach ($rows as $row) {
+        $gaps = [];
+        if ($row['appliance_class'] === null) {
+            $gaps[] = 'appliance class';
+        }
+        if ((int) $row['has_fuse'] === 1 && $row['plug_fuse_rating_amps'] === null) {
+            $gaps[] = 'fuse rating';
+        }
+
+        $table[] = [
+            (string) $row['asset_tag'],
+            str_limit((string) $row['name'], 40),
+            implode(', ', $gaps),
+        ];
+    }
+
+    heading('Assets needing electrical details');
+    table(['Tag', 'Name', 'Missing'], $table);
+
+    line();
+    line('  These were never PAT tested, so migration 014 had nothing to copy from.');
+    line('  Set them on each asset\'s edit page — the guided PAT flow needs the');
+    line('  appliance class to know which electrical tests to ask for.');
+
+    return $rows === [] ? 0 : 1;
+}
+
 /** @param array<int,string> $argv */
 function cmdRefreshOverdue(array $argv): int
 {
@@ -765,6 +814,7 @@ $commands = [
     'setting:list'          => ['Show application settings', 'cmdSettingList'],
     'setting:set'           => ['Change a setting  --key= --value=', 'cmdSettingSet'],
     'activity:prune'        => ['Delete old audit rows  --days=365 [--dry-run] [--force]', 'cmdActivityPrune'],
+    'pat:missing-details'   => ['Assets needing an appliance class or fuse rating', 'cmdPatMissingDetails'],
     'loans:refresh-overdue' => ['Recompute the stored overdue flag on loans', 'cmdRefreshOverdue'],
 ];
 

@@ -68,6 +68,7 @@ $needsAttention = $summary['overdue'] + $summary['failed'] + $summary['never_tes
         <label class="sr-only" for="q">Search</label>
         <input class="input input-search" type="search" id="q" name="q" enterkeyhint="search"
                placeholder="Search asset tag, name, serial, PAT label…" value="<?= e($filters['q']) ?>">
+        <?= partial('partials/scan-button', ['target' => 'q', 'submit' => true]) ?>
         <button class="btn btn-primary" type="submit">Search</button>
     </div>
 

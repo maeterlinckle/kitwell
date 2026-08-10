@@ -678,6 +678,84 @@ reference, test equipment, appliance class, visual inspection, earth continuity,
 insulation resistance, leakage, load, polarity, functional check, overall
 result, PAT label serial, fuse fitted, remedial action and notes.
 
+#### Fixed values live on the asset, not the test
+
+Appliance class, load rating, whether the plug is fused and the fuse rating are
+properties of the *appliance*, so they are recorded once on the asset under
+**Electrical & PAT** and never asked for again. Re-entering them at every test
+invited drift — the same item logged Class I one year and Class II the next —
+and made the tester answer questions the register already knew.
+
+The plug fuse rating is a four-way choice (3 A, 5 A, 10 A, 13 A) rather than
+free numeric entry. An existing non-standard value is kept and shown flagged for
+correction rather than silently discarded.
+
+Each test still stores a **snapshot** of the appliance class it was performed
+under, so correcting an asset later never rewrites its history.
+
+#### Recording a test is a guided flow
+
+**Record a test** walks through the job in the order it is actually done, one
+step per screen — designed for a phone in a workshop:
+
+1. **This appliance** — the fixed values, shown alongside every later step.
+2. **Visual inspection** — plug, cable, case, and (only if the asset is fused)
+   a fuse check that asks you to *confirm the fitted fuse matches the recorded
+   rating* rather than to type a value in again.
+3. **Electrical tests** — only the ones the class calls for. Class I gets earth
+   continuity, insulation resistance and leakage; Class II gets insulation and
+   leakage, because there is no earth path to test. Each has its reading, its
+   unit, and its own pass/fail.
+4. **Functional check** — does it work when you switch it on.
+5. **Result** — derived, not declared.
+
+**One failed check fails the test.** You never separately declare a failure: if
+anything in steps 2–4 is marked fail, the record saves as a Fail with the failed
+checks listed automatically, and the flow asks what was wrong. A Pass only
+becomes available once every applicable check has passed.
+
+The browser enforces this as you go, but the server derives the result
+independently — posting the form by hand with a smuggled `overall_result=Pass`
+and a failed cable still saves a Fail.
+
+Every individual step result is stored, not just the overall verdict, so the
+history stays inspectable. Tests imported from CSV, and anything predating this
+flow, show "not recorded" for the per-check verdicts rather than claiming a pass
+nobody gave.
+
+Editing an existing record stays a flat form — correcting a typo in a tester's
+name should not mean walking six steps.
+
+#### Guideline pass ranges
+
+Each electrical reading shows typical guidance beside it:
+
+| Reading | Default guidance |
+|---------|------------------|
+| Insulation resistance | 1 MΩ or more |
+| Earth continuity | under 0.1 Ω for the appliance, plus 0.1 Ω per 7.5 m of extension lead |
+| Leakage current | under 3.5 mA (Class I) or 0.25 mA (Class II) |
+
+Enter the length of any extension lead under test and the earth continuity
+guideline recalculates live. The leakage guideline follows the asset's class
+automatically.
+
+**These are guidance, not a rule.** Nothing compares a reading against them to
+decide anything — your pass/fail choice is what records the result. All six
+values are editable under **Admin → Settings → PAT guideline pass ranges**, so
+they can be tuned to your own policy without a code change.
+
+#### Assets that need details filling in
+
+The migration backfills appliance class, load and fuse details from each asset's
+most recent test. Anything never tested has nothing to copy from, and the guided
+flow will not start without an appliance class — it cannot tell which tests
+apply. List the gaps with:
+
+```bash
+php bin/console.php pat:missing-details
+```
+
 **Units are explicit everywhere** — in the column names, the form labels and the
 displayed values:
 
@@ -749,8 +827,34 @@ came back needing work.
 
 ### Scanning
 
-A **Scan** button sits in the header on every page. Three ways in, all landing
-at the same lookup:
+A **Scan** button sits in the header on every page, and a small **Scan** button
+sits at the end of every field that takes an asset tag or barcode:
+
+| Where | Field | After a scan |
+|-------|-------|--------------|
+| Add / edit asset | Asset tag | fills the field |
+| Add / edit asset | Existing barcode | fills the field |
+| Asset register | Search | fills and searches |
+| PAT register | Search | fills and searches |
+| Record a PAT test | Asset lookup | fills and jumps to the asset |
+| Loan checkout | "Which asset?" | fills and finds the asset |
+
+Where the field is the whole question — a search or a lookup — a successful scan
+submits it rather than making you press another button.
+
+This is one partial and one shared decoder, so adding it to a new field is a
+single line and no JavaScript:
+
+```php
+<?= partial('partials/scan-button', ['target' => 'asset_tag']) ?>
+```
+
+The button is hidden until its script loads: without JavaScript there is no
+camera, and a dead button is worse than no button. Typing the tag and USB
+scanners work regardless. The quick-scan page deliberately has no such button —
+it already *is* a camera scanner, and two would fight over the camera.
+
+Three ways in, all landing at the same lookup:
 
 | Input | Notes |
 |-------|-------|

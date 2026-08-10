@@ -65,10 +65,13 @@ $parentId = $value('parent_asset_id', $parent['id'] ?? '');
         <div class="field-row">
             <div class="field">
                 <label class="label" for="asset_tag">Asset tag / barcode</label>
-                <input class="input mono<?= isset($errors['asset_tag']) ? ' has-error' : '' ?>" type="text"
-                       id="asset_tag" name="asset_tag" maxlength="64" required
-                       autocapitalize="characters" autocomplete="off" spellcheck="false"
-                       value="<?= e($value('asset_tag', $suggestedTag ?? '')) ?>">
+                <div class="input-with-scan">
+                    <input class="input mono<?= isset($errors['asset_tag']) ? ' has-error' : '' ?>" type="text"
+                           id="asset_tag" name="asset_tag" maxlength="64" required
+                           autocapitalize="characters" autocomplete="off" spellcheck="false"
+                           value="<?= e($value('asset_tag', $suggestedTag ?? '')) ?>">
+                    <?= partial('partials/scan-button', ['target' => 'asset_tag']) ?>
+                </div>
                 <p class="field-hint">
                     <?= $isEdit
                         ? 'Changing this means the printed label no longer matches — reprint it afterwards.'
@@ -79,9 +82,12 @@ $parentId = $value('parent_asset_id', $parent['id'] ?? '');
 
             <div class="field">
                 <label class="label" for="barcode">Existing barcode <span class="optional">(optional)</span></label>
-                <input class="input mono<?= isset($errors['barcode']) ? ' has-error' : '' ?>" type="text"
-                       id="barcode" name="barcode" maxlength="64" autocomplete="off" spellcheck="false"
-                       value="<?= e($value('barcode')) ?>">
+                <div class="input-with-scan">
+                    <input class="input mono<?= isset($errors['barcode']) ? ' has-error' : '' ?>" type="text"
+                           id="barcode" name="barcode" maxlength="64" autocomplete="off" spellcheck="false"
+                           value="<?= e($value('barcode')) ?>">
+                    <?= partial('partials/scan-button', ['target' => 'barcode']) ?>
+                </div>
                 <p class="field-hint">A manufacturer or previous-system barcode. Scanning either finds this asset.</p>
                 <?php if (isset($errors['barcode'])): ?><p class="field-error"><?= e($errors['barcode']) ?></p><?php endif; ?>
             </div>
@@ -206,22 +212,80 @@ $parentId = $value('parent_asset_id', $parent['id'] ?? '');
         </div>
 
         <div id="pat-details" class="conditional-block">
+            <p class="field-hint">
+                These describe the appliance itself, so the tester is never asked for
+                them again. They decide which electrical tests the guided PAT flow asks for.
+            </p>
+
             <div class="field-row">
                 <div class="field">
-                    <label class="label" for="plug_fuse_rating_amps">Plug fuse rating (A)</label>
-                    <input class="input<?= isset($errors['plug_fuse_rating_amps']) ? ' has-error' : '' ?>" type="number"
-                           id="plug_fuse_rating_amps" name="plug_fuse_rating_amps" step="0.5" min="0" max="999"
-                           inputmode="decimal" list="fuse-ratings" value="<?= e($value('plug_fuse_rating_amps')) ?>">
-                    <datalist id="fuse-ratings">
-                        <option value="3"></option>
-                        <option value="5"></option>
-                        <option value="10"></option>
-                        <option value="13"></option>
-                    </datalist>
-                    <p class="field-hint">Fuse fitted in the plug, in amps.</p>
-                    <?php if (isset($errors['plug_fuse_rating_amps'])): ?><p class="field-error"><?= e($errors['plug_fuse_rating_amps']) ?></p><?php endif; ?>
+                    <label class="label" for="appliance_class">Appliance class</label>
+                    <select class="input<?= isset($errors['appliance_class']) ? ' has-error' : '' ?>"
+                            id="appliance_class" name="appliance_class">
+                        <option value="">— not established —</option>
+                        <?php foreach (\App\Models\Asset::APPLIANCE_CLASSES as $option): ?>
+                            <option value="<?= e($option) ?>" <?= $value('appliance_class') === $option ? 'selected' : '' ?>>
+                                <?= e($option) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="field-hint">
+                        Class I is earthed, Class II double-insulated. This decides whether
+                        earth continuity is tested.
+                    </p>
+                    <?php if (isset($errors['appliance_class'])): ?><p class="field-error"><?= e($errors['appliance_class']) ?></p><?php endif; ?>
                 </div>
 
+                <div class="field">
+                    <label class="label" for="load_rating_va">Load rating (VA) <span class="optional">(optional)</span></label>
+                    <input class="input<?= isset($errors['load_rating_va']) ? ' has-error' : '' ?>" type="number"
+                           id="load_rating_va" name="load_rating_va" step="1" min="0" max="9999999"
+                           inputmode="decimal" value="<?= e($value('load_rating_va')) ?>">
+                    <p class="field-hint">Rated load in volt-amps, shown to the tester for reference.</p>
+                    <?php if (isset($errors['load_rating_va'])): ?><p class="field-error"><?= e($errors['load_rating_va']) ?></p><?php endif; ?>
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="checkbox">
+                    <input type="checkbox" id="has_fuse" name="has_fuse" value="1"
+                           data-toggles="#fuse-details" <?= $checked('has_fuse', false) ? 'checked' : '' ?>>
+                    <span>The plug carries a fuse</span>
+                </label>
+                <p class="field-hint">Turn this off for unfused items — the PAT flow then skips the fuse check.</p>
+            </div>
+
+            <div id="fuse-details" class="conditional-block">
+                <div class="field">
+                    <label class="label" for="plug_fuse_rating_amps">Plug fuse rating</label>
+                    <?php
+                    $fuse       = $value('plug_fuse_rating_amps');
+                    $fuseNumber = $fuse === '' ? '' : (string) (float) $fuse;
+                    $nonStandard = $fuseNumber !== '' && !in_array($fuseNumber, \App\Models\Asset::FUSE_RATINGS, true);
+                    ?>
+                    <select class="input<?= isset($errors['plug_fuse_rating_amps']) ? ' has-error' : '' ?>"
+                            id="plug_fuse_rating_amps" name="plug_fuse_rating_amps">
+                        <option value="">— not recorded —</option>
+                        <?php foreach (\App\Models\Asset::FUSE_RATINGS as $rating): ?>
+                            <option value="<?= e($rating) ?>" <?= $fuseNumber === $rating ? 'selected' : '' ?>>
+                                <?= e($rating) ?> A
+                            </option>
+                        <?php endforeach; ?>
+                        <?php if ($nonStandard): ?>
+                            <?php /* Kept so editing another field cannot silently discard existing data. */ ?>
+                            <option value="<?= e($fuseNumber) ?>" selected>
+                                <?= e($fuseNumber) ?> A — non-standard, please correct
+                            </option>
+                        <?php endif; ?>
+                    </select>
+                    <p class="field-hint">
+                        The tester confirms the fitted fuse against this value rather than re-entering it.
+                    </p>
+                    <?php if (isset($errors['plug_fuse_rating_amps'])): ?><p class="field-error"><?= e($errors['plug_fuse_rating_amps']) ?></p><?php endif; ?>
+                </div>
+            </div>
+
+            <div class="field-row">
                 <div class="field">
                     <label class="label" for="cable_csa_mm2">Cable CSA (mm²)</label>
                     <input class="input<?= isset($errors['cable_csa_mm2']) ? ' has-error' : '' ?>" type="number"

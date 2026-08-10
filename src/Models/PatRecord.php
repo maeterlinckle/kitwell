@@ -25,6 +25,52 @@ final class PatRecord
     public const RESULTS = ['Pass', 'Fail'];
 
     /**
+     * The visual checks, in the order a tester actually performs them.
+     * `fuse` is only asked when the asset records has_fuse = 1.
+     *
+     * column => [label, help]
+     */
+    public const VISUAL_CHECKS = [
+        'visual_plug_pass' => [
+            'Plug',
+            'Correct wiring, secure cord grip, pins undamaged, no scorching or cracks.',
+        ],
+        'visual_cable_pass' => [
+            'Cable',
+            'No cuts, fraying, kinks, crushing or taped repairs along the full length.',
+        ],
+        'visual_case_pass' => [
+            'Case / enclosure',
+            'No cracks or damage, guards present, nothing loose inside when handled.',
+        ],
+        'visual_fuse_pass' => [
+            'Fuse',
+            'The fuse actually fitted matches the rating recorded for this asset.',
+        ],
+    ];
+
+    /**
+     * The electrical tests. Which of these are asked depends on the asset's
+     * appliance class — see Asset::CLASS_TESTS.
+     *
+     * key => [value column, verdict column, label, unit, decimal step]
+     */
+    public const ELECTRICAL_TESTS = [
+        'earth_continuity' => [
+            'earth_continuity_ohms', 'earth_continuity_pass',
+            'Earth continuity', 'Ω', '0.001',
+        ],
+        'insulation_resistance' => [
+            'insulation_resistance_mohms', 'insulation_resistance_pass',
+            'Insulation resistance', 'MΩ', '0.01',
+        ],
+        'leakage_current' => [
+            'leakage_current_ma', 'leakage_current_pass',
+            'Leakage current', 'mA', '0.001',
+        ],
+    ];
+
+    /**
      * Status of an asset's PAT position.
      *
      * A failed item is called out separately: it is not "in date" just because
@@ -57,6 +103,97 @@ final class PatRecord
     public static function defaultIntervalMonths(): int
     {
         return max(1, min(120, Setting::int('pat_default_interval_months', 12)));
+    }
+
+    /**
+     * The guideline pass ranges, from settings.
+     *
+     * These are shown to the tester as helper text and are GUIDANCE ONLY —
+     * nothing compares a reading against them to decide a result. Acceptable
+     * values vary by appliance, so the tester's own verdict is what counts.
+     * They live in settings so a workshop can tune them without a code change.
+     *
+     * @return array<string,float>
+     */
+    public static function guidelines(): array
+    {
+        return [
+            'insulation_mohm'   => self::settingFloat('pat_guide_insulation_mohm', 1.0),
+            'earth_base_ohm'    => self::settingFloat('pat_guide_earth_base_ohm', 0.1),
+            'earth_lead_ohm'    => self::settingFloat('pat_guide_earth_lead_ohm', 0.1),
+            'earth_lead_metres' => max(0.1, self::settingFloat('pat_guide_earth_lead_metres', 7.5)),
+            'leakage_class1_ma' => self::settingFloat('pat_guide_leakage_class1_ma', 3.5),
+            'leakage_class2_ma' => self::settingFloat('pat_guide_leakage_class2_ma', 0.25),
+        ];
+    }
+
+    private static function settingFloat(string $key, float $default): float
+    {
+        $value = Setting::get($key);
+
+        return ($value === null || !is_numeric($value)) ? $default : (float) $value;
+    }
+
+    /**
+     * The earth continuity guideline for a given length of extension lead.
+     * Defaults allow 0.1 Ω for the appliance plus 0.1 Ω per 7.5 m of extra lead.
+     */
+    public static function earthGuideline(float $leadMetres = 0.0): float
+    {
+        $g = self::guidelines();
+
+        return $g['earth_base_ohm'] + (max(0.0, $leadMetres) / $g['earth_lead_metres']) * $g['earth_lead_ohm'];
+    }
+
+    /** The leakage guideline for an appliance class, in milliamps. */
+    public static function leakageGuideline(string $applianceClass): float
+    {
+        $g = self::guidelines();
+
+        return $applianceClass === 'Class II' ? $g['leakage_class2_ma'] : $g['leakage_class1_ma'];
+    }
+
+    /**
+     * Guideline helper text for one electrical test, ready to print.
+     * Deliberately worded as guidance, never as a verdict.
+     */
+    public static function guidelineText(string $test, string $applianceClass, float $leadMetres = 0.0): string
+    {
+        $g = self::guidelines();
+
+        return match ($test) {
+            'insulation_resistance' => sprintf(
+                'Typically %s MΩ or more.',
+                self::trimNumber($g['insulation_mohm'])
+            ),
+            'earth_continuity' => $leadMetres > 0
+                ? sprintf(
+                    'Typically under %s Ω — %s Ω for the appliance plus %s Ω per %s m of lead, for %s m of lead.',
+                    self::trimNumber(self::earthGuideline($leadMetres)),
+                    self::trimNumber($g['earth_base_ohm']),
+                    self::trimNumber($g['earth_lead_ohm']),
+                    self::trimNumber($g['earth_lead_metres']),
+                    self::trimNumber($leadMetres)
+                )
+                : sprintf(
+                    'Typically under %s Ω for the appliance or lead alone, plus about %s Ω per %s m of any extension lead.',
+                    self::trimNumber($g['earth_base_ohm']),
+                    self::trimNumber($g['earth_lead_ohm']),
+                    self::trimNumber($g['earth_lead_metres'])
+                ),
+            'leakage_current' => sprintf(
+                'Typically under %s mA for %s.',
+                self::trimNumber(self::leakageGuideline($applianceClass)),
+                $applianceClass === 'Class II' ? 'Class II' : 'Class I'
+            ),
+            default => '',
+        };
+    }
+
+    /** 3.50 -> "3.5", 1.00 -> "1". Guidance reads badly with trailing zeros. */
+    private static function trimNumber(float $value): string
+    {
+        return rtrim(rtrim(number_format($value, 3, '.', ''), '0'), '.');
     }
 
     /** The retest interval that applies to one asset, in months. */
@@ -342,7 +479,7 @@ final class PatRecord
     public static function testableAssets(): array
     {
         return Database::select(
-            "SELECT id, asset_tag, name FROM assets
+            "SELECT id, asset_tag, name, appliance_class FROM assets
               WHERE requires_pat = 1 AND status <> 'Retired'
               ORDER BY asset_tag"
         );

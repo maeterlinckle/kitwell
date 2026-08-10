@@ -32,19 +32,46 @@ $passed      = $record['overall_result'] === 'Pass';
             </dd>
         </div>
 
+        <?php foreach (PatRecord::VISUAL_CHECKS as $column => [$checkLabel]): ?>
+            <?php if (array_key_exists($column, $record) && $record[$column] !== null): ?>
+                <div class="pat-subcheck">
+                    <dt><?= e($checkLabel) ?></dt>
+                    <dd><?= partial("partials/verdict-cell", ["value" => $record[$column]]) ?></dd>
+                </div>
+            <?php endif; ?>
+        <?php endforeach; ?>
+
         <div>
             <dt>Earth continuity</dt>
-            <dd><?= e(PatRecord::measurement($record['earth_continuity_ohms'], 'Ω')) ?></dd>
+            <dd>
+                <?= e(PatRecord::measurement($record['earth_continuity_ohms'], 'Ω')) ?>
+                <?php if (($record['earth_continuity_pass'] ?? null) !== null): ?>
+                    · <?= partial("partials/verdict-cell", ["value" => $record['earth_continuity_pass']]) ?>
+                <?php endif; ?>
+                <?php if (($record['extension_lead_metres'] ?? null) !== null): ?>
+                    <span class="muted">(with <?= e(rtrim(rtrim(number_format((float) $record['extension_lead_metres'], 2, '.', ''), '0'), '.')) ?> m of lead)</span>
+                <?php endif; ?>
+            </dd>
         </div>
 
         <div>
             <dt>Insulation resistance</dt>
-            <dd><?= e(PatRecord::measurement($record['insulation_resistance_mohms'], 'MΩ')) ?></dd>
+            <dd>
+                <?= e(PatRecord::measurement($record['insulation_resistance_mohms'], 'MΩ')) ?>
+                <?php if (($record['insulation_resistance_pass'] ?? null) !== null): ?>
+                    · <?= partial("partials/verdict-cell", ["value" => $record['insulation_resistance_pass']]) ?>
+                <?php endif; ?>
+            </dd>
         </div>
 
         <div>
             <dt>Leakage current</dt>
-            <dd><?= e(PatRecord::measurement($record['leakage_current_ma'], 'mA')) ?></dd>
+            <dd>
+                <?= e(PatRecord::measurement($record['leakage_current_ma'], 'mA')) ?>
+                <?php if (($record['leakage_current_pass'] ?? null) !== null): ?>
+                    · <?= partial("partials/verdict-cell", ["value" => $record['leakage_current_pass']]) ?>
+                <?php endif; ?>
+            </dd>
         </div>
 
         <?php if ($record['load_test_va'] !== null): ?>

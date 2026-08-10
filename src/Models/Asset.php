@@ -12,6 +12,61 @@ final class Asset
     public const STATUSES   = ['In Stock', 'On Loan', 'In Maintenance', 'Retired'];
     public const RELATIONSHIPS = ['sub-asset', 'accessory', 'related'];
 
+    /**
+     * Fixed electrical properties of the appliance itself, not of any one test.
+     * The PAT flow reads these; it never asks the tester to re-enter them.
+     */
+    public const APPLIANCE_CLASSES = ['Class I', 'Class II', 'Class III', 'Not Applicable'];
+
+    /**
+     * BS 1362 plug fuses. A free numeric field invited 3.15, 2 and 13.0 for what
+     * is in practice a four-way choice, so the form offers exactly these.
+     * An existing out-of-range value is preserved and shown for correction
+     * rather than silently discarded — see templates/assets/form.php.
+     */
+    public const FUSE_RATINGS = ['3', '5', '10', '13'];
+
+    /** Which electrical tests a class calls for, in the order they are done. */
+    public const CLASS_TESTS = [
+        'Class I'        => ['earth_continuity', 'insulation_resistance', 'leakage_current'],
+        'Class II'       => ['insulation_resistance', 'leakage_current'],
+        'Class III'      => [],
+        'Not Applicable' => [],
+    ];
+
+    /**
+     * The electrical tests that apply to an asset, given its class.
+     *
+     * @param array<string,mixed>|null $asset
+     * @return array<int,string>
+     */
+    public static function testsFor(?array $asset): array
+    {
+        $class = (string) ($asset['appliance_class'] ?? '');
+
+        return self::CLASS_TESTS[$class] ?? [];
+    }
+
+    /**
+     * Assets that need a PAT test but have no appliance class recorded, so the
+     * guided flow cannot tell which electrical tests apply. Populated by the
+     * 014 backfill where a past test could supply it; the rest need a human.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function missingElectricalDetails(): array
+    {
+        return Database::select(
+            "SELECT a.id, a.asset_tag, a.name, a.appliance_class, a.has_fuse, a.plug_fuse_rating_amps
+               FROM assets a
+              WHERE a.requires_pat = 1
+                AND a.status <> 'Retired'
+                AND (a.appliance_class IS NULL
+                     OR (a.has_fuse = 1 AND a.plug_fuse_rating_amps IS NULL))
+              ORDER BY a.asset_tag"
+        );
+    }
+
     /** Columns a user may sort the register by, mapped to safe SQL. */
     private const SORTS = [
         'tag'       => 'a.asset_tag ASC',

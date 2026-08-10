@@ -83,28 +83,38 @@ final class PatController extends Controller
             Flash::warning($asset['asset_tag'] . ' is not currently flagged as requiring PAT. Recording a test will flag it.');
         }
 
-        $this->view('pat/form', [
-            'pageTitle'   => $asset !== null ? 'Record PAT test · ' . $asset['asset_tag'] : 'Record a PAT test',
-            'record'      => null,
-            'asset'       => $asset,
-            'assets'      => $asset === null ? PatRecord::testableAssets() : [],
-            'users'       => MaintenanceSchedule::assignableUsers(),
-            'suggestedDue'=> $asset === null ? null : PatRecord::suggestRetestDate(date('Y-m-d'), $asset),
-            'interval'    => PatRecord::intervalForAsset($asset),
+        // Without an asset there is nothing to show fixed values for, so the
+        // flow starts with a lookup rather than a half-populated wizard.
+        if ($asset === null) {
+            $this->view('pat/choose-asset', [
+                'pageTitle' => 'Record a PAT test',
+                'assets'    => PatRecord::testableAssets(),
+            ]);
+
+            return;
+        }
+
+        $this->view('pat/wizard', [
+            'pageTitle'    => 'Record PAT test · ' . $asset['asset_tag'],
+            'asset'        => $asset,
+            'users'        => MaintenanceSchedule::assignableUsers(),
+            'suggestedDue' => PatRecord::suggestRetestDate(date('Y-m-d'), $asset),
+            'interval'     => PatRecord::intervalForAsset($asset),
+            'tests'        => Asset::testsFor($asset),
+            'lastTest'     => PatRecord::forAsset((int) $asset['id'], 1)[0] ?? null,
         ]);
     }
 
     public function store(): void
     {
-        $data    = $this->validateRecord();
-        $assetId = (int) $data['asset_id'];
+        $assetId = (int) Request::post('asset_id', 0);
         $asset   = Asset::find($assetId);
 
         if ($asset === null) {
             $this->notFound();
         }
 
-        unset($data['asset_id']);
+        $data = $this->validateGuided($asset);
 
         $data['asset_id']   = $assetId;
         $data['created_by'] = Auth::id();
@@ -270,7 +280,184 @@ final class PatController extends Controller
     }
 
     /**
-     * Validate the test form.
+     * Validate the guided test flow.
+     *
+     * The tester answers each check separately; the overall result is derived
+     * here rather than declared. One failed check fails the test, and a Pass is
+     * only possible once every applicable check has passed. The browser gates
+     * the Pass button too, but this is the check that counts — the wizard is
+     * ordinary HTML and can be posted without it.
+     *
+     * Fixed values (appliance class, fuse arrangement) come from the asset, not
+     * from the form, so a tester cannot contradict the register by hand.
+     *
+     * @param array<string,mixed> $asset
+     * @return array<string,mixed>
+     */
+    private function validateGuided(array $asset): array
+    {
+        $assetId  = (int) $asset['id'];
+        $redirect = '/pat/create?asset=' . $assetId;
+
+        $data = $this->validate([
+            'test_date'                   => 'required|date',
+            'retest_due_date'             => 'date',
+            'tester_user_id'              => 'integer',
+            'tester_name'                 => 'max:191',
+            'tester_reference'            => 'max:100',
+            'test_equipment'              => 'max:191',
+            'earth_continuity_ohms'       => 'numeric|min_value:0|max_value:9999',
+            'insulation_resistance_mohms' => 'numeric|min_value:0|max_value:999999',
+            'leakage_current_ma'          => 'numeric|min_value:0|max_value:9999',
+            'extension_lead_metres'       => 'numeric|min_value:0|max_value:500',
+            'pat_label_serial'            => 'max:100',
+            'remedial_action'             => 'max:5000',
+            'notes'                       => 'max:5000',
+        ], [
+            'test_date'                   => 'Test date',
+            'retest_due_date'             => 'Retest due date',
+            'earth_continuity_ohms'       => 'Earth continuity (Ω)',
+            'insulation_resistance_mohms' => 'Insulation resistance (MΩ)',
+            'leakage_current_ma'          => 'Leakage current (mA)',
+            'extension_lead_metres'       => 'Extension lead length (m)',
+            'pat_label_serial'            => 'PAT label serial',
+        ], $redirect);
+
+        if ($data['test_date'] > date('Y-m-d')) {
+            $this->failValidation(['test_date' => 'The test date cannot be in the future.'], $redirect);
+        }
+
+        if ($data['retest_due_date'] !== '' && $data['retest_due_date'] < $data['test_date']) {
+            $this->failValidation(['retest_due_date' => 'The retest date must be after the test date.'], $redirect);
+        }
+
+        // Fixed values are the asset's, snapshotted onto the record so the
+        // history stays readable even if the asset is corrected later.
+        $applianceClass = (string) ($asset['appliance_class'] ?? '');
+        $hasFuse        = (int) ($asset['has_fuse'] ?? 0) === 1;
+
+        if ($applianceClass === '') {
+            $this->failValidation(
+                ['appliance_class' => 'This asset has no appliance class recorded, so the flow cannot tell which electrical tests apply. Set it on the asset first.'],
+                '/assets/' . $assetId . '/edit'
+            );
+        }
+
+        $errors  = [];
+        $answers = [];   // column => 1 | 0 | null
+        $failed  = [];   // labels of everything that failed, for the summary
+
+        // --- Step 2: the visual checks ------------------------------------
+        foreach (PatRecord::VISUAL_CHECKS as $column => [$label]) {
+            if ($column === 'visual_fuse_pass' && !$hasFuse) {
+                $answers[$column] = null;   // unfused: the check does not exist
+                continue;
+            }
+
+            $answer = (string) Request::post($column, '');
+
+            if ($answer !== '1' && $answer !== '0') {
+                $errors[$column] = $label . ' has not been answered.';
+                continue;
+            }
+
+            $answers[$column] = (int) $answer;
+            if ($answer === '0') {
+                $failed[] = $label;
+            }
+        }
+
+        // --- Step 3: only the electrical tests this class calls for --------
+        $applicable = Asset::testsFor($asset);
+
+        foreach (PatRecord::ELECTRICAL_TESTS as $key => [$valueColumn, $verdictColumn, $label]) {
+            if (!in_array($key, $applicable, true)) {
+                $answers[$valueColumn]   = null;
+                $answers[$verdictColumn] = null;
+                continue;
+            }
+
+            if ($data[$valueColumn] === '') {
+                $errors[$valueColumn] = $label . ' has no reading.';
+            }
+
+            $verdict = (string) Request::post($verdictColumn, '');
+
+            if ($verdict !== '1' && $verdict !== '0') {
+                $errors[$verdictColumn] = $label . ' has not been marked pass or fail.';
+                continue;
+            }
+
+            $answers[$valueColumn]   = $data[$valueColumn] !== '' ? $data[$valueColumn] : null;
+            $answers[$verdictColumn] = (int) $verdict;
+
+            if ($verdict === '0') {
+                $failed[] = $label;
+            }
+        }
+
+        // --- Step 4: functional check -------------------------------------
+        $functional = (string) Request::post('functional_check_pass', '');
+
+        if ($functional !== '1' && $functional !== '0') {
+            $errors['functional_check_pass'] = 'The functional check has not been answered.';
+        } else {
+            $answers['functional_check_pass'] = (int) $functional;
+            if ($functional === '0') {
+                $failed[] = 'Functional check';
+            }
+        }
+
+        if ($errors !== []) {
+            $this->failValidation($errors, $redirect);
+        }
+
+        // --- Step 5: the result is derived, never declared -----------------
+        $overall = $failed === [] ? 'Pass' : 'Fail';
+
+        // A failure needs saying what failed; the flow asks for it, so an empty
+        // note here means the form was bypassed.
+        $notes = $data['notes'];
+        if ($overall === 'Fail') {
+            $summary = 'Failed: ' . implode(', ', $failed) . '.';
+            $notes   = $notes !== '' ? $summary . ' ' . $notes : $summary;
+        }
+
+        $visualColumns = ['visual_plug_pass', 'visual_cable_pass', 'visual_case_pass', 'visual_fuse_pass'];
+        $visualPass    = 1;
+        foreach ($visualColumns as $column) {
+            if (($answers[$column] ?? null) === 0) {
+                $visualPass = 0;
+            }
+        }
+
+        return array_merge($answers, [
+            'test_date'              => $data['test_date'],
+            'retest_due_date'        => $data['retest_due_date'] !== ''
+                ? $data['retest_due_date']
+                : PatRecord::suggestRetestDate($data['test_date'], $asset),
+            'tester_user_id'         => (int) $data['tester_user_id'] > 0 ? (int) $data['tester_user_id'] : Auth::id(),
+            'tester_name'            => $data['tester_name'] !== '' ? $data['tester_name'] : null,
+            'tester_reference'       => $data['tester_reference'] !== '' ? $data['tester_reference'] : null,
+            'test_equipment'         => $data['test_equipment'] !== '' ? $data['test_equipment'] : null,
+            'appliance_class'        => $applianceClass,
+            'visual_inspection_pass' => $visualPass,
+            'extension_lead_metres'  => $data['extension_lead_metres'] !== '' ? $data['extension_lead_metres'] : null,
+            'load_test_va'           => $asset['load_rating_va'] ?? null,
+            'fuse_fitted_amps'       => $hasFuse ? ($asset['plug_fuse_rating_amps'] ?? null) : null,
+            'overall_result'         => $overall,
+            'pat_label_serial'       => $data['pat_label_serial'] !== '' ? $data['pat_label_serial'] : null,
+            'remedial_action'        => $data['remedial_action'] !== '' ? $data['remedial_action'] : null,
+            'notes'                  => $notes !== '' ? $notes : null,
+        ]);
+    }
+
+    /**
+     * Validate the correction form.
+     *
+     * Editing an existing record stays a flat form: a correction is a different
+     * job from performing a test, and walking six steps to fix a typo in the
+     * tester's name would be worse, not better.
      *
      * @param array<string,mixed>|null $existing
      * @return array<string,mixed>

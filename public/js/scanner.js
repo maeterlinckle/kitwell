@@ -494,3 +494,197 @@
         });
     }
 })();
+
+/* ==========================================================================
+   Field scanner.
+
+   Attaches a camera scan button to any input that takes an asset tag or
+   barcode. Rendered by templates/partials/scan-button.php, so adding one to a
+   new field is a single line of markup and no JavaScript:
+
+       <?= partial('scan-button', ['target' => 'asset_tag']) ?>
+
+   The decoding is not reimplemented: it reuses window.AssetBarcode from the
+   block above, so there is exactly one Code 128 reader in the application and
+   it stays the mirror of src/Core/Barcode.php. A USB scanner still works
+   without any of this — it types into the focused field and presses Enter.
+   ========================================================================== */
+(function () {
+    'use strict';
+
+    var buttons = document.querySelectorAll('[data-scan-for]');
+    if (!buttons.length) return;
+
+    var dialog = null;
+    var video = null;
+    var statusEl = null;
+    var canvas = document.createElement('canvas');
+    var context = canvas.getContext('2d', { willReadFrequently: true });
+
+    var stream = null;
+    var detector = null;
+    var scanning = false;
+    var target = null;      // the input being filled
+    var autoSubmit = false;
+
+    if ('BarcodeDetector' in window) {
+        window.BarcodeDetector.getSupportedFormats()
+            .then(function (formats) {
+                var wanted = ['code_128', 'code_39', 'ean_13', 'qr_code'].filter(function (f) {
+                    return formats.indexOf(f) !== -1;
+                });
+                if (wanted.length) detector = new window.BarcodeDetector({ formats: wanted });
+            })
+            .catch(function () { detector = null; });
+    }
+
+    function setStatus(message, tone) {
+        if (!statusEl) return;
+        statusEl.textContent = message;
+        statusEl.className = 'scan-status' + (tone ? ' scan-status-' + tone : '');
+    }
+
+    function build() {
+        dialog = document.createElement('dialog');
+        dialog.className = 'scan-modal';
+        dialog.innerHTML =
+            '<div class="scan-modal-head">' +
+            '  <h2 class="scan-modal-title">Scan a barcode</h2>' +
+            '  <button type="button" class="btn" data-scan-cancel>Close</button>' +
+            '</div>' +
+            '<div class="scan-modal-frame"><video playsinline muted></video></div>' +
+            '<p class="scan-status" data-scan-modal-status></p>' +
+            '<p class="scan-modal-hint">A USB scanner or typing the tag works too — close this and use the field.</p>';
+
+        document.body.appendChild(dialog);
+
+        video = dialog.querySelector('video');
+        statusEl = dialog.querySelector('[data-scan-modal-status]');
+
+        dialog.addEventListener('click', function (event) {
+            if (event.target === dialog || event.target.closest('[data-scan-cancel]')) close();
+        });
+
+        // Escape closes a modal dialog natively; make sure the camera stops too.
+        dialog.addEventListener('close', stopCamera);
+    }
+
+    function tick() {
+        if (!scanning) return;
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (detector) {
+                detector.detect(canvas)
+                    .then(function (codes) {
+                        if (codes && codes.length && codes[0].rawValue) accept(codes[0].rawValue);
+                    })
+                    .catch(function () { /* a failed frame is not an error */ });
+            } else if (window.AssetBarcode) {
+                var found = window.AssetBarcode.decodeCanvas(context, canvas.width, canvas.height);
+                if (found) accept(found);
+            }
+        }
+
+        setTimeout(function () {
+            if (scanning) requestAnimationFrame(tick);
+        }, 120);
+    }
+
+    function accept(code) {
+        if (!scanning || !target) return;
+        scanning = false;
+
+        target.value = code;
+
+        // Let anything listening (validation, live search) react as if typed.
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+
+        close();
+
+        // Where the field is the whole question — a lookup or a search — go
+        // straight there rather than making the tester press another button.
+        if (autoSubmit && target.form) {
+            if (typeof target.form.requestSubmit === 'function') {
+                target.form.requestSubmit();
+            } else {
+                target.form.submit();
+            }
+            return;
+        }
+
+        target.focus();
+    }
+
+    function stopCamera() {
+        scanning = false;
+
+        if (stream) {
+            stream.getTracks().forEach(function (track) { track.stop(); });
+            stream = null;
+        }
+
+        if (video) video.srcObject = null;
+    }
+
+    function close() {
+        stopCamera();
+        if (dialog && dialog.open) dialog.close();
+    }
+
+    function open(button) {
+        target = document.getElementById(button.getAttribute('data-scan-for'));
+        if (!target) return;
+
+        autoSubmit = button.getAttribute('data-scan-submit') === '1';
+
+        if (!dialog) build();
+        dialog.showModal();
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setStatus('This browser cannot use the camera. Close this and use a USB scanner, or type the tag.', 'error');
+            return;
+        }
+
+        setStatus('Starting the camera…');
+
+        navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        })
+            .then(function (mediaStream) {
+                stream = mediaStream;
+                video.srcObject = mediaStream;
+                video.setAttribute('playsinline', 'true');
+                return video.play();
+            })
+            .then(function () {
+                scanning = true;
+                setStatus(detector
+                    ? 'Point the camera at the barcode.'
+                    : 'Point the camera at the barcode. Hold steady and fill the width of the frame.');
+                requestAnimationFrame(tick);
+            })
+            .catch(function (error) {
+                var message = 'Could not start the camera.';
+
+                if (error && error.name === 'NotAllowedError') {
+                    message = 'Camera permission was refused. Allow it in your browser settings, or type the tag.';
+                } else if (error && error.name === 'NotFoundError') {
+                    message = 'No camera was found. Use a USB scanner, or type the tag.';
+                }
+
+                setStatus(message, 'error');
+            });
+    }
+
+    Array.prototype.forEach.call(buttons, function (button) {
+        button.hidden = false;
+        button.addEventListener('click', function () { open(button); });
+    });
+
+    window.addEventListener('pagehide', close);
+})();

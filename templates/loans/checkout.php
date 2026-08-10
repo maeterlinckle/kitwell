@@ -55,6 +55,7 @@ use App\Models\Borrower;
                     <input class="input input-scan mono" type="text" id="code" name="code" autofocus
                            autocomplete="off" autocapitalize="characters" spellcheck="false"
                            placeholder="e.g. AST-0001" enterkeyhint="go">
+                    <?= partial('partials/scan-button', ['target' => 'code', 'submit' => true]) ?>
                     <button class="btn btn-primary" type="submit">Find</button>
                 </div>
             </div>

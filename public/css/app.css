@@ -1609,3 +1609,213 @@ tr.preview-warning td { background: var(--warn-soft); }
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
 }
+
+/* ==========================================================================
+   Guided PAT test, scan buttons and pass/fail toggles (prompt 10)
+   ========================================================================== */
+
+/* --- A scan button welded to the end of a barcode field ------------------ */
+.input-with-scan {
+    display: flex;
+    gap: var(--space-2);
+    align-items: stretch;
+}
+.input-with-scan .input { flex: 1 1 auto; min-width: 0; }
+
+.btn-scan {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.btn-scan-icon { flex: 0 0 auto; }
+
+/* On a phone the label is noise next to the icon; the aria-label still reads. */
+@media (max-width: 30rem) {
+    .btn-scan span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+
+/* --- The camera modal the scan button opens ------------------------------ */
+.scan-modal {
+    width: min(560px, 94vw);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
+    color: var(--text);
+    padding: var(--space-4);
+}
+.scan-modal:not([open]) { display: none; }   /* see the lightbox note above */
+.scan-modal::backdrop { background: rgb(2 6 23 / 78%); }
+
+.scan-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+.scan-modal-title { margin: 0; font-size: 1.1rem; }
+.scan-modal-frame {
+    background: #000;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+}
+.scan-modal-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-modal-hint { color: var(--text-muted); font-size: 0.85rem; margin: var(--space-2) 0 0; }
+
+/* --- Pass / fail toggle -------------------------------------------------- */
+.verdict { display: flex; gap: var(--space-2); flex: 0 0 auto; }
+.verdict-input {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+.verdict-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 84px;
+    min-height: 44px;            /* the workshop tap target */
+    padding: 0 var(--space-3);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--bg-raised);
+    color: var(--text);
+}
+.verdict-label:hover { border-color: var(--text-muted); }
+.verdict-input:focus-visible + .verdict-label {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+}
+.verdict-input:checked + .verdict-pass {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: #fff;
+}
+.verdict-input:checked + .verdict-fail {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+}
+
+/* --- One check, one row -------------------------------------------------- */
+.check-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--border);
+}
+.check-row:first-of-type { border-top: 0; }
+.check-row.has-error {
+    background: var(--danger-soft);
+    border-radius: var(--radius-sm);
+    padding-inline: var(--space-3);
+}
+.check-text { flex: 1 1 16rem; min-width: 0; }
+.check-text h3 { margin: 0 0 4px; font-size: 1rem; }
+
+.input-with-unit { display: flex; align-items: center; gap: var(--space-2); max-width: 16rem; }
+.input-with-unit .input { flex: 1 1 auto; min-width: 0; }
+.input-unit { color: var(--text-muted); font-weight: 600; }
+
+.guideline { margin-top: var(--space-2); }
+.guideline-tag {
+    display: inline-block;
+    background: var(--warn-soft);
+    color: var(--warn);
+    border-radius: 999px;
+    padding: 1px 8px;
+    margin-right: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* --- Wizard shell -------------------------------------------------------- */
+.pat-wizard-layout {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 62rem) {
+    .pat-wizard-layout { grid-template-columns: 20rem minmax(0, 1fr); align-items: start; }
+    .pat-context { position: sticky; top: var(--space-4); }
+}
+
+.pat-context-list { display: grid; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.pat-context-list > div { display: flex; justify-content: space-between; gap: var(--space-2); }
+.pat-context-list dt { color: var(--text-muted); font-size: 0.85rem; margin: 0; }
+.pat-context-list dd { margin: 0; text-align: right; }
+
+.wizard-progress {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    list-style: none;
+    margin: 0 0 var(--space-3);
+    padding: 0;
+    counter-reset: wizard;
+}
+.wizard-progress-step {
+    counter-increment: wizard;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+}
+.wizard-progress-step::before { content: counter(wizard) ". "; font-weight: 700; }
+.wizard-progress-step.is-current {
+    color: var(--text);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    font-weight: 600;
+}
+.wizard-progress-step.is-done { color: var(--ok); border-color: var(--ok); }
+
+.wizard-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-top: var(--space-3);
+}
+.wizard-count { margin-inline: auto; }
+
+.result-banner {
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    border-left: 4px solid var(--border);
+    margin-bottom: var(--space-3);
+}
+.result-banner p { margin: 0; font-weight: 600; }
+.result-pending { background: var(--bg-sunken); border-left-color: var(--text-muted); }
+.result-pass    { background: var(--ok-soft);     border-left-color: var(--ok); }
+.result-fail    { background: var(--danger-soft); border-left-color: var(--danger); }
+
+[data-wizard-save][disabled] { opacity: 0.55; cursor: not-allowed; }
+
+/* A plain list of links — used to pick an asset to test. */
+.link-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.link-list a {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--tap);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    color: var(--text);
+}
+.link-list a:hover { background: var(--bg-hover); }

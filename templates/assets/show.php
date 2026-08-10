@@ -170,8 +170,30 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                     </div>
                 <?php endif; ?>
                 <div>
-                    <dt>Plug fuse rating</dt>
-                    <dd><?= $asset['plug_fuse_rating_amps'] !== null ? e(rtrim(rtrim(number_format((float) $asset['plug_fuse_rating_amps'], 2), '0'), '.')) . ' A' : '—' ?></dd>
+                    <dt>Appliance class</dt>
+                    <dd>
+                        <?php if ($asset['appliance_class'] !== null): ?>
+                            <?= e($asset['appliance_class']) ?>
+                        <?php else: ?>
+                            <span class="badge badge-warn">Not established</span>
+                        <?php endif; ?>
+                    </dd>
+                </div>
+                <div>
+                    <dt>Load rating</dt>
+                    <dd><?= $asset['load_rating_va'] !== null ? e(rtrim(rtrim(number_format((float) $asset['load_rating_va'], 2), '0'), '.')) . ' VA' : '—' ?></dd>
+                </div>
+                <div>
+                    <dt>Fuse</dt>
+                    <dd>
+                        <?php if ((int) $asset['has_fuse'] === 1): ?>
+                            <?= $asset['plug_fuse_rating_amps'] !== null
+                                ? e(rtrim(rtrim(number_format((float) $asset['plug_fuse_rating_amps'], 2), '0'), '.')) . ' A'
+                                : 'Fitted, rating not recorded' ?>
+                        <?php else: ?>
+                            None
+                        <?php endif; ?>
+                    </dd>
                 </div>
                 <div>
                     <dt>Cable CSA</dt>

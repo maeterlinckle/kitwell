@@ -32,6 +32,12 @@ final class SettingsController extends Controller
             'maintenance_due_days' => 'required|integer|min_value:1|max_value:365',
             'pat_due_days'         => 'required|integer|min_value:1|max_value:365',
             'pat_default_interval_months' => 'required|integer|min_value:1|max_value:120',
+            'pat_guide_insulation_mohm'   => 'required|numeric|min_value:0|max_value:1000',
+            'pat_guide_earth_base_ohm'    => 'required|numeric|min_value:0|max_value:100',
+            'pat_guide_earth_lead_ohm'    => 'required|numeric|min_value:0|max_value:100',
+            'pat_guide_earth_lead_metres' => 'required|numeric|min_value:0.1|max_value:1000',
+            'pat_guide_leakage_class1_ma' => 'required|numeric|min_value:0|max_value:1000',
+            'pat_guide_leakage_class2_ma' => 'required|numeric|min_value:0|max_value:1000',
         ], [
             'asset_tag_prefix'     => 'Asset tag prefix',
             'asset_tag_pad'        => 'Number padding',
@@ -39,6 +45,12 @@ final class SettingsController extends Controller
             'maintenance_due_days' => 'Maintenance “due soon” window',
             'pat_due_days'         => 'PAT “due soon” window',
             'pat_default_interval_months' => 'Default PAT retest interval',
+            'pat_guide_insulation_mohm'   => 'Insulation resistance guideline',
+            'pat_guide_earth_base_ohm'    => 'Earth continuity guideline',
+            'pat_guide_earth_lead_ohm'    => 'Earth continuity lead allowance',
+            'pat_guide_earth_lead_metres' => 'Earth continuity lead length',
+            'pat_guide_leakage_class1_ma' => 'Leakage guideline (Class I)',
+            'pat_guide_leakage_class2_ma' => 'Leakage guideline (Class II)',
         ], '/admin/settings');
 
         $prefix = (string) $data['asset_tag_prefix'];
@@ -61,6 +73,13 @@ final class SettingsController extends Controller
         Setting::put('maintenance_due_days', (string) (int) $data['maintenance_due_days']);
         Setting::put('pat_due_days', (string) (int) $data['pat_due_days']);
         Setting::put('pat_default_interval_months', (string) (int) $data['pat_default_interval_months']);
+
+        // Guideline pass ranges shown to the tester. Guidance only � nothing
+        // compares a reading against these to decide a result.
+        foreach (['pat_guide_insulation_mohm', 'pat_guide_earth_base_ohm', 'pat_guide_earth_lead_ohm',
+                  'pat_guide_earth_lead_metres', 'pat_guide_leakage_class1_ma', 'pat_guide_leakage_class2_ma'] as $key) {
+            Setting::put($key, (string) (float) $data[$key]);
+        }
 
         ActivityLog::record('updated', 'settings', null, 'Updated application settings', [
             'before' => array_intersect_key($before, array_flip(['asset_tag_prefix', 'asset_tag_pad', 'organisation_name'])),

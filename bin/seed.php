@@ -139,7 +139,7 @@ try {
             'condition_rating' => 'Good', 'status' => 'In Stock',
             'purchase_date' => '2023-04-18', 'purchase_cost' => 0.00,
             'manufacturer' => 'Makita', 'model' => 'DC18RC',
-            'requires_pat' => 1, 'plug_fuse_rating_amps' => 3.00, 'cable_csa_mm2' => 0.75,
+            'requires_pat' => 1, 'plug_fuse_rating_amps' => 3.00, 'appliance_class' => 'Class II', 'has_fuse' => 1, 'load_rating_va' =>  350, 'cable_csa_mm2' => 0.75,
         ],
         [
             'key' => 'battery',
@@ -161,7 +161,7 @@ try {
             'purchase_date' => '2022-09-02', 'purchase_cost' => 74.50, 'current_value' => 40.00,
             'serial_number' => 'BSH-2209-7741', 'manufacturer' => 'Bosch', 'model' => 'GWS 750-115',
             'manufacturer_url' => 'https://www.bosch-professional.com/gb/en/products/gws-750-115-0601394000',
-            'requires_pat' => 1, 'plug_fuse_rating_amps' => 13.00, 'cable_csa_mm2' => 1.00,
+            'requires_pat' => 1, 'plug_fuse_rating_amps' => 13.00, 'appliance_class' => 'Class I', 'has_fuse' => 1, 'load_rating_va' => 700, 'cable_csa_mm2' => 1.00,
             'notes' => 'Guard replaced March 2026. Brushes due for inspection.',
         ],
         [
@@ -173,7 +173,7 @@ try {
             'purchase_date' => '2024-11-11', 'purchase_cost' => 1120.00, 'current_value' => 900.00,
             'serial_number' => 'FLK-1663-00921', 'manufacturer' => 'Fluke', 'model' => '1663 GB',
             'manufacturer_url' => 'https://www.fluke.com/en-gb/product/electrical-testing/installation-testers/fluke-1663',
-            'requires_pat' => 1, 'plug_fuse_rating_amps' => 3.00, 'cable_csa_mm2' => 0.75,
+            'requires_pat' => 1, 'plug_fuse_rating_amps' => 3.00, 'appliance_class' => 'Class II', 'has_fuse' => 1, 'load_rating_va' =>  350, 'cable_csa_mm2' => 0.75,
             'warranty_expires_on' => '2027-11-11',
             'notes' => 'Calibration certificate stored with the manuals.',
         ],
@@ -185,7 +185,7 @@ try {
             'condition_rating' => 'Good', 'status' => 'In Stock',
             'purchase_date' => '2024-02-20', 'purchase_cost' => 899.00, 'current_value' => 550.00,
             'serial_number' => 'DL-5540-JX82K', 'manufacturer' => 'Dell', 'model' => 'Latitude 5540',
-            'requires_pat' => 1, 'plug_fuse_rating_amps' => 3.00, 'cable_csa_mm2' => 0.75,
+            'requires_pat' => 1, 'plug_fuse_rating_amps' => 3.00, 'appliance_class' => 'Class II', 'has_fuse' => 1, 'load_rating_va' =>  350, 'cable_csa_mm2' => 0.75,
             // Office IT sits in a benign environment, so it carries a longer
             // retest interval than the site default.
             'pat_interval_months' => 24,
@@ -208,7 +208,7 @@ try {
             'condition_rating' => 'Good', 'status' => 'In Stock',
             'purchase_date' => '2020-03-15', 'purchase_cost' => 425.00, 'current_value' => 200.00,
             'manufacturer' => 'Axminster', 'model' => 'AT16B',
-            'requires_pat' => 1, 'plug_fuse_rating_amps' => 13.00, 'cable_csa_mm2' => 1.50,
+            'requires_pat' => 1, 'plug_fuse_rating_amps' => 13.00, 'appliance_class' => 'Class I', 'has_fuse' => 1, 'load_rating_va' => 700, 'cable_csa_mm2' => 1.50,
             'is_loanable' => 0, 'notes' => 'Fixed to the bench — not available for loan.',
         ],
         [
@@ -230,7 +230,7 @@ try {
             'purchase_date' => '2023-10-05', 'purchase_cost' => 189.00, 'current_value' => 130.00,
             'serial_number' => 'DW-25133-4471', 'manufacturer' => 'DeWalt', 'model' => 'D25133K',
             'manufacturer_url' => 'https://www.dewalt.co.uk/product/d25133k-gb/',
-            'requires_pat' => 1, 'plug_fuse_rating_amps' => 13.00, 'cable_csa_mm2' => 1.50,
+            'requires_pat' => 1, 'plug_fuse_rating_amps' => 13.00, 'appliance_class' => 'Class I', 'has_fuse' => 1, 'load_rating_va' => 700, 'cable_csa_mm2' => 1.50,
         ],
     ];
 

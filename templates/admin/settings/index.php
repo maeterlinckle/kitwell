@@ -116,6 +116,65 @@ $setting = static fn (string $key, string $default = ''): string => (string) ($s
         </div>
     </div>
 
+    <div class="card">
+        <h2>PAT guideline pass ranges</h2>
+        <p class="muted">
+            Shown to the tester as helper text beside each reading in the guided test.
+            <strong>These are guidance, not a rule.</strong> Nothing compares a reading
+            against them to decide a result — the tester's own pass/fail choice is what
+            records the outcome. Acceptable values vary by appliance, so tune these to
+            your own policy.
+        </p>
+
+        <div class="field-row">
+            <?php
+            $guides = [
+                'pat_guide_insulation_mohm'   => ['Insulation resistance (MΩ)', '1', 'Typical minimum. Shown as “≥ this value”.'],
+                'pat_guide_leakage_class1_ma' => ['Leakage, Class I (mA)', '3.5', 'Typical maximum for an earthed appliance.'],
+                'pat_guide_leakage_class2_ma' => ['Leakage, Class II (mA)', '0.25', 'Typical maximum for a double-insulated appliance.'],
+            ];
+            foreach ($guides as $key => [$label, $default, $hint]):
+                ?>
+                <div class="field">
+                    <label class="label" for="<?= e($key) ?>"><?= e($label) ?></label>
+                    <input class="input<?= isset($errors[$key]) ? ' has-error' : '' ?>" type="number"
+                           id="<?= e($key) ?>" name="<?= e($key) ?>" min="0" step="0.01" required
+                           inputmode="decimal"
+                           value="<?= e(old($old, $key, $setting($key, $default))) ?>">
+                    <p class="field-hint"><?= e($hint) ?></p>
+                    <?php if (isset($errors[$key])): ?><p class="field-error"><?= e($errors[$key]) ?></p><?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+
+        <h3>Earth continuity</h3>
+        <p class="field-hint">
+            The guideline shown is the base value, plus the lead allowance for every
+            length of extension lead under test. With the defaults that reads as
+            “0.1 Ω, plus 0.1 Ω per 7.5 m of lead”.
+        </p>
+        <div class="field-row">
+            <?php
+            $earth = [
+                'pat_guide_earth_base_ohm'    => ['Base (Ω)', '0.1', 'For the appliance or lead alone.'],
+                'pat_guide_earth_lead_ohm'    => ['Lead allowance (Ω)', '0.1', 'Added per length below.'],
+                'pat_guide_earth_lead_metres' => ['Per length (m)', '7.5', 'The lead length that allowance covers.'],
+            ];
+            foreach ($earth as $key => [$label, $default, $hint]):
+                ?>
+                <div class="field">
+                    <label class="label" for="<?= e($key) ?>"><?= e($label) ?></label>
+                    <input class="input<?= isset($errors[$key]) ? ' has-error' : '' ?>" type="number"
+                           id="<?= e($key) ?>" name="<?= e($key) ?>" min="0" step="0.01" required
+                           inputmode="decimal"
+                           value="<?= e(old($old, $key, $setting($key, $default))) ?>">
+                    <p class="field-hint"><?= e($hint) ?></p>
+                    <?php if (isset($errors[$key])): ?><p class="field-error"><?= e($errors[$key]) ?></p><?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
     <div class="form-actions">
         <button type="submit" class="btn btn-primary btn-lg">Save settings</button>
     </div>

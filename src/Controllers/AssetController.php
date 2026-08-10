@@ -277,6 +277,8 @@ final class AssetController extends Controller
             'manufacturer_url'      => 'url|max:500',
             'plug_fuse_rating_amps' => 'numeric|min_value:0|max_value:999',
             'cable_csa_mm2'         => 'numeric|min_value:0|max_value:999',
+            'appliance_class'       => 'in:' . implode(',', Asset::APPLIANCE_CLASSES),
+            'load_rating_va'        => 'numeric|min_value:0|max_value:9999999',
             'pat_interval_months'   => 'integer|min_value:1|max_value:120',
             'parent_asset_id'       => 'integer',
             'relationship_type'     => 'in:' . implode(',', Asset::RELATIONSHIPS),
@@ -288,6 +290,8 @@ final class AssetController extends Controller
             'manufacturer_url'      => 'Manufacturer website',
             'plug_fuse_rating_amps' => 'Plug fuse rating',
             'cable_csa_mm2'         => 'Cable CSA',
+            'appliance_class'       => 'Appliance class',
+            'load_rating_va'        => 'Load rating (VA)',
             'pat_interval_months'   => 'PAT interval',
         ], $redirect);
 
@@ -322,6 +326,24 @@ final class AssetController extends Controller
         }
 
         $requiresPat = Request::boolean('requires_pat');
+        $hasFuse     = Request::boolean('has_fuse');
+
+        // The fuse rating is a four-way choice, not free numeric entry. An
+        // existing non-standard value is allowed through so that editing an
+        // unrelated field on an old record does not silently destroy it; the
+        // form shows it flagged for correction.
+        $fuseRating = self::nullIfBlank($data['plug_fuse_rating_amps']);
+        if (!$hasFuse) {
+            $fuseRating = null;
+        } elseif ($fuseRating !== null
+            && !in_array((string) (float) $fuseRating, Asset::FUSE_RATINGS, true)
+            && (float) ($existing['plug_fuse_rating_amps'] ?? -1) !== (float) $fuseRating) {
+            $this->failValidation(
+                ['plug_fuse_rating_amps' => 'Choose one of the standard plug fuse ratings: '
+                    . implode(' A, ', Asset::FUSE_RATINGS) . ' A.'],
+                $redirect
+            );
+        }
 
         return [
             'asset_tag'             => $tag,
@@ -341,8 +363,11 @@ final class AssetController extends Controller
             'manufacturer'          => self::nullIfBlank($data['manufacturer']),
             'model'                 => self::nullIfBlank($data['model']),
             'manufacturer_url'      => self::nullIfBlank($data['manufacturer_url']),
-            'plug_fuse_rating_amps' => self::nullIfBlank($data['plug_fuse_rating_amps']),
+            'has_fuse'              => $hasFuse ? 1 : 0,
+            'plug_fuse_rating_amps' => $fuseRating,
             'cable_csa_mm2'         => self::nullIfBlank($data['cable_csa_mm2']),
+            'appliance_class'       => $data['appliance_class'] !== '' ? $data['appliance_class'] : null,
+            'load_rating_va'        => self::nullIfBlank($data['load_rating_va']),
             'requires_pat'          => $requiresPat ? 1 : 0,
             'pat_interval_months'   => $requiresPat ? self::nullIfBlank($data['pat_interval_months']) : null,
             'parent_asset_id'       => $parentId > 0 ? $parentId : null,
