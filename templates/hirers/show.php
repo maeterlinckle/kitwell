@@ -8,6 +8,8 @@ use App\Models\Hirer;
  * @var array<string,mixed> $hirer
  * @var array<int,array<string,mixed>> $openHires
  * @var array<int,array<string,mixed>> $pastHires
+ * @var bool $mailReady
+ * @var array<int,array<string,mixed>> $recentEmails
  */
 $id = (int) $hirer['id'];
 ?>
@@ -28,6 +30,29 @@ $id = (int) $hirer['id'];
         </p>
     </div>
     <div class="head-actions">
+        <?php /* One click, no intermediate form: the address is on the record and
+                 the wording is a template, so a confirmation step would only ask
+                 the operator to agree with themselves. */ ?>
+        <?php if (can('email.send') && $openHires !== []): ?>
+            <?php
+            $hirerEmail = trim((string) ($hirer['email'] ?? ''));
+            $canEmail   = $hirerEmail !== '' && ($mailReady ?? false);
+
+            if ($hirerEmail === '') {
+                $emailTitle = 'This hirer has no email address on record.';
+            } elseif (!($mailReady ?? false)) {
+                $emailTitle = 'Email is not configured. An administrator can set it up in Settings → Email.';
+            } else {
+                $emailTitle = 'Send ' . $hirerEmail . ' a list of everything they currently hold.';
+            }
+            ?>
+            <form method="post" action="<?= e(url('/hirers/' . $id . '/email')) ?>">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn" <?= $canEmail ? '' : 'disabled' ?>
+                        title="<?= e($emailTitle) ?>">Email hire list</button>
+            </form>
+        <?php endif; ?>
+
         <?php if (can('hires.create') && (int) $hirer['is_active'] === 1): ?>
             <a class="btn btn-primary" href="<?= e(url('/hires/checkout')) ?>">Check something out</a>
         <?php endif; ?>
@@ -173,6 +198,27 @@ $id = (int) $hirer['id'];
                 <?php endif; ?>
             <?php endif; ?>
         </div>
+
+        <?php /* What has already been sent, so nobody chases the same person
+                 twice in an afternoon without knowing it. */ ?>
+        <?php if (can('email.send') && ($recentEmails ?? []) !== []): ?>
+            <div class="card">
+                <h2>Recent emails</h2>
+                <ul class="plain-list">
+                    <?php foreach ($recentEmails as $sent): ?>
+                        <li>
+                            <?= e(format_datetime((string) $sent['created_at'])) ?> —
+                            <?php if ((string) $sent['status'] === 'sent'): ?>
+                                <span class="badge badge-ok">Sent</span>
+                            <?php else: ?>
+                                <span class="badge badge-danger">Failed</span>
+                            <?php endif; ?>
+                            <span class="muted"><?= e(str_limit((string) $sent['subject'], 40)) ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
 
         <?php if (can('hirers.manage') && (int) $hirer['total_hires'] === 0): ?>
             <div class="card danger-card">

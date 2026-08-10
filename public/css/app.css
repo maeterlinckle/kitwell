@@ -267,6 +267,7 @@ a:hover { color: var(--accent-hover); }
     border-top: 1px solid var(--border);
 }
 
+.nav-account-group { position: relative; flex: 1 1 auto; }
 .nav-user { gap: var(--space-2); flex: 1 1 auto; }
 .nav-user-text { display: grid; line-height: 1.2; }
 .nav-user-name { font-weight: 600; }
@@ -319,12 +320,35 @@ a:hover { color: var(--accent-hover); }
         width: 1px; height: 24px; margin-inline: var(--space-2); background: var(--border);
     }
 
-    .nav-account { border: 0; padding-top: 0; }
+    /* nowrap: the account area is the theme toggle, the account menu and Sign
+       out, and they belong on one line. Allowed to wrap it pushed Sign out
+       onto a second row and doubled the header's height. */
+    .nav-account { border: 0; padding-top: 0; flex-wrap: nowrap; }
+
+    /* On a desktop the bar shows the avatar alone; the name and role are the
+       first thing inside the account menu.
+       This is arithmetic, not taste: .container caps at 1200px, and brand
+       (142) + six nav items (612) + the account chip with a name (321) + the
+       scan button (86) is already over that before gaps. The name was
+       previously revealed at 1100px, a width the header can never actually
+       reach, so "Settings" wrapped onto a second row at every desktop size.
+       In the slide-out menu below 900px there is room, and it still shows. */
     .nav-user-text { display: none; }
 }
 
-@media (min-width: 1100px) {
-    .nav-user-text { display: grid; }
+/* Who you are, at the top of your own menu. */
+.nav-account-identity {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-1);
+    line-height: 1.3;
+}
+.nav-account-identity strong { display: block; }
+.nav-account-identity span { font-size: 0.85rem; color: var(--text-muted); }
+
+/* Redundant on a phone, where the chip itself already shows both. */
+@media (max-width: 899px) {
+    .nav-account-identity { display: none; }
 }
 
 /* --- Main ----------------------------------------------------------------- */
@@ -366,6 +390,56 @@ main.container { padding-block: var(--space-5) var(--space-6); }
 }
 
 .notice-card { border-left: 4px solid var(--accent); }
+
+/* Status cards: a coloured edge rather than a coloured panel, so the text
+   inside keeps the page's normal contrast. */
+.card-ok     { border-left: 4px solid var(--ok); }
+.card-warn   { border-left: 4px solid var(--warn); }
+.card-danger { border-left: 4px solid var(--danger); }
+
+.plain-list { margin: 0; padding-left: var(--space-4); }
+.plain-list li + li { margin-top: var(--space-1); }
+
+/* --- Sub-navigation ------------------------------------------------------- */
+/* Tabs inside a settings area, so four related pages are one menu entry. */
+.subnav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.subnav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    padding: var(--space-2) var(--space-3);
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+}
+
+.subnav-link:hover { color: var(--text); }
+
+.subnav-link.is-active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+}
+
+/* A short form that sits on one line where there is room: the test-email box,
+   and anything else that is a single field plus its button. */
+.form-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0;
+}
+.form-inline .field { margin: 0; }
+.form-inline .field-inline { flex: 1 1 16rem; }
 
 /* --- Stats ---------------------------------------------------------------- */
 .stat-grid {
@@ -593,6 +667,20 @@ textarea.input { min-height: 120px; resize: vertical; }
     gap: var(--space-3);
     align-items: center;
 }
+
+/* A form inside .form-actions is just a wrapper around one button (each POST
+   needs its own form and CSRF token), so it must not add layout of its own. */
+.form-actions > form { margin: 0; }
+
+/* Several checkboxes that each carry a name and some detail — the reminder
+   notify list. Columns where there is room, one per row on a phone. */
+.check-grid {
+    display: grid;
+    gap: var(--space-2);
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+}
+.check-grid .checkbox { align-items: flex-start; }
+.check-grid .muted { display: block; font-size: 0.88rem; }
 
 .sticky-actions {
     position: sticky;
@@ -853,6 +941,27 @@ textarea.input { min-height: 120px; resize: vertical; }
 @media (min-width: 900px) {
     .detail-grid { grid-template-columns: minmax(0, 1fr) 320px; }
     .detail-side { position: sticky; top: 76px; }
+
+    /* The template editor's side column carries the merge-field reference and
+       a preview, both of which need more room than a 320px rail. */
+    .detail-grid-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 26rem); }
+}
+
+/* --- Email templates ------------------------------------------------------ */
+textarea.textarea-tall { min-height: 22rem; font-family: var(--font-mono, monospace); font-size: 0.92rem; }
+
+.merge-fields { margin: 0; }
+.merge-fields dt { font-weight: 600; margin-top: var(--space-2); }
+.merge-fields dd { margin: 0 0 var(--space-1); color: var(--text-muted); font-size: 0.9rem; }
+
+.email-preview {
+    margin: 0;
+    padding: var(--space-3);
+    background: var(--bg-sunken);
+    border-radius: var(--radius-sm);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.9rem;
 }
 
 .card-head {
@@ -1903,6 +2012,14 @@ tr.preview-warning td { background: var(--warn-soft); }
     }
 
     .nav-group-toggle { width: auto; }
+
+    /* The account menu sits at the right-hand end of the bar, so its panel
+       hangs from the right edge — anchored left it would run off the page. */
+    .nav-account-group > .nav-sublist { left: auto; right: 0; }
+
+    /* On a phone the chip fills its row; on a desktop it must not grow, or it
+       pushes Sign out onto a second line and doubles the header's height. */
+    .nav-account-group { flex: 0 0 auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -26,6 +26,11 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 - **Reports** — five built in, each filterable, printable and exportable.
 - **CSV** — import an existing register or a contractor's PAT results with a
   preview before anything is written; export what you are looking at.
+- **Email** — reminders for PAT, maintenance and hire returns on a schedule you
+  choose, sent through your own SMTP server; one-click "email this hirer their
+  hire list"; editable templates; and a log of every message, sent or failed.
+- **Calendar** — each user can subscribe their own calendar app to the dates
+  their role lets them see.
 
 ---
 
@@ -38,6 +43,8 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 - [Upgrading](#upgrading)
 - [Backups](#backups)
 - [Roles and permissions](#roles-and-permissions)
+- [Email and reminders](#email-and-reminders)
+- [Calendar feeds](#calendar-feeds)
 - [Using the asset register](#using-the-asset-register)
 - [CSV formats](#csv-import-and-export)
 - [Security notes](#security-notes)
@@ -53,8 +60,10 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 | PHP       | 8.1 or newer | Required: `pdo_mysql`, `mbstring`, `fileinfo`, `json`. Recommended: `gd` and `exif` for photo resizing and orientation |
 | MariaDB   | 10.4 or newer | InnoDB, `utf8mb4`. Developed and tested against MariaDB 12.3 |
 | Web server| Apache with `mod_rewrite`, or nginx | Document root must point at `public/` |
-| Composer  | Optional | Used for autoloading; the app has no runtime package dependencies |
+| Composer  | Needed for email | Installs PHPMailer, the one runtime dependency. Without it everything works except sending mail |
+| PHP `openssl` | Needed for email | Encrypts the stored SMTP password. Present in almost every PHP build |
 | HTTPS     | Required in production | TLS is expected to terminate at a reverse proxy |
+| SMTP server | Optional | Any host you can send through. Email is off until it is configured |
 
 > **On the `mysql` naming:** the PHP extension is `pdo_mysql` and the PDO DSN
 > starts `mysql:`. Those are the names of PHP's extension and PDO's driver, and
@@ -130,7 +139,13 @@ Credentials live in `.env`, never in the code:
 
 ```bash
 cp .env.example .env
+composer install --no-dev --optimize-autoloader   # installs PHPMailer
+php bin/console.php key:generate                  # prints the APP_KEY line
 ```
+
+Composer is only needed for outbound email. Skip it and everything else still
+works — the application falls back to its own autoloader, and Settings → Email
+tells you what to run.
 
 Then edit `.env`. The settings that matter most:
 
@@ -138,7 +153,9 @@ Then edit `.env`. The settings that matter most:
 |-----|---------|
 | `APP_URL` | Full public URL, e.g. `https://assets.example.com` |
 | `APP_ENV` / `APP_DEBUG` | Use `production` / `false` on a live server |
+| `APP_KEY` | Encrypts the SMTP password in the database. Generate with `php bin/console.php key:generate`. Back it up with the database |
 | `DB_*` | Database host, name, user, password |
+| `MAIL_PASSWORD` | Optional. Set it to keep the SMTP password out of the database entirely; it then overrides the Settings page |
 | `FORCE_HTTPS` | `true` redirects HTTP → HTTPS and sets the `Secure` cookie flag |
 | `TRUST_PROXY` | `true` when behind a reverse proxy, so `X-Forwarded-Proto`/`-For` are honoured |
 | `LOGIN_MAX_ATTEMPTS`, `LOGIN_DECAY_MINUTES`, `LOGIN_LOCKOUT_MINUTES` | Failed-login throttling |
@@ -262,7 +279,11 @@ sudo /var/www/asset-register/manage.sh help
 | Read the application log | `manage.sh logs -n 100` |
 | Change one value in `.env` | `manage.sh config FORCE_HTTPS false` |
 | Trim the audit trail | `manage.sh prune-activity 730` |
-| Schedule nightly backups | `manage.sh cron-install` |
+| Schedule backups and reminder emails | `manage.sh cron-install` |
+| Check the mail setup | `manage.sh mail-status` |
+| Send a test message | `manage.sh mail-test you@example.com` |
+| Run the reminders now | `manage.sh send-reminders --dry-run` |
+| Find a user's calendar link | `manage.sh calendar-url jo@example.com` |
 | Re-run the shipped audits | `manage.sh audit` |
 
 Anything that touches the database goes through `bin/console.php`, which uses
@@ -499,6 +520,185 @@ Auth::authorize('assets.delete');
 ```
 
 Never rely on the template check alone — it is a courtesy, not a control.
+
+Two permissions cover email:
+
+| Permission | Held by | Allows |
+|---|---|---|
+| `email.manage` | Administrator | Settings → Email: the SMTP connection, reminder schedule, templates and the send log |
+| `email.send` | Administrator, Manager / Staff | The "Email hire list" and "Email reminder" buttons |
+
+The calendar feed needs no permission of its own: every signed-in user can
+create their own, and what it contains is decided by the permissions they
+already hold.
+
+---
+
+## Email and reminders
+
+Everything lives under **Settings → Email**, which has four tabs: Connection,
+Reminders, Templates and Log. All of it needs `email.manage`, which only the
+Administrator role holds by default.
+
+**Nothing is sent until you switch it on.** A fresh install has email disabled,
+no host configured and every reminder type off. That is deliberate: an install
+that starts trying to send on day one, to a server that does not exist, just
+fills the log with failures nobody asked for.
+
+### Setting it up
+
+1. Install PHPMailer if the installer could not:
+   `cd /var/www/asset-register && composer install --no-dev --optimize-autoloader`
+2. **Settings → Email → Connection**: host, port, encryption, sign-in details
+   and the "from" address. Tick *Send email from this application* and save.
+3. Press **Send test email**. If it fails you get the mail server's own error
+   message, not a shrug.
+
+Most providers want STARTTLS on port 587. Port 465 is the older implicit-TLS
+style. Choose *None* only for a relay on the same machine.
+
+### Where the SMTP password lives
+
+Typed into the Settings page, it is encrypted with AES-256-GCM before being
+stored, using the `APP_KEY` in `.env` (the installer generates one). A database
+dump on its own is therefore useless — dumps get emailed about and copied to
+laptops, and a password sitting in a `settings` row in the clear would travel
+with them.
+
+Two consequences worth knowing:
+
+- **Back up `.env` alongside the database.** Restoring a dump without the
+  matching `APP_KEY` leaves a password that cannot be decrypted. The application
+  says so plainly and asks for it again rather than failing mysteriously.
+- If you would rather the password never touched the database, set
+  `MAIL_PASSWORD` in `.env` instead. It takes precedence, and the Settings page
+  shows the field as locked and says where the value is coming from.
+
+### Reminders
+
+Three kinds, each switched on independently: **PAT**, **maintenance** and
+**hire returns**. Each has its own "remind this many days before due" window;
+leave it at `0` to use the same window the register and dashboard already show,
+so the numbers agree without being written down twice.
+
+- **One digest per person, not one email per item.** Forty overdue PAT items
+  produce one message listing forty items. Volume is what makes people filter
+  reminders into a folder, and a filtered reminder is worse than none because it
+  still looks like it is working.
+- **An item already mentioned is skipped** until *Remind again after* has
+  passed (7 days by default). Crossing from "due soon" to "overdue" sends
+  straight away, because that is a different message rather than a repeat.
+- **PAT reminders include failures and never-tested items**, matching the
+  "Assets needing PAT" report. An appliance that failed its last test is not
+  fine merely because no retest date has arrived.
+- **Recipients are re-checked against their permissions every run.** The notify
+  list is a list of people, but somebody's role can change after they are added
+  to it; a user who no longer holds `pat.view` stops receiving PAT reminders.
+  Ticking a box here grants nothing.
+- Maintenance can also go to the person a job is **assigned to** — their own
+  jobs only. Hire reminders can optionally chase the **hirer** directly.
+
+They are sent by cron, not by anyone having the site open:
+
+```bash
+sudo /var/www/asset-register/manage.sh cron-install
+```
+
+That installs a daily 08:00 run. To try it first:
+
+```bash
+sudo /var/www/asset-register/manage.sh send-reminders --dry-run
+```
+
+### Templates
+
+**Settings → Email → Templates** holds the wording of every message. Editing one
+takes effect immediately; there is nothing to deploy.
+
+Each template documents its own merge fields — `{{asset_tag}}`, `{{due_date}}`,
+`{{items}}` and so on — beside the editor, with a live preview filled in with
+example values. A placeholder that a template does not supply is flagged when
+you save and comes out blank when sent.
+
+Defaults ship in the code, and the database stores **only what you have
+edited**. So a fresh install sends properly worded mail with an empty table, and
+*Reset to the default wording* is a deletion rather than a re-seed — it cannot
+go stale. A single template can also be switched off without disabling email or
+the reminder it belongs to.
+
+### One-click sends
+
+| Where | Button | What it sends |
+|---|---|---|
+| A hirer's page | **Email hire list** | Everything currently on hire to them, to the address on their record |
+| An open hire | **Email reminder** | A return reminder for that one item |
+
+Both need `email.send` (Administrator and Manager/Staff). Neither asks for
+confirmation — the address is already on file and the wording is already a
+template, so a confirmation step would only be asking you to agree with
+yourself. What you get back is the result: sent, or the exact reason not. A
+manual reminder also counts against the automated schedule, so cron will not
+chase the same person again tomorrow.
+
+### The log
+
+**Settings → Email → Log** records every message: recipient, subject, template,
+the record it relates to, whether it was sent or failed, the failure reason, and
+whether it came from a person or the scheduled run. A bad address or an SMTP
+outage is invisible otherwise, and "the reminders stopped working three weeks
+ago" is exactly the sort of thing nobody notices until it matters.
+
+Trim it with `manage.sh` when it gets long:
+
+```bash
+sudo /var/www/asset-register/manage.sh mail-status
+```
+
+---
+
+## Calendar feeds
+
+Every user can subscribe their own calendar app to their dates: **account menu →
+Calendar feed**. This is personal rather than administrative, so it is under the
+user's own menu and not in Settings.
+
+The feed carries PAT retest dates, maintenance due dates and hire due-back
+dates — **filtered by what that user's role permits**, using the same permission
+rules as the rest of the application rather than a second access model. A Hirer
+sees only the due-back dates of equipment they hold; nothing else appears.
+
+### Why iCalendar and not CalDAV
+
+CalDAV is a WebDAV extension with `PROPFIND`, `REPORT`, ctag/etag
+synchronisation and a two-way write path. All of that exists so clients can
+*change* events. Nothing here is editable from a calendar: these dates are
+derived from PAT records, maintenance schedules and hires, and the only sensible
+place to change one is in the application.
+
+What is actually wanted is "add it to my calendar and let it keep up", and
+Outlook, Google Calendar, Apple Calendar and Thunderbird all do that by
+subscribing to an HTTPS `.ics` URL. So that is what this is: a few hundred lines
+instead of a WebDAV server, no write surface to secure, and the same result for
+the user. Instructions for each client are on the page.
+
+### The link is a credential
+
+The URL contains a 64-character random token unique to one user. A calendar app
+cannot complete an interactive sign-in, so a secret in the URL is the mechanism
+they all support — which means anyone holding the link can read those dates
+without signing in.
+
+- **Create a new link** immediately stops the old one working. Use it if the
+  address may have been seen by someone it should not have been.
+- **Switch the feed off** removes it entirely.
+- An administrator can look up a link for support purposes with
+  `manage.sh calendar-url jo@example.com` — a shell command that writes an audit
+  entry, not a button in the admin area. Handing one person another's feed URL
+  is not an administrative task.
+
+Set `APP_URL` in `.env`. The address a user pastes into their phone has to work
+from outside, and the host header on the request they happen to be looking at
+may be an internal name.
 
 ---
 

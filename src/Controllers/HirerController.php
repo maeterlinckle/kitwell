@@ -8,6 +8,8 @@ use App\Core\Auth;
 use App\Core\Flash;
 use App\Core\Request;
 use App\Core\Response;
+use App\Mail\EmailLog;
+use App\Mail\Mailer;
 use App\Models\ActivityLog;
 use App\Models\Hirer;
 use App\Models\Hire;
@@ -46,7 +48,117 @@ final class HirerController extends Controller
             'hirer'  => $hirer,
             'openHires' => array_values(array_filter($hires, static fn (array $l): bool => $l['returned_at'] === null)),
             'pastHires' => array_values(array_filter($hires, static fn (array $l): bool => $l['returned_at'] !== null)),
+            'mailReady' => Mailer::isReady(),
+            'recentEmails' => EmailLog::forEntity('hirer', (int) $hirer['id'], 5),
         ]);
+    }
+
+    /**
+     * Email this hirer everything they currently hold.
+     *
+     * One click, no intermediate form: the address is already on the record and
+     * the wording is already a template, so a confirmation step would only be
+     * asking the operator to agree with themselves. What they get back is the
+     * result — sent, or the exact reason it was not.
+     */
+    public function emailHires(string $id): void
+    {
+        $hirerId = (int) $id;
+        $hirer   = Hirer::find($hirerId);
+
+        if ($hirer === null) {
+            $this->notFound();
+        }
+
+        $email = trim((string) ($hirer['email'] ?? ''));
+
+        if ($email === '') {
+            Flash::error('This hirer has no email address on record. Add one to their details first.');
+            Response::redirect('/hirers/' . $hirerId);
+        }
+
+        $open = Hire::forHirer($hirerId, true);
+
+        if ($open === []) {
+            Flash::error('There is nothing on hire to ' . $hirer['name'] . ' at the moment, so there is nothing to send.');
+            Response::redirect('/hirers/' . $hirerId);
+        }
+
+        $lines   = [];
+        $overdue = 0;
+
+        foreach ($open as $hire) {
+            $isOverdue = (string) $hire['effective_status'] === 'Overdue';
+            $overdue  += $isOverdue ? 1 : 0;
+
+            $lines[] = sprintf(
+                '%s  %s — out %s, due back %s%s',
+                $hire['asset_tag'],
+                $hire['asset_name'],
+                format_date((string) $hire['checked_out_at']),
+                format_date((string) $hire['due_back_date']),
+                $isOverdue ? ' (OVERDUE)' : ''
+            );
+        }
+
+        $sent = Mailer::sendTemplate(
+            'hirer_hire_list',
+            $email,
+            (string) $hirer['name'],
+            [
+                'hirer_name'    => (string) $hirer['name'],
+                'hirer_company' => (string) ($hirer['company_name'] ?? ''),
+                'count'         => (string) count($open),
+                'items'         => implode("\n", $lines),
+                'overdue_count' => (string) $overdue,
+            ],
+            ['trigger' => 'user', 'entity_type' => 'hirer', 'entity_id' => $hirerId]
+        );
+
+        ActivityLog::record(
+            'sent',
+            'hirer',
+            $hirerId,
+            ($sent ? 'Emailed' : 'Tried to email') . ' the hire list to ' . $hirer['name'] . ' (' . $email . ')'
+        );
+
+        if ($sent) {
+            Flash::success('Sent ' . count($open) . ' item(s) to ' . $email . '.');
+        } else {
+            Flash::error(self::sendFailureMessage('hirer_hire_list'));
+        }
+
+        Response::redirect('/hirers/' . $hirerId);
+    }
+
+    /**
+     * Why a send failed, in words the operator can act on.
+     *
+     * Shared with HireController: both buttons fail for the same handful of
+     * reasons, and "it didn't work" is not a useful thing to tell someone.
+     */
+    public static function sendFailureMessage(string $templateKey = ''): string
+    {
+        // Checked first: a switched-off template writes no log row, so pointing
+        // at the log here would send someone looking for an entry that does not
+        // exist.
+        if ($templateKey !== '' && !Mailer::isTemplateActive($templateKey)) {
+            return 'Nothing was sent because that message is switched off in Settings → Email → Templates.';
+        }
+
+        $problems = Mailer::problems();
+
+        if ($problems !== []) {
+            return 'The message was not sent: ' . implode(' ', $problems);
+        }
+
+        if (!Mailer::isReady()) {
+            return 'The message was not sent because email is switched off in Settings → Email.';
+        }
+
+        $latest = EmailLog::search(['status' => 'failed'], 1, 1);
+
+        return 'The message was not sent: ' . (string) ($latest['rows'][0]['error'] ?? 'see Settings → Email → Log for the reason.');
     }
 
     public function create(): void

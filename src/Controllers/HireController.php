@@ -11,6 +11,10 @@ use App\Core\Image;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Upload;
+use App\Mail\EmailLog;
+use App\Mail\EmailReminder;
+use App\Mail\Mailer;
+use App\Mail\Reminders;
 use App\Models\ActivityLog;
 use App\Models\Asset;
 use App\Models\Hirer;
@@ -50,7 +54,69 @@ final class HireController extends Controller
             'hire'      => $hire,
             'photosOut' => Hire::photos((int) $hire['id'], 'out'),
             'photosIn'  => Hire::photos((int) $hire['id'], 'in'),
+            'mailReady' => Mailer::isReady(),
+            'recentEmails' => EmailLog::forEntity('hire', (int) $hire['id'], 5),
         ]);
+    }
+
+    /**
+     * Email this hire's hirer about this one item, on demand.
+     *
+     * The same template the automated hire reminder uses, so a chased-early
+     * item and a chased-by-cron item read identically — and the send is
+     * recorded against the hire, so the next person to open it can see it has
+     * already been chased today.
+     */
+    public function emailReminder(string $id): void
+    {
+        $hireId = (int) $id;
+        $hire   = Hire::find($hireId);
+
+        if ($hire === null) {
+            $this->notFound();
+        }
+
+        if ($hire['returned_at'] !== null) {
+            Flash::error('This hire has already been booked back in, so there is nothing to chase.');
+            Response::redirect('/hires/' . $hireId);
+        }
+
+        $email = trim((string) ($hire['hirer_email'] ?? ''));
+
+        if ($email === '') {
+            Flash::error($hire['hirer_name'] . ' has no email address on record. Add one to their details first.');
+            Response::redirect('/hires/' . $hireId);
+        }
+
+        $sent = Mailer::sendTemplate(
+            'hirer_overdue_notice',
+            $email,
+            (string) $hire['hirer_name'],
+            Reminders::hireFields($hire),
+            ['trigger' => 'user', 'entity_type' => 'hire', 'entity_id' => $hireId]
+        );
+
+        if ($sent) {
+            // Count it against the automated schedule too, so the cron run does
+            // not send the same person the same thing again tomorrow.
+            $key = (string) $hire['effective_status'] === 'Overdue' ? 'hirer_notice_overdue' : 'hirer_notice_due';
+            EmailReminder::markSent($key, 'hire', [$hireId], $email);
+        }
+
+        ActivityLog::record(
+            'sent',
+            'hire',
+            $hireId,
+            ($sent ? 'Emailed' : 'Tried to email') . ' a return reminder to ' . $hire['hirer_name'] . ' (' . $email . ')'
+        );
+
+        if ($sent) {
+            Flash::success('Reminder sent to ' . $email . '.');
+        } else {
+            Flash::error(HirerController::sendFailureMessage('hirer_overdue_notice'));
+        }
+
+        Response::redirect('/hires/' . $hireId);
     }
 
     /** Step 1 of checkout: an asset (possibly pre-filled from a scan). */

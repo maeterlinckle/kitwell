@@ -338,7 +338,14 @@ final class PatRecord
      */
     public static function assetSearchAll(array $filters = [], int $limit = 5000): array
     {
-        $dueDays = self::dueDays();
+        // A caller may set its own "due soon" horizon. The reminder run is the
+        // only one that does: its window is configurable separately from the
+        // one the register and dashboard show. Everything else gets the site
+        // default, so the screens stay in agreement with each other.
+        $dueDays = isset($filters['due_days']) && (int) $filters['due_days'] > 0
+            ? max(1, min(365, (int) $filters['due_days']))
+            : self::dueDays();
+
         [$where, $params] = self::buildFilters($filters, $dueDays);
 
         return Database::select(

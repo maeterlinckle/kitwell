@@ -10,7 +10,12 @@
 !/storage/logs/.gitkeep
 /storage/cache/*
 !/storage/cache/.gitkeep
-composer.lock
+
+# composer.lock IS committed. This is an application, not a library: the lock
+# file is what makes `composer install` on a server produce the same PHPMailer
+# every time, rather than whatever happens to be current that day. It was
+# ignored while the project had no runtime packages at all.
+
 .DS_Store
 Thumbs.db
 *.log

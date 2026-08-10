@@ -19,8 +19,12 @@ define('APP_ROOT', dirname(__DIR__));
 define('APP_START', microtime(true));
 
 // --- Autoloading ----------------------------------------------------------
-// Composer is the supported path, but the app has no runtime package
-// dependencies, so it also runs from a plain upload without `composer install`.
+// Composer is the supported path. The application has exactly one runtime
+// package — PHPMailer, which sends the outbound email added in stage 12 — and
+// everything else still runs from a plain upload without `composer install`.
+// Without vendor/ the app works normally and mail reports itself as
+// unconfigured (App\Mail\Mailer::problems() says to run composer install),
+// rather than failing somewhere confusing.
 if (is_file(APP_ROOT . '/vendor/autoload.php')) {
     require APP_ROOT . '/vendor/autoload.php';
 } else {

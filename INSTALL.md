@@ -102,9 +102,17 @@ a database password. (`Compress-Archive` includes dotfiles.)
    No `DROP`: nothing in the application ever issues one.
 7. **Copies the files**, leaving out `.git`, `.env`, `vendor/` and the contents
    of `storage/`.
-8. **Writes `.env`** with a generated 28-character database password, mode 640,
-   owned `root:www-data`. An existing `.env` is backed up first, never
-   overwritten in place.
+8. **Writes `.env`** with a generated 28-character database password and a
+   generated `APP_KEY`, mode 640, owned `root:www-data`. An existing `.env` is
+   backed up first, never overwritten in place.
+   `APP_KEY` encrypts the SMTP password in the database, so outbound email can
+   be configured from the Settings page without anyone needing shell access.
+   **Back it up with the database** — a dump restored without the matching key
+   leaves a password that cannot be decrypted.
+8b. **Runs `composer install` if Composer is present**, which fetches PHPMailer,
+   the one runtime dependency. If Composer is missing it says so and carries on:
+   everything works except *sending* email, and Settings → Email prints the
+   exact command to run later.
 9. **Sets ownership and modes:** application files `root:www-data`,
    directories 750, files 640; `storage/` owned by the web user, 2775/664 — the
    only directory the application can write to. On SELinux systems it also sets
@@ -218,8 +226,18 @@ The tasks the README describes, as one command each:
 | What went wrong? | `manage.sh logs -n 100` |
 | Change a `.env` value | `manage.sh config FORCE_HTTPS false` |
 | Trim the audit trail | `manage.sh prune-activity 730` |
-| Schedule backups | `manage.sh cron-install` |
+| Schedule backups and reminder emails | `manage.sh cron-install` |
+| Is email working? | `manage.sh mail-status` |
+| Prove it | `manage.sh mail-test you@example.com` |
+| Run the reminders now | `manage.sh send-reminders --dry-run` |
+| Find a calendar feed link | `manage.sh calendar-url jo@example.com` |
 | Re-run the security audits | `manage.sh audit` |
+
+Email is **off** after an install. To turn it on, sign in and go to
+**Settings → Email**: enter your SMTP details, tick *Send email from this
+application*, save, and press *Send test email*. Reminders are configured on the
+next tab and are each off until you switch them on. `manage.sh cron-install`
+adds the daily run that sends them.
 
 Everything that touches the database goes through `bin/console.php`, which uses
 the application's own models — so the same prepared statements, the same

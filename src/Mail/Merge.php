@@ -1,0 +1,88 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Mail;
+
+/**
+ * Merge-field substitution for email templates.
+ *
+ * Placeholders are `{{ field_name }}`; surrounding whitespace inside the braces
+ * is ignored, so `{{asset_tag}}` and `{{ asset_tag }}` are the same field. A
+ * placeholder the sending code did not supply is removed rather than left
+ * showing braces in someone's inbox — but the template editor checks for
+ * unknown fields when the template is saved, which is the point at which a typo
+ * can still be fixed by the person who made it.
+ *
+ * Values are treated as data, never as markup: in an HTML template every
+ * substituted value is escaped before it goes in. The template body itself is
+ * written by an administrator and is left alone.
+ */
+final class Merge
+{
+    private const PATTERN = '/\{\{\s*([a-z0-9_]+)\s*\}\}/i';
+
+    /**
+     * @param array<string,string> $fields
+     */
+    public static function render(string $text, array $fields, bool $html = false): string
+    {
+        return (string) preg_replace_callback(
+            self::PATTERN,
+            static function (array $match) use ($fields, $html): string {
+                $value = (string) ($fields[strtolower($match[1])] ?? '');
+
+                if (!$html) {
+                    return $value;
+                }
+
+                $escaped = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+                // A list field such as {{items}} arrives as one line per row;
+                // in an HTML body those newlines would otherwise collapse.
+                return nl2br($escaped, false);
+            },
+            $text
+        );
+    }
+
+    /**
+     * The field names a piece of template text refers to.
+     *
+     * @return array<int,string>
+     */
+    public static function placeholders(string $text): array
+    {
+        preg_match_all(self::PATTERN, $text, $matches);
+
+        return array_values(array_unique(array_map('strtolower', $matches[1] ?? [])));
+    }
+
+    /**
+     * Placeholders used in the text that the sending code does not supply.
+     *
+     * @param array<string,string> $known Field name => description
+     * @return array<int,string>
+     */
+    public static function unknown(string $text, array $known): array
+    {
+        return array_values(array_diff(self::placeholders($text), array_keys($known)));
+    }
+
+    /**
+     * A readable plain-text version of an HTML body, for the multipart
+     * alternative. Deliberately simple: block tags become line breaks, the rest
+     * are stripped. Anyone sending HTML mail complex enough to need better than
+     * this should be writing the text part themselves.
+     */
+    public static function htmlToText(string $html): string
+    {
+        $text = preg_replace('#<br\s*/?>#i', "\n", $html) ?? $html;
+        $text = preg_replace('#</(p|div|tr|li|h[1-6])\s*>#i', "\n", $text) ?? $text;
+        $text = strip_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+
+        return trim($text);
+    }
+}

@@ -88,6 +88,46 @@
         button.textContent = reveal ? 'Hide' : 'Show';
     });
 
+    // --- Copy a read-only field to the clipboard ---------------------------
+    // Progressive enhancement only: without JavaScript the field is still
+    // selectable and the address is still visible, which is all it has to be.
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-copy]');
+        if (!button) return;
+
+        var field = document.querySelector(button.getAttribute('data-copy'));
+        if (!field) return;
+
+        field.focus();
+        field.select();
+
+        var done = function () {
+            var original = button.getAttribute('data-copy-label') || button.textContent;
+            button.setAttribute('data-copy-label', original);
+            button.textContent = 'Copied';
+            window.setTimeout(function () { button.textContent = original; }, 2000);
+        };
+
+        // navigator.clipboard needs a secure context; execCommand is the
+        // fallback for a plain-http install on a local network.
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(field.value).then(done, function () {});
+            return;
+        }
+
+        try {
+            if (document.execCommand('copy')) done();
+        } catch (error) {
+            /* Leave the text selected — the user can copy it themselves. */
+        }
+    });
+
+    // Selecting the whole address on focus makes it one gesture to copy by
+    // hand, which is the no-JavaScript path's only alternative.
+    document.addEventListener('focusin', function (event) {
+        if (event.target.matches('[data-select-on-focus]')) event.target.select();
+    });
+
     // --- Confirmation on destructive actions -------------------------------
     document.addEventListener('click', function (event) {
         var trigger = event.target.closest('[data-confirm]');

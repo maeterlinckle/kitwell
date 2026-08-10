@@ -27,7 +27,12 @@ if (PHP_SAPI !== 'cli') {
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 use App\Core\Config;
+use App\Core\Crypto;
 use App\Core\Database;
+use App\Mail\EmailLog;
+use App\Mail\EmailReminder;
+use App\Mail\Mailer;
+use App\Mail\Reminders;
 use App\Models\ActivityLog;
 use App\Models\Hire;
 use App\Models\MaintenanceSchedule;
@@ -331,6 +336,56 @@ function cmdDoctor(array $argv): int
             'Audit trail size',
             $activity < 500000 ? 'ok' : 'WARN',
             number_format($activity) . ' rows' . ($activity >= 500000 ? ' — consider `activity:prune`' : '')
+        );
+
+        heading('Email');
+
+        $check('Extension openssl', Crypto::isAvailable() ? 'ok' : 'WARN', 'required to store the SMTP password securely');
+        $check(
+            'APP_KEY set',
+            Crypto::hasKey() ? 'ok' : 'WARN',
+            Crypto::hasKey() ? 'present in .env' : 'missing — run `key:generate`'
+        );
+        $check(
+            'PHPMailer installed',
+            Mailer::libraryInstalled() ? 'ok' : 'WARN',
+            Mailer::libraryInstalled() ? 'vendor/ present' : 'run `composer install --no-dev`'
+        );
+
+        $mailEnabled  = Setting::bool('mail_enabled', false);
+        $mailProblems = Mailer::problems();
+
+        if (!$mailEnabled) {
+            $check('Sending', 'WARN', 'switched off in Settings → Email');
+        } else {
+            $check(
+                'Sending',
+                $mailProblems === [] ? 'ok' : 'FAIL',
+                $mailProblems === []
+                    ? 'via ' . Setting::get('mail_host', '') . ':' . Setting::get('mail_port', '')
+                    : implode(' ', $mailProblems)
+            );
+        }
+
+        $failed7 = (int) Database::scalar(
+            "SELECT COUNT(*) FROM email_log WHERE status = 'failed' AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+        );
+        $check(
+            'Failed sends (7 days)',
+            $failed7 === 0 ? 'ok' : 'WARN',
+            $failed7 === 0 ? 'none' : $failed7 . ' — see Settings → Email → Log'
+        );
+
+        $remindersOn = [];
+        foreach (array_keys(Reminders::TYPES) as $type) {
+            if (Reminders::isEnabled($type)) {
+                $remindersOn[] = $type;
+            }
+        }
+        $check(
+            'Reminders',
+            'ok',
+            $remindersOn === [] ? 'none switched on' : implode(', ', $remindersOn) . ' — needs `bin/send-reminders.php` on cron'
         );
     } catch (Throwable $e) {
         $check('Connection', 'FAIL', $e->getMessage());
@@ -795,6 +850,227 @@ function cmdDbCheck(array $argv): int
     return 0;
 }
 
+/**
+ * Generate the APP_KEY that encrypts the SMTP password.
+ *
+ * Deliberately does not write .env itself: that file may be root-owned and
+ * mode 640, and a half-written .env is a much worse outcome than a line to
+ * paste. It refuses to print a second key when one already exists, because
+ * replacing APP_KEY makes every value encrypted under the old one unreadable.
+ *
+ * @param array<int,string> $argv
+ */
+function cmdKeyGenerate(array $argv): int
+{
+    if (!Crypto::isAvailable()) {
+        fail('The PHP openssl extension is not loaded, so no key can be used.');
+    }
+
+    if (Crypto::hasKey() && !flag($argv, 'force')) {
+        line('APP_KEY is already set in .env.');
+        line();
+        line('Replacing it makes the stored SMTP password unreadable, and it would have to be');
+        line('re-entered in Settings → Email. Pass --force if that is what you want.');
+
+        return 1;
+    }
+
+    line('Add this line to .env:');
+    line();
+    line('  APP_KEY=' . Crypto::generateKey());
+    line();
+    line('Then re-enter the SMTP password in Settings → Email.');
+
+    return 0;
+}
+
+/**
+ * Send a test message, so a server install can be proved without the browser.
+ *
+ * @param array<int,string> $argv
+ */
+function cmdMailTest(array $argv): int
+{
+    $to = (string) option($argv, 'to', '');
+
+    if ($to === '') {
+        $to = prompt('Send the test message to: ');
+    }
+
+    if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
+        fail("'{$to}' is not a valid email address.");
+    }
+
+    $problems = Mailer::problems();
+
+    if ($problems !== []) {
+        foreach ($problems as $problem) {
+            line('  - ' . $problem);
+        }
+
+        fail('Email is not usable yet.');
+    }
+
+    if (!Setting::bool('mail_enabled', false)) {
+        fail('Email sending is switched off. Turn it on in Settings → Email, or with `setting:set --key=mail_enabled --value=1`.');
+    }
+
+    line('Sending to ' . $to . ' via ' . Setting::get('mail_host', '') . '…');
+
+    $sent = Mailer::sendTemplate('smtp_test', $to, null, [
+        'mail_host' => (string) Setting::get('mail_host', ''),
+        'recipient' => $to,
+        'sent_at'   => date('j M Y, H:i'),
+        'sent_by'   => 'the console',
+    ]);
+
+    if ($sent) {
+        line('Sent. If it does not arrive, check the spam folder.');
+
+        return 0;
+    }
+
+    $latest = EmailLog::search(['status' => 'failed'], 1, 1);
+    fail((string) ($latest['rows'][0]['error'] ?? 'The send failed; see the email log.'));
+}
+
+/**
+ * The reminder run's state, without sending anything.
+ *
+ * @param array<int,string> $argv
+ */
+function cmdMailStatus(array $argv): int
+{
+    heading('Configuration');
+
+    $problems = Mailer::problems();
+
+    line('  Enabled:  ' . (Setting::bool('mail_enabled', false) ? 'yes' : 'no'));
+    line('  Host:     ' . (Setting::get('mail_host', '') ?: '(unset)') . ':' . Setting::get('mail_port', ''));
+    line('  From:     ' . (Setting::get('mail_from_address', '') ?: '(unset)'));
+    line('  Password: ' . Mailer::passwordSource());
+    line('  Ready:    ' . (Mailer::isReady() ? 'yes' : 'no'));
+
+    foreach ($problems as $problem) {
+        line('    - ' . $problem);
+    }
+
+    heading('Reminders');
+
+    $rows = [];
+    foreach (Reminders::TYPES as $type => $label) {
+        $rows[] = [
+            $label,
+            Reminders::isEnabled($type) ? 'on' : 'off',
+            Reminders::windowDays($type) . ' day(s)',
+        ];
+    }
+
+    table(['Reminder', 'State', 'Window'], $rows, false);
+
+    line();
+    line('  Repeat after:  ' . Reminders::repeatDays() . ' day(s)');
+    line('  Notify list:   ' . (Reminders::notifyUserIds() === [] ? 'nobody' : count(Reminders::notifyUserIds()) . ' user(s)'));
+
+    foreach (array_keys(Reminders::TYPES) as $type) {
+        $names = array_map(static fn (array $u): string => (string) $u['name'], Reminders::recipientsFor($type));
+        line('    ' . str_pad($type, 12) . ($names === [] ? '(nobody eligible)' : implode(', ', $names)));
+    }
+
+    heading('Log');
+
+    $summary = EmailLog::summary();
+    line('  Sent:      ' . number_format($summary['sent']));
+    line('  Failed:    ' . number_format($summary['failed']) . ' (' . $summary['failed_7'] . ' in the last 7 days)');
+    line('  Last sent: ' . ($summary['last_sent_at'] ?? 'never'));
+
+    return 0;
+}
+
+/**
+ * Trim the email log and the reminder tracking rows.
+ *
+ * @param array<int,string> $argv
+ */
+function cmdMailPrune(array $argv): int
+{
+    $days = (int) option($argv, 'days', '365');
+
+    if ($days < 30) {
+        fail('Refusing to keep less than 30 days of email history.');
+    }
+
+    if (flag($argv, 'dry-run')) {
+        $logRows = (int) Database::scalar(
+            'SELECT COUNT(*) FROM email_log WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+            [$days]
+        );
+
+        // sprintf, not interpolation: tests/security-audit.php flags any
+        // double-quoted string that contains both a SQL verb and a variable,
+        // and it cannot tell a status message from a query. Keeping the rule
+        // strict is worth more than the convenience here.
+        line(sprintf('Would delete %d email log row(s) older than %d days.', $logRows, $days));
+
+        return 0;
+    }
+
+    $logRows      = EmailLog::prune($days);
+    $reminderRows = EmailReminder::prune($days);
+
+    line(sprintf('Deleted %d email log row(s) and %d reminder tracking row(s).', $logRows, $reminderRows));
+
+    return 0;
+}
+
+/**
+ * Print a user's calendar feed URL, creating the token if they have none.
+ *
+ * The one place an administrator can reach somebody else's feed link, and it
+ * exists for the support case ("I cannot find the address"). It is a shell
+ * command with an audit entry, not a button in the admin UI.
+ *
+ * @param array<int,string> $argv
+ */
+function cmdCalendarUrl(array $argv): int
+{
+    $user = userByEmail((string) option($argv, 'email', ''));
+    $id   = (int) $user['id'];
+
+    if ($user['calendar_token'] === null || flag($argv, 'regenerate')) {
+        $regenerating = $user['calendar_token'] !== null;
+
+        if ($regenerating && !flag($argv, 'force') && !confirm('This stops their current link working. Continue?')) {
+            line('Cancelled.');
+
+            return 1;
+        }
+
+        User::regenerateCalendarToken($id);
+        ActivityLog::record(
+            'updated',
+            'user',
+            $id,
+            ($regenerating ? 'Regenerated' : 'Created') . ' the calendar feed link for ' . $user['name'] . ' from the console'
+        );
+
+        $user = User::find($id);
+    }
+
+    line('Calendar feed for ' . $user['name'] . ':');
+    line();
+    line('  ' . App\Controllers\CalendarController::feedUrl((string) $user['calendar_token']));
+    line();
+    line('Treat it as a password — it grants read access to the dates that user can see.');
+
+    if ((string) Config::get('app.url', '') === '') {
+        line();
+        line('APP_URL is not set in .env, so the host above was guessed. Set it.');
+    }
+
+    return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
@@ -816,6 +1092,11 @@ $commands = [
     'activity:prune'        => ['Delete old audit rows  --days=365 [--dry-run] [--force]', 'cmdActivityPrune'],
     'pat:missing-details'   => ['Assets needing an appliance class or fuse rating', 'cmdPatMissingDetails'],
     'hires:refresh-overdue' => ['Recompute the stored overdue flag on hires', 'cmdRefreshOverdue'],
+    'key:generate'          => ['Generate the APP_KEY that encrypts the SMTP password', 'cmdKeyGenerate'],
+    'mail:status'           => ['Show the mail configuration, reminders and log summary', 'cmdMailStatus'],
+    'mail:test'             => ['Send a test message  --to=you@example.com', 'cmdMailTest'],
+    'mail:prune'            => ['Delete old email log rows  --days=365 [--dry-run]', 'cmdMailPrune'],
+    'calendar:url'          => ['Show a user\'s calendar feed URL  --email= [--regenerate]', 'cmdCalendarUrl'],
 ];
 
 $command = $argv[1] ?? '';

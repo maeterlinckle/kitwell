@@ -26,6 +26,13 @@ return [
         'currency'        => Env::get('APP_CURRENCY', 'GBP'),
         'currency_symbol' => Env::get('APP_CURRENCY_SYMBOL', '£'),
         'root'            => $root,
+
+        // Encryption key for secrets that have to live in the database (today,
+        // only the SMTP password). Generate one with `php bin/console.php
+        // key:generate`. Without it the mail password simply cannot be saved
+        // from the UI — App\Core\Crypto fails closed rather than storing it in
+        // the clear.
+        'key'             => Env::get('APP_KEY', ''),
     ],
 
     'database' => [
@@ -51,6 +58,16 @@ return [
             'decay_minutes'    => (int) Env::get('LOGIN_DECAY_MINUTES', 15),
             'lockout_minutes'  => (int) Env::get('LOGIN_LOCKOUT_MINUTES', 15),
         ],
+    ],
+
+    // Outbound mail. Everything else — host, port, encryption, from address —
+    // is an application setting an administrator edits in Settings → Email.
+    // Only the password can come from the environment, because that is the one
+    // value a site may prefer to keep out of the database entirely; when it is
+    // set here it wins, and the Settings page says so rather than pretending
+    // the field it shows is the one in use.
+    'mail' => [
+        'password' => (string) Env::get('MAIL_PASSWORD', ''),
     ],
 
     'storage' => [

@@ -69,13 +69,21 @@ Application
   refresh-overdue             recompute the stored overdue flag on hires
   prune-activity [DAYS]       delete audit rows older than DAYS (default 365)
 
+Email
+  mail-status                 show the mail configuration, reminders and log
+  mail-test EMAIL             send a test message and report the result
+  send-reminders [OPTS]       run the reminder emails now
+                              --dry-run, --force, --type=pat|maintenance|hire
+  calendar-url EMAIL          show a user's personal calendar feed URL
+
 Server
   backup [DIR]                dump the database and archive the uploads
   restore DUMP [UPLOADS]      restore from a backup
   update [SOURCE_DIR]         copy in a new version and migrate
   permissions                 re-apply ownership and file modes
   package [FILE]              build a distributable archive of this install
-  cron-install                nightly backup + hourly overdue refresh
+  cron-install                nightly backup, hourly overdue refresh,
+                              daily reminder emails
   cron-remove                 remove them again
   restart                     restart the web server and PHP-FPM
 
@@ -350,6 +358,40 @@ cmd_seed() {
 
 cmd_refresh_overdue() { console hires:refresh-overdue; }
 
+cmd_mail_status() { console mail:status; }
+
+cmd_mail_test() {
+    [ -n "${1:-}" ] || die "Usage: $0 mail-test EMAIL"
+    console mail:test --to="$1"
+}
+
+cmd_calendar_url() {
+    [ -n "${1:-}" ] || die "Usage: $0 calendar-url EMAIL"
+    console calendar:url --email="$1"
+}
+
+cmd_send_reminders() {
+    local args=()
+    [ "$QUIET" = yes ] && args+=(--quiet)
+
+    local arg
+    for arg in "$@"; do
+        case "$arg" in
+            --dry-run|--force|--type=*) args+=("$arg") ;;
+            --quiet)                    ;;   # already handled by the global flag
+            *) die "Unknown option '$arg'. Use --dry-run, --force or --type=pat|maintenance|hire." ;;
+        esac
+    done
+
+    assert_web_can_read
+
+    # As the web user, so the log rows it writes are owned the same way
+    # everything else the application writes is. `${args[@]+"${args[@]}"}` is
+    # the empty-array-safe expansion — a plain "${args[@]}" under `set -u`
+    # would pass one empty argument on older bash.
+    ( cd "$APP_DIR" && run_as_web "$PHP_BIN" bin/send-reminders.php ${args[@]+"${args[@]}"} )
+}
+
 cmd_prune_activity() {
     local days="${1:-365}"
     console activity:prune --days="$days" ${ASSUME_YES:+--force}
@@ -583,6 +625,13 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # Keep the stored hire status in step with the due dates. Every screen already
 # derives this in SQL, so this only tidies the column itself.
 5 * * * * root ${APP_DIR}/manage.sh refresh-overdue --quiet
+
+# Reminder emails: PAT, maintenance and hire returns. Once each morning is the
+# right cadence for a workshop — running it more often does not send more mail,
+# because an item already reminded about is skipped until the repeat window in
+# Settings → Email → Reminders has passed. It does nothing at all until at
+# least one reminder type is switched on there.
+0 8 * * * root ${APP_DIR}/manage.sh send-reminders --quiet
 CRON
 
     chmod 644 "$file"
@@ -705,6 +754,10 @@ case "$COMMAND" in
     migrate)         cmd_migrate "$@" ;;
     seed)            cmd_seed ;;
     refresh-overdue) cmd_refresh_overdue ;;
+    mail-status)     cmd_mail_status ;;
+    mail-test)       cmd_mail_test "${1:-}" ;;
+    send-reminders)  cmd_send_reminders "$@" ;;
+    calendar-url)    cmd_calendar_url "${1:-}" ;;
     prune-activity)  cmd_prune_activity "${1:-365}" ;;
 
     backup)          cmd_backup "${1:-}" ;;

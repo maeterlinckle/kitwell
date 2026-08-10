@@ -110,6 +110,77 @@ final class User
         );
     }
 
+    /**
+     * Active users who hold a permission, optionally narrowed to a set of ids.
+     *
+     * This is the same rule Auth::can() applies — a superuser role holds
+     * everything, everyone else needs the explicit grant — asked of an
+     * arbitrary user rather than the signed-in one. It backs the reminder
+     * notify list and the calendar feed, both of which have to answer "may
+     * *this* person see PAT dates?" with nobody signed in at all.
+     *
+     * @param array<int,int>|null $ids null = every user
+     * @return array<int,array<string,mixed>>
+     */
+    public static function withPermission(string $permission, ?array $ids = null): array
+    {
+        if ($ids !== null && $ids === []) {
+            return [];
+        }
+
+        $sql = 'SELECT u.id, u.name, u.email, r.slug AS role_slug
+                  FROM users u
+                  INNER JOIN roles r ON r.id = u.role_id
+                 WHERE u.is_active = 1
+                   AND u.email <> \'\'
+                   AND (r.is_superuser = 1 OR EXISTS (
+                           SELECT 1
+                             FROM role_permissions rp
+                             INNER JOIN permissions p ON p.id = rp.permission_id
+                            WHERE rp.role_id = r.id AND p.slug = ?
+                       ))';
+        $params = [$permission];
+
+        if ($ids !== null) {
+            $ids = array_values(array_unique(array_map('intval', $ids)));
+            $sql .= ' AND u.id IN (' . implode(', ', array_fill(0, count($ids), '?')) . ')';
+            foreach ($ids as $id) {
+                $params[] = $id;
+            }
+        }
+
+        return Database::select($sql . ' ORDER BY u.name', $params);
+    }
+
+    /** Does one user hold a permission? Same rule as Auth::can(). */
+    public static function holdsPermission(int $userId, string $permission): bool
+    {
+        return self::withPermission($permission, [$userId]) !== [];
+    }
+
+    /** @return array<string,mixed>|null */
+    public static function findByCalendarToken(string $token): ?array
+    {
+        if ($token === '') {
+            return null;
+        }
+
+        return Database::selectOne(self::SELECT . ' WHERE u.calendar_token = ? AND u.is_active = 1', [$token]);
+    }
+
+    /** Issue (or re-issue) a personal calendar feed token, and return it. */
+    public static function regenerateCalendarToken(int $id): string
+    {
+        $token = bin2hex(random_bytes(32));
+
+        Database::update('users', [
+            'calendar_token'            => $token,
+            'calendar_token_created_at' => date('Y-m-d H:i:s'),
+        ], $id);
+
+        return $token;
+    }
+
     public static function emailExists(string $email, int $ignoreId = 0): bool
     {
         $sql    = 'SELECT COUNT(*) FROM users WHERE email = ?';

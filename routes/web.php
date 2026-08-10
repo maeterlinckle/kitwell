@@ -13,8 +13,10 @@ use App\Controllers\Admin\ActivityController;
 use App\Controllers\Admin\CategoryController;
 use App\Controllers\Admin\LocationController;
 use App\Controllers\Admin\RoleController;
+use App\Controllers\Admin\EmailController;
 use App\Controllers\Admin\SettingsController;
 use App\Controllers\Admin\UserController;
+use App\Controllers\CalendarController;
 use App\Controllers\AssetController;
 use App\Controllers\AssetCopyController;
 use App\Controllers\AssetExportController;
@@ -43,6 +45,12 @@ $router->post('/logout', [AuthController::class, 'logout'],   ['auth', 'csrf'], 
 
 $router->get('/health', [DashboardController::class, 'health']);
 
+// Personal calendar subscription. Deliberately outside 'auth': a calendar
+// client cannot sign in, so the 64-character token in the path is the
+// credential, and what the feed contains is decided by the token owner's own
+// permissions. See App\Services\CalendarFeed.
+$router->get('/calendar/{token:[a-f0-9]+}.ics', [CalendarController::class, 'feed']);
+
 // --- Signed in ------------------------------------------------------------
 $router->group(['auth'], static function (Router $router): void {
     $router->get('/', [DashboardController::class, 'index'], [], 'dashboard');
@@ -50,6 +58,12 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/profile', [ProfileController::class, 'edit'], [], 'profile');
     $router->post('/profile', [ProfileController::class, 'update'], ['csrf']);
     $router->post('/profile/password', [ProfileController::class, 'updatePassword'], ['csrf']);
+
+    // Personal, not administrative: a user manages only their own feed token,
+    // and there is no route by which anyone can reach somebody else's.
+    $router->get('/profile/calendar',         [CalendarController::class, 'show'], [], 'profile.calendar');
+    $router->post('/profile/calendar',        [CalendarController::class, 'regenerate'], ['csrf']);
+    $router->post('/profile/calendar/revoke', [CalendarController::class, 'revoke'], ['csrf']);
 });
 
 // --- Assets ---------------------------------------------------------------
@@ -143,6 +157,7 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/hires/{id:\d+}/return',    [HireController::class, 'returnForm'], ['can:hires.return']);
     $router->post('/hires/{id:\d+}/return',   [HireController::class, 'returnHire'], ['can:hires.return', 'csrf']);
     $router->post('/hires/{id:\d+}/extend',   [HireController::class, 'extend'],     ['can:hires.manage', 'csrf']);
+    $router->post('/hires/{id:\d+}/email',    [HireController::class, 'emailReminder'], ['can:email.send', 'csrf']);
     $router->get('/hires/{hireId:\d+}/photos/{photoId:\d+}', [HireController::class, 'photo'], ['can:hires.view']);
 
     // Hirers
@@ -153,6 +168,7 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/hirers/{id:\d+}/edit',   [HirerController::class, 'edit'],    ['can:hirers.manage']);
     $router->post('/hirers/{id:\d+}',       [HirerController::class, 'update'],  ['can:hirers.manage', 'csrf']);
     $router->post('/hirers/{id:\d+}/delete',[HirerController::class, 'destroy'], ['can:hirers.manage', 'csrf']);
+    $router->post('/hirers/{id:\d+}/email',  [HirerController::class, 'emailHires'], ['can:email.send', 'csrf']);
 
     // Quick scan, reachable from anywhere.
     $router->get('/scan',        [ScanController::class, 'index'],  ['can:assets.view'], 'scan');
@@ -217,6 +233,26 @@ $router->group(['auth'], static function (Router $router): void {
     // Application settings
     $router->get('/admin/settings',  [SettingsController::class, 'edit'],   ['can:settings.manage'], 'admin.settings');
     $router->post('/admin/settings', [SettingsController::class, 'update'], ['can:settings.manage', 'csrf']);
+
+    // Email: the SMTP connection, reminders, templates and the send log.
+    // One nav entry, four pages — Settings is set up once and visited rarely,
+    // so the sub-pages live inside it rather than cluttering the menu.
+    $router->get('/admin/email',            [EmailController::class, 'index'],   ['can:email.manage'], 'admin.email');
+    $router->post('/admin/email',           [EmailController::class, 'update'],  ['can:email.manage', 'csrf']);
+    $router->post('/admin/email/test',      [EmailController::class, 'test'],    ['can:email.manage', 'csrf']);
+
+    $router->get('/admin/email/reminders',  [EmailController::class, 'reminders'],       ['can:email.manage']);
+    $router->post('/admin/email/reminders', [EmailController::class, 'updateReminders'], ['can:email.manage', 'csrf']);
+    $router->post('/admin/email/reminders/run', [EmailController::class, 'runReminders'],['can:email.manage', 'csrf']);
+
+    $router->get('/admin/email/log',        [EmailController::class, 'log'],     ['can:email.manage']);
+
+    // Templates last: /admin/email/templates must be registered before the
+    // {key} route so the list is never swallowed by the wildcard.
+    $router->get('/admin/email/templates',  [EmailController::class, 'templates'], ['can:email.manage']);
+    $router->get('/admin/email/templates/{key:[a-z0-9_]+}',        [EmailController::class, 'editTemplate'],   ['can:email.manage']);
+    $router->post('/admin/email/templates/{key:[a-z0-9_]+}',       [EmailController::class, 'updateTemplate'], ['can:email.manage', 'csrf']);
+    $router->post('/admin/email/templates/{key:[a-z0-9_]+}/reset', [EmailController::class, 'resetTemplate'],  ['can:email.manage', 'csrf']);
 
     // Audit trail
     $router->get('/admin/activity', [ActivityController::class, 'index'], ['can:audit.view'], 'admin.activity');

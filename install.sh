@@ -32,6 +32,7 @@ INSTALL_DIR="${INSTALL_DIR:-}"
 APP_NAME="${APP_NAME:-}"
 APP_URL="${APP_URL:-}"
 APP_TIMEZONE="${APP_TIMEZONE:-}"
+APP_KEY="${APP_KEY:-}"
 APP_CURRENCY="${APP_CURRENCY:-GBP}"
 APP_CURRENCY_SYMBOL="${APP_CURRENCY_SYMBOL:-£}"
 ORGANISATION_NAME="${ORGANISATION_NAME:-}"
@@ -285,6 +286,20 @@ random_password() {
     fi
 }
 
+# The APP_KEY that encrypts secrets stored in the database (the SMTP password).
+# 32 random bytes, base64, in the same "base64:..." form the console emits.
+# Falls back to PHP when openssl is missing, because base64 of raw random bytes
+# is not something to improvise with shell tools.
+random_app_key() {
+    if have openssl; then
+        printf 'base64:%s' "$(openssl rand -base64 32)"
+    elif have "$PHP_BIN"; then
+        "$PHP_BIN" -r 'echo "base64:" . base64_encode(random_bytes(32));'
+    else
+        printf ''
+    fi
+}
+
 # Quote a value for MariaDB's single-quoted string literals.
 sql_quote() { printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\\'/g"; }
 
@@ -524,6 +539,16 @@ DB_PASSWORD_GENERATED=no
 if [ -z "$DB_PASSWORD" ]; then
     DB_PASSWORD="$(random_password)"
     DB_PASSWORD_GENERATED=yes
+fi
+
+# Not asked for: there is nothing an operator could usefully choose here, and a
+# generated key means outbound email can be configured from the Settings page
+# on day one without anyone having to touch .env. An answers file may still
+# carry one over from an existing install, and that must win — reusing the old
+# key is what keeps an already-stored SMTP password readable.
+if [ -z "$APP_KEY" ]; then
+    APP_KEY="$(random_app_key)"
+    [ -n "$APP_KEY" ] || warn "No way to generate APP_KEY (no openssl, no PHP yet). Email can still be configured by setting MAIL_PASSWORD in .env."
 fi
 
 step "The first administrator"
@@ -900,10 +925,25 @@ mkdir -p "$INSTALL_DIR/storage/logs" \
          "$INSTALL_DIR/storage/uploads/hires" \
          "$INSTALL_DIR/storage/uploads/imports"
 
-if have composer && [ -f "$INSTALL_DIR/composer.json" ]; then
-    info "Composer found — building the optimised autoloader"
-    ( cd "$INSTALL_DIR" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction --quiet ) \
-        || warn "Composer failed. The application's own fallback autoloader will be used instead."
+# Composer is not required for the application to run — there is a fallback
+# autoloader — but it is what installs PHPMailer, and without PHPMailer the
+# outbound email added in stage 12 cannot send. So this is now worth saying
+# out loud rather than passing over in silence.
+if [ -f "$INSTALL_DIR/vendor/autoload.php" ]; then
+    info "vendor/ is already present — leaving it alone"
+elif have composer && [ -f "$INSTALL_DIR/composer.json" ]; then
+    info "Composer found — installing dependencies and building the autoloader"
+    if ( cd "$INSTALL_DIR" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction --quiet ); then
+        ok "Dependencies installed (PHPMailer, for outbound email)"
+    else
+        warn "Composer failed. Everything works except sending email; run"
+        warn "  cd $INSTALL_DIR && composer install --no-dev --optimize-autoloader"
+    fi
+else
+    warn "Composer was not found, so PHPMailer is not installed."
+    warn "Everything works except sending email. To enable it later:"
+    warn "  apt/dnf install composer   (or see https://getcomposer.org)"
+    warn "  cd $INSTALL_DIR && composer install --no-dev --optimize-autoloader"
 fi
 
 # ---------------------------------------------------------------------------
@@ -943,6 +983,12 @@ APP_TIMEZONE=$(env_quote "$APP_TIMEZONE")
 APP_CURRENCY=$(env_quote "$APP_CURRENCY")
 APP_CURRENCY_SYMBOL=$(env_quote "$APP_CURRENCY_SYMBOL")
 
+# Encrypts secrets stored in the database — today only the SMTP password.
+# Generated here so email can be configured from Settings without shell access.
+# Changing it makes the stored SMTP password unreadable; back it up with the
+# database, not instead of it.
+APP_KEY=$(env_quote "$APP_KEY")
+
 # Database
 DB_HOST=$(env_quote "$DB_HOST")
 DB_PORT=${DB_PORT}
@@ -962,6 +1008,13 @@ TRUST_PROXY=${trust_proxy}
 LOGIN_MAX_ATTEMPTS=5
 LOGIN_DECAY_MINUTES=15
 LOGIN_LOCKOUT_MINUTES=15
+
+# Outbound email
+# Host, port, encryption and addresses are configured in Settings → Email.
+# Only the password can live here, for a site that would rather keep it out of
+# the database. Set it and it wins over whatever is stored; leave it blank to
+# manage the password from the Settings page.
+MAIL_PASSWORD=
 
 # Uploads
 UPLOAD_MAX_PHOTO_MB=${UPLOAD_MAX_PHOTO_MB}

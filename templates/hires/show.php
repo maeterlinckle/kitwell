@@ -5,9 +5,22 @@
  * @var array<string,mixed> $hire
  * @var array<int,array<string,mixed>> $photosOut
  * @var array<int,array<string,mixed>> $photosIn
+ * @var bool $mailReady
+ * @var array<int,array<string,mixed>> $recentEmails
  */
 $id   = (int) $hire['id'];
 $open = $hire['returned_at'] === null;
+
+$hirerEmail = trim((string) ($hire['hirer_email'] ?? ''));
+$canEmail   = $open && $hirerEmail !== '' && ($mailReady ?? false);
+
+if ($hirerEmail === '') {
+    $emailTitle = $hire['hirer_name'] . ' has no email address on record.';
+} elseif (!($mailReady ?? false)) {
+    $emailTitle = 'Email is not configured. An administrator can set it up in Settings → Email.';
+} else {
+    $emailTitle = 'Send ' . $hirerEmail . ' a reminder about this item.';
+}
 ?>
 <div class="page-head">
     <div>
@@ -23,6 +36,17 @@ $open = $hire['returned_at'] === null;
         <?php if ($open && can('hires.return')): ?>
             <a class="btn btn-primary" href="<?= e(url('/hires/' . $id . '/return')) ?>">Book in</a>
         <?php endif; ?>
+
+        <?php /* Chase this one item now rather than waiting for the nightly
+                 reminder — same template, so both read identically. */ ?>
+        <?php if ($open && can('email.send')): ?>
+            <form method="post" action="<?= e(url('/hires/' . $id . '/email')) ?>">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn" <?= $canEmail ? '' : 'disabled' ?>
+                        title="<?= e($emailTitle) ?>">Email reminder</button>
+            </form>
+        <?php endif; ?>
+
         <a class="btn btn-ghost" href="<?= e(url('/hires')) ?>">All hires</a>
     </div>
 </div>
@@ -127,6 +151,25 @@ $open = $hire['returned_at'] === null;
                     </div>
                     <button type="submit" class="btn btn-block">Extend hire</button>
                 </form>
+            </div>
+        <?php endif; ?>
+
+        <?php if (can('email.send') && ($recentEmails ?? []) !== []): ?>
+            <div class="card">
+                <h2>Reminders sent</h2>
+                <ul class="plain-list">
+                    <?php foreach ($recentEmails as $sent): ?>
+                        <li>
+                            <?= e(format_datetime((string) $sent['created_at'])) ?> —
+                            <?php if ((string) $sent['status'] === 'sent'): ?>
+                                <span class="badge badge-ok">Sent</span>
+                            <?php else: ?>
+                                <span class="badge badge-danger">Failed</span>
+                            <?php endif; ?>
+                            <span class="muted">to <?= e($sent['recipient']) ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
             </div>
         <?php endif; ?>
     </aside>

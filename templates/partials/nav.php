@@ -49,6 +49,7 @@ $links = [
         ['label' => 'Roles',        'href' => '/admin/roles',      'permission' => 'roles.manage'],
         ['label' => 'Categories',   'href' => '/admin/categories', 'permission' => 'categories.manage'],
         ['label' => 'Locations',    'href' => '/admin/locations',  'permission' => 'locations.manage'],
+        ['label' => 'Email',        'href' => '/admin/email',      'permission' => 'email.manage'],
         ['label' => 'Activity log', 'href' => '/admin/activity',   'permission' => 'audit.view'],
         ['label' => 'Import CSV',   'href' => '/import',           'permission' => 'assets.create'],
         ['label' => 'Export assets','href' => '/assets/export',    'permission' => 'assets.export'],
@@ -146,13 +147,39 @@ $groupIsOpen = static function (array $link): bool {
                     <span class="btn-label" data-theme-label>Dark mode</span>
                 </button>
 
-                <a class="nav-link nav-user" href="<?= e(url('/profile')) ?>">
-                    <span class="avatar" aria-hidden="true"><?= e(mb_strtoupper(mb_substr((string) ($user['name'] ?? '?'), 0, 1))) ?></span>
-                    <span class="nav-user-text">
-                        <span class="nav-user-name"><?= e($user['name'] ?? '') ?></span>
-                        <span class="nav-user-role"><?= e($user['role_name'] ?? '') ?></span>
-                    </span>
-                </a>
+                <?php /* The account menu. Personal settings only — the calendar
+                         feed is one person's own subscription link, so it
+                         belongs here rather than in the admin area. Same
+                         <details> mechanics as the main nav groups, so it
+                         accordions on a phone and drops down on a desktop
+                         without a second structure. */ ?>
+                <?php $accountOpen = is_active_path('/profile'); ?>
+                <details class="nav-group nav-account-group" data-nav-group <?= $accountOpen ? 'open' : '' ?>>
+                    <summary class="nav-link nav-user nav-group-toggle<?= $accountOpen ? ' is-active' : '' ?>">
+                        <span class="avatar" aria-hidden="true"><?= e(mb_strtoupper(mb_substr((string) ($user['name'] ?? '?'), 0, 1))) ?></span>
+                        <span class="nav-user-text">
+                            <span class="nav-user-name"><?= e($user['name'] ?? '') ?></span>
+                            <span class="nav-user-role"><?= e($user['role_name'] ?? '') ?></span>
+                        </span>
+                        <span class="nav-caret" aria-hidden="true"></span>
+                    </summary>
+                    <ul class="nav-sublist">
+                        <?php /* On a desktop the bar shows only the avatar, so the
+                                 menu is where you confirm who you are signed in as. */ ?>
+                        <li class="nav-account-identity">
+                            <strong><?= e($user['name'] ?? '') ?></strong>
+                            <span><?= e($user['role_name'] ?? '') ?></span>
+                        </li>
+                        <li>
+                            <a href="<?= e(url('/profile')) ?>"
+                               class="nav-link nav-sublink<?= is_active_path('/profile') && !is_active_path('/profile/calendar') ? ' is-active' : '' ?>">My account</a>
+                        </li>
+                        <li>
+                            <a href="<?= e(url('/profile/calendar')) ?>"
+                               class="nav-link nav-sublink<?= is_active_path('/profile/calendar') ? ' is-active' : '' ?>">Calendar feed</a>
+                        </li>
+                    </ul>
+                </details>
 
                 <form method="post" action="<?= e(url('/logout')) ?>" class="nav-logout">
                     <?= csrf_field() ?>

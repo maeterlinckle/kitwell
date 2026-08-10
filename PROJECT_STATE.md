@@ -1,15 +1,16 @@
 # Project state
 
-A ground-truth snapshot of the asset register as it stands on **2026-08-07**,
+A ground-truth snapshot of the asset register as it stands on **2026-08-10**,
 written for whoever (or whatever) picks the code up next.
 
-The application itself was finished on 2026-08-06 and is unchanged since; what
-2026-08-07 added is the deployment tooling in §5.3 — `install.sh`, `manage.sh`,
-`bin/console.php` and `INSTALL.md`.
+The original nine build prompts finished on 2026-08-06. Since then:
+deployment tooling on 2026-08-07 (§5.3), the PAT workflow overhaul on
+2026-08-08, the navigation and Hires/Hirers rename on 2026-08-09, and outbound
+email plus calendar feeds on 2026-08-10.
 
 Everything below was checked against the files and the database at the time of
 writing, not recalled. The schema section was produced by creating an empty
-database, applying all thirteen migrations in order and then reading
+database, applying all eighteen migrations in order and then reading
 `information_schema`, so it describes exactly what a fresh install produces.
 Where something is *not* verified, it says so.
 
@@ -22,10 +23,12 @@ Where something is *not* verified, it says so.
 | Language | PHP **>= 8.1** (`composer.json`), developed and tested on **8.4.22** |
 | Database | **MariaDB** 10.4+ — tested on 12.3.2 |
 | Framework | none |
-| Runtime dependencies | none. `composer.json` declares only `php`, `ext-pdo`, `ext-pdo_mysql`, `ext-json`, `ext-mbstring`, `ext-fileinfo` — no packages |
-| Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only) |
+| Runtime dependencies | one package: `phpmailer/phpmailer`. `composer.json` also declares `php`, `ext-pdo`, `ext-pdo_mysql`, `ext-json`, `ext-mbstring`, `ext-fileinfo`, `ext-openssl` |
+| Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
+| `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 144 PHP files (56 of them templates), 105 routes (58 GET, 47 POST), 13 migrations |
+| Counted at time of writing | 168 PHP files (68 of them templates), 122 routes (65 GET, 57 POST), 18 migrations |
+| Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
 > name and must not be "corrected": PHP's extension is `pdo_mysql` and PDO's DSN
@@ -36,13 +39,13 @@ Where something is *not* verified, it says so.
 
 ## 2. Database schema as implemented
 
-Built by applying `database/migrations/001` … `013` to an empty database. All
-thirteen applied cleanly with no errors.
+Built by applying `database/migrations/001` … `018` to an empty database. All
+eighteen applied cleanly with no errors.
 
-**Totals:** 19 domain tables, 233 columns, 37 foreign keys, 90 indexes.
+**Totals:** 22 domain tables, 279 columns, 39 foreign keys, 106 indexes.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
-A database migrated with `php bin/migrate.php` has a **20th** table,
+A database migrated with `php bin/migrate.php` has a **23rd** table,
 `migrations` (`id`, `migration`, `batch`, `applied_at`, unique on `migration`),
 created by `src/Core/Migrator.php`. It does not appear below because it is
 tracking, not domain data — and note that it is *not* created if you pipe the
@@ -69,6 +72,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 | `015_pat_step_results.sql` | `pat_records` gains the per-step verdicts and `extension_lead_metres` |
 | `016_pat_guideline_settings.sql` | the six `pat_guide_*` guideline settings |
 | `017_rename_loans_to_hires.sql` | **`loans`→`hires`, `borrowers`→`hirers`, `loan_photos`→`hire_photos`**, plus the columns, permissions, role, settings and `assets.status` value that carried the old words |
+| `018_email_and_calendar.sql` | `email_templates`, `email_log`, `email_reminders`; `users.calendar_token` + `calendar_token_created_at`; the `mail_*` and `reminder_*` settings; the `email.manage` and `email.send` permissions |
 
 Migrations are applied in filename order and recorded. **Never edit an applied
 file** — add a new numbered one.
@@ -91,6 +95,8 @@ Types are as MariaDB reports them. `NN` = NOT NULL.
 | last_login_at | datetime | | NULL |
 | last_login_ip | varchar(45) | | NULL |
 | password_changed_at | datetime | | NULL |
+| calendar_token | char(64) | | **unique**, NULL until the user creates a feed |
+| calendar_token_created_at | datetime | | NULL |
 | created_by | int unsigned | | NULL |
 | created_at / updated_at | timestamp | ✓ | CURRENT_TIMESTAMP (+ ON UPDATE) |
 
@@ -246,6 +252,39 @@ Indexes `created_at`, `(entity_type, entity_id, created_at)`, `(user_id, created
 #### `settings`
 `setting_key` varchar(100) **PK**, `setting_value` text, `updated_by`, `updated_at`.
 
+#### `email_templates` (migration 018)
+`id`, `template_key` varchar(60) NN **unique**, `subject` varchar(255) NN,
+`body` text NN, `is_html` tinyint NN 0, `is_active` tinyint NN 1,
+`updated_by` (SET NULL), timestamps.
+
+**Stores overrides only.** A row exists for a key precisely when an
+administrator has edited it. The shipped wording lives in
+`App\Mail\EmailTemplate::DEFAULTS`, so there is one copy of each default,
+a fresh install sends properly worded mail with this table empty, and
+"reset to default" is a `DELETE` rather than a re-seed.
+
+#### `email_log` (migration 018)
+`id` bigint, `recipient` varchar(190) NN, `recipient_name`, `subject` NN,
+`template_key` varchar(60) (NULL for one-offs), `entity_type` varchar(64),
+`entity_id` bigint, `status` enum('sent','failed') NN, `error` varchar(500),
+`trigger_source` enum('system','user') NN 'system', `user_id` (SET NULL),
+`user_name` varchar(191) NN 'System' (**snapshot**), `created_at`.
+Indexes `created_at`, `(status, created_at)`, `(template_key, created_at)`,
+`(entity_type, entity_id)`.
+**No FK on `entity_id`** — same reasoning as `activity_log`.
+
+#### `email_reminders` (migration 018)
+`id` bigint, `reminder_key` varchar(40) NN, `entity_type` varchar(64) NN,
+`entity_id` bigint NN, `recipient` varchar(190) NN, `last_sent_at` datetime NN,
+`send_count` int NN 1.
+Unique `(reminder_key, entity_type, entity_id, recipient)` — ~1.2 KB, inside
+InnoDB's 3072-byte limit. Index `last_sent_at`. No foreign keys.
+
+De-duplication for the cron run. `reminder_key` is part of the unique key on
+purpose: an item crossing from "due soon" to "overdue" is a *different*
+reminder and goes out at once rather than waiting out the earlier one's repeat
+window.
+
 ### 2.3 Foreign keys (37)
 
 | Delete rule | Where it is used |
@@ -262,33 +301,52 @@ deleting a user never destroys the records they touched.
 
 - **4 roles**: `admin` (Administrator, `is_superuser=1`), `manager` (Manager / Staff),
   `viewer` (Read-only), `hirer` (Hirer). All four are `is_system=1`.
-- **30 permissions** in groups Assets, Hirers, Hires & hire, Maintenance,
-  Photos & files, PAT testing, Reports, Administration:
+- **32 permissions** in groups Assets, Hirers, Hires, Maintenance,
+  Photos & files, PAT testing, Reports, Email, Administration:
   `assets.view/create/edit/delete/export`, `hirers.view/manage`,
   `hires.view/view_own/create/return/manage`, `maintenance.view/manage/complete`,
   `media.photo.upload/delete`, `media.manual.upload/delete`,
-  `pat.view/manage/delete`, `reports.view`,
+  `pat.view/manage/delete`, `reports.view`, `email.manage/send`,
   `users.view/manage`, `roles.manage`, `categories.manage`, `locations.manage`,
   `settings.manage`, `audit.view`.
-- **62 role_permissions rows** — admin 30, manager 24, viewer 7, hirer 1.
+- **65 role_permissions rows** — admin 32, manager 25, viewer 7, hirer 1.
   - viewer: `assets.view`, `assets.export`, `hirers.view`, `hires.view`,
     `maintenance.view`, `pat.view`, `reports.view`
   - hirer: **`hires.view_own` and nothing else**
-- **11 settings**:
+  - manager gained `email.send` (not `email.manage`) in 018
+- **37 settings**:
 
-  | Key | Default |
-  |---|---|
-  | `asset_tag_prefix` | `AST-` |
-  | `asset_tag_pad` | `4` |
-  | `label_show_name` | `1` |
-  | `label_show_location` | `1` |
-  | `maintenance_due_days` | `30` |
-  | `pat_due_days` | `30` |
-  | `pat_default_interval_months` | `12` |
-  | `hire_default_days` | `7` |
-  | `hire_due_soon_days` | `2` |
-  | `hire_reference_prefix` | `LN-` |
-  | `organisation_name` | *(empty)* |
+  | Key | Default | |
+  |---|---|---|
+  | `asset_tag_prefix` | `AST-` | |
+  | `asset_tag_pad` | `4` | |
+  | `label_show_name` | `1` | |
+  | `label_show_location` | `1` | |
+  | `maintenance_due_days` | `30` | |
+  | `pat_due_days` | `30` | |
+  | `pat_default_interval_months` | `12` | |
+  | `pat_guide_insulation_mohm` | `1` | guidance shown to the tester |
+  | `pat_guide_earth_base_ohm` | `0.1` | |
+  | `pat_guide_earth_lead_ohm` | `0.1` | |
+  | `pat_guide_earth_lead_metres` | `7.5` | |
+  | `pat_guide_leakage_class1_ma` | `3.5` | |
+  | `pat_guide_leakage_class2_ma` | `0.25` | |
+  | `hire_default_days` | `7` | |
+  | `hire_due_soon_days` | `2` | |
+  | `hire_reference_prefix` | `LN-` | |
+  | `organisation_name` | *(empty)* | |
+  | `mail_enabled` | `0` | **off until configured** |
+  | `mail_host` / `mail_username` / `mail_from_address` / `mail_from_name` / `mail_reply_to` | *(empty)* | |
+  | `mail_port` | `587` | |
+  | `mail_encryption` | `tls` | `tls` \| `ssl` \| `none` |
+  | `mail_password` | *(empty)* | **ciphertext**, `v1.`-prefixed; `MAIL_PASSWORD` in `.env` overrides |
+  | `mail_timeout` | `15` | seconds |
+  | `reminder_pat_enabled` / `_maintenance_` / `_hire_` | `0` | each off by default |
+  | `reminder_pat_days` / `_maintenance_` / `_hire_` | `0` | **0 = use the register's own window** |
+  | `reminder_repeat_days` | `7` | |
+  | `reminder_recipient_user_ids` | *(empty)* | comma-separated user ids |
+  | `reminder_maintenance_assignee` | `1` | |
+  | `reminder_hire_notify_hirer` | `0` | |
 
 ### 2.5 Divergences from the original build brief
 
@@ -316,6 +374,12 @@ Nothing here is accidental, but a reader coming from the brief should know:
    decision, not an omission — don't "upgrade" it without being asked.
 7. **`activity_log.entity_id` has no foreign key**, and `user_name` is a
    denormalised snapshot, so the audit trail outlives what it describes.
+   `email_log` follows the same shape for the same reason.
+8. **`email_templates` holds overrides, not templates.** The shipped wording is
+   in PHP (`App\Mail\EmailTemplate::DEFAULTS`); the table is empty on a fresh
+   install and gains a row only when an administrator edits one. See §2.2.
+9. **The calendar feed is iCalendar, not CalDAV** — a deliberate reading of the
+   brief's "use your judgement". See §4.9.
 
 ---
 
@@ -339,12 +403,15 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── migrate.php          apply pending migrations (--status to inspect)
 │   ├── seed.php             demo data (--force); never on a live system
 │   ├── create-admin.php     first administrator; password prompted, not an argument
-│   └── console.php          admin console: doctor, users, settings, prune, stats
+│   ├── console.php          admin console: doctor, users, settings, prune, stats,
+│   │                        key:generate, mail:status/test/prune, calendar:url
+│   └── send-reminders.php   the cron entry point for reminder emails
 │
 ├── config/
 │   └── config.php           every value from Env::get(); nothing hardcoded
 │
-├── database/migrations/     001…013, plain .sql, applied in filename order
+├── database/migrations/     001…018, plain .sql, applied in filename order
+├── vendor/                  gitignored; created by `composer install` (PHPMailer)
 │
 ├── public/                  ← the only directory the web server should serve
 │   ├── index.php            front controller
@@ -361,14 +428,16 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        csrf_token(), method_field(), can(), can_any(),
 │   │                        auth_user(), old(), is_active_path(), format_date(),
 │   │                        format_datetime(), format_money(), config(), str_limit()
-│   ├── Core/                Auth, Barcode, Config, Csrf, Csv, CsvReader, Database,
-│   │                        Env, Flash, Image, LoginThrottle, Migrator, Request,
-│   │                        Response, Router, Session, Upload, Validator, View
+│   ├── Core/                Auth, Barcode, Config, Crypto, Csrf, Csv, CsvReader,
+│   │                        Database, Env, Flash, Image, LoginThrottle, Migrator,
+│   │                        Request, Response, Router, Session, Upload, Validator, View
 │   ├── Controllers/         Controller (base) + Asset, AssetCopy, AssetExport,
-│   │                        Auth, Hirer, Dashboard, Import, Label, Hire,
+│   │                        Auth, Calendar, Hirer, Dashboard, Import, Label, Hire,
 │   │                        Maintenance, Manual, MyHires, Pat, Photo, Profile,
 │   │                        Report, Scan
-│   │   └── Admin/           Activity, Category, Location, Role, Settings, User
+│   │   └── Admin/           Activity, Category, Email, Location, Role, Settings, User
+│   ├── Mail/                Mailer, EmailTemplate, EmailLog, EmailReminder,
+│   │                        Reminders, Merge
 │   ├── Middleware/          Auth, Csrf, Guest, Permission, MiddlewareRunner
 │   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto, Hirer,
 │   │                        Category, Hire, Location, MaintenanceLog,
@@ -378,7 +447,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        MaintenanceDue, PatDue, AssetsOnHire, HiresDueBack
 │   ├── Imports/             Importer (base), ImportRegistry, AssetImporter,
 │   │                        PatImporter
-│   └── Services/            AssetTagger, AssetCopier
+│   └── Services/            AssetTagger, AssetCopier, CalendarFeed
 │
 ├── storage/                 ← outside the docroot
 │   ├── logs/                app.log
@@ -390,9 +459,11 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, flash, photo-gallery, photo-upload,
 │   │                        pat-status, pat-record, maintenance-log-photos,
-│   │                        report-table
+│   │                        report-table, scan-button, verdict, verdict-cell,
+│   │                        email-nav
 │   ├── assets/              index, show, form, copy, apply, photos, labels
-│   ├── auth/ dashboard/ errors/ profile/ scan/
+│   ├── auth/ dashboard/ errors/ scan/
+│   ├── profile/             edit, calendar
 │   ├── maintenance/         index, show, form, complete, history
 │   ├── pat/                 index, show, form, history
 │   ├── hires/               index, show, checkout, return
@@ -400,7 +471,8 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── my-hires/            index, show, unlinked
 │   ├── import/              index, show, preview
 │   ├── reports/             index, show, print
-│   └── admin/               users, roles, categories, locations, settings, activity
+│   └── admin/               users, roles, categories, locations, settings, activity,
+│                            email/ (index, reminders, templates, template-form, log)
 │
 └── tests/                   shipped verification tooling (see §5)
 ```
@@ -576,11 +648,74 @@ Nothing here is accidental, but a reader coming from the brief should know:
 - Import uploads are kept **on disk** between preview and commit and
   **re-validated at commit time**. Never trust a preview held in the session.
 
+### 4.8 Outbound email
+
+- **PHPMailer speaks SMTP; nothing here does.** `src/Mail/Mailer.php` configures
+  it from settings and sends. Talking to a mail server correctly means STARTTLS
+  negotiation, AUTH mechanisms, dot-stuffing, MIME assembly and header
+  encoding — all long solved and none of it worth re-deriving.
+- **It degrades rather than fatals.** `Mailer::libraryInstalled()` is a
+  `class_exists()` check and `Mailer::problems()` returns a list of
+  human-readable, actionable problems ("run composer install", "no SMTP host",
+  "APP_KEY is not set"). The same list explains a greyed-out button, a failed
+  send and `console.php doctor`. **Never let a missing package reach the user
+  as a white screen.**
+- **`Mailer::send()` never throws.** A send either happens or is logged as a
+  failure and returns false. A reminder that cannot go out must not take down
+  the page or the cron run that triggered it.
+- **Every send is logged, successes and failures alike** (`email_log`), with the
+  SMTP server's own error text. A silenced template is the one exception: it
+  returns false *without* a log row, because a deliberately switched-off message
+  is not a failure. Callers that report to a person must check
+  `Mailer::isTemplateActive()` first, or they end up saying "see the log" about
+  an entry that was never written.
+- **The SMTP password is encrypted at rest** (`src/Core/Crypto.php`,
+  AES-256-GCM, key from `APP_KEY`). `Crypto::encrypt()` returns null rather than
+  falling back to plaintext — **it fails closed**, and `Mailer::storePassword()`
+  returns false so the controller can refuse to save. `MAIL_PASSWORD` in `.env`
+  overrides the stored value entirely.
+- **Templates: defaults in code, overrides in the database.** See §2.2
+  `email_templates`. `EmailTemplate::DEFAULTS` also carries each template's
+  merge-field list, which is what the edit screen documents — so the
+  placeholders offered and the placeholders supplied are the same array and
+  cannot drift.
+- **Merge values are escaped in HTML templates** (`Merge::render($text, $fields,
+  true)`); the admin-authored body is not.
+- **Reminders send one digest per recipient, not one email per item.** Forty
+  overdue items are one message. `email_reminders` suppresses an item already
+  mentioned within `reminder_repeat_days`.
+- **Recipients are re-checked against their permissions at send time** via
+  `User::withPermission()` — the same rule as `Auth::can()`, asked of a user who
+  is not signed in. The notify list is a list of ids; a role change must not
+  leave someone receiving records they can no longer open.
+- Due/overdue sets come from the existing models (`PatRecord`,
+  `MaintenanceSchedule`, `Hire`). **`Reminders` restates no status rules.**
+
+### 4.9 Calendar feeds
+
+- **Authenticated iCalendar (`.ics`), not CalDAV** — a deliberate choice, not an
+  omission. CalDAV's PROPFIND/REPORT/ctag machinery exists so clients can
+  *change* events; nothing here is editable from a calendar. Outlook, Google,
+  Apple and Thunderbird all subscribe to an HTTPS `.ics` URL, which is what the
+  brief actually asks for. Reasoning is in the class docblock.
+- **The route is outside the `auth` group** — a calendar client cannot sign in,
+  so the 64-hex token in the path is the credential. `tests/security-audit.php`
+  lists it as a documented exception with the reasoning inline; **that
+  allow-list is the policy, so extend it only with a written reason.**
+- **Scope is the token owner's own permissions** (`User::holdsPermission`), not
+  a second access model. A hirer's feed contains their own due-back dates only.
+- Events are all-day (`VALUE=DATE`) — a due date is a day, and a clock time
+  would move it for anyone in another timezone. Lines are folded to 75 **octets
+  on character boundaries**, so a multi-byte character is never split.
+- **Only the user manages their own token.** There is no admin UI for anyone
+  else's; `console.php calendar:url` exists for support and writes an audit
+  entry.
+
 ---
 
 ## 5. Build-prompt status
 
-All nine prompts are **complete**. Nothing is partial or unstarted.
+All twelve prompts are **complete**. Nothing is partial or unstarted.
 
 > **Terminology:** the application says **Hires** and **Hirers**, never loans or borrowers. Migration 017 renamed the schema to match, so code and interface use the same words — there is no compatibility shim and nothing left calling it a loan. Only the filenames of migrations 006 and 013 still carry the old words, because an applied migration is never edited.
 
@@ -599,6 +734,9 @@ All nine prompts are **complete**. Nothing is partial or unstarted.
 | 7 | Reports | complete | 2026-08-05 |
 | 8 | CSV import and export | complete | 2026-08-05 |
 | 9 | Polish pass | complete | 2026-08-06 |
+| 10 | PAT workflow: fixed values on the asset, guided test, scan buttons | complete | 2026-08-08 |
+| 11 | Navigation declutter, Hires/Hirers rename, scan as a quick action | complete | 2026-08-09 |
+| 12 | Outbound email, templates, reminders, calendar feeds | complete | 2026-08-10 |
 
 ### 5.1 What each prompt delivered
 
@@ -629,6 +767,20 @@ All nine prompts are **complete**. Nothing is partial or unstarted.
    everything audit-logged.
 9. **Polish** — dashboard review, server-side permission edge cases, security
    audit, WCAG contrast and tap-target fixes, README completed, `tests/` shipped.
+10. **PAT workflow** — the fixed electrical values (appliance class, load rating,
+    fuse) moved onto the asset where they belong; "Add PAT result" rebuilt as a
+    guided step-by-step test with server-side enforcement of the verdict;
+    configurable guideline pass ranges shown as helper text but never used to
+    decide a result; a reusable scan button beside barcode fields.
+11. **Navigation and terminology** — six top-level destinations with the rest
+    nested under them, one markup for desktop drop-downs and mobile accordions,
+    scan promoted to a persistent quick action, and loans/borrowers renamed to
+    hires/hirers everywhere including the schema (migration 017).
+12. **Email and calendar** — SMTP configured and tested from Settings with the
+    password encrypted at rest; editable templates whose defaults live in code;
+    PAT, maintenance and hire reminders on a cron schedule with per-recipient
+    de-duplication; one-click sends to a hirer; a log of every message; and a
+    per-user authenticated `.ics` calendar feed scoped by role.
 
 ### 5.2 What has been verified, and how
 
@@ -636,11 +788,32 @@ All nine prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 144 PHP files | 0 failures |
+| `php -l` on all 168 PHP files | 0 failures |
 | `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **1508 output expressions across 56 templates, 0 unescaped** |
-| All 13 migrations against an empty database | applied cleanly; schema as documented above |
-| Seed data counts | 4 roles / 30 permissions / 62 grants / 11 settings |
+| `tests/escape-audit.php` | **1800 output expressions across 68 templates, 0 unescaped** |
+| All 18 migrations against an empty database | applied cleanly; schema as documented above |
+| Seed data counts | 4 roles / 32 permissions / 65 grants / 37 settings / 0 template overrides |
+| Migration 018 on the **populated** dev database | applied cleanly; existing rows untouched |
+
+**Stage 12 specifically, verified on this machine:**
+
+| Check | Result |
+|---|---|
+| `Crypto` round trip: empty, ASCII, multi-byte, 500 chars | all recovered; two encryptions of the same value differ (random IV) |
+| `Crypto` rejects a tampered ciphertext, a truncated one, and a non-prefixed value | all return null |
+| SMTP password stored via the UI | ciphertext in the row, plaintext absent, decrypts to the original |
+| A real SMTP send | PHPMailer 6.12.0 → a local catcher: AUTH with the decrypted password, correct `From` with display name, merged subject and body |
+| Reminder run, 13 messages | PAT / maintenance / hire, staff digests + one hirer notice, all bodies checked |
+| Second run immediately after | **0 sent, everything suppressed** by `email_reminders` |
+| Notify list containing a Hirer | dropped from all three reminder types by the permission re-check |
+| `email_log` / `email_reminders` rows | statuses, template keys, entity links and trigger sources all correct |
+| `.ics` feed for all four roles | `text/calendar`, parses, balanced, folded ≤75 octets; admin/manager/viewer 11 events, **hirer 1 — their own hire only** |
+| Feed tokens: wrong by one character, too short, uppercase, empty, revoked | 404 in every case; valid token 200 |
+| 29 pages as admin over real HTTP | all 200 |
+| Permission matrix, 8 new routes × 4 roles | 32/32 as declared |
+| POST actions (test send, template edit/reset/disable, both manual sends, reminder preview, token lifecycle) | 17/17 |
+| `vendor/` removed | app still serves; mail reports "run composer install"; `send-reminders.php` exits 2 without sending |
+| `bash -n install.sh` / `manage.sh` | clean |
 
 **Shipped in `tests/` but requiring a running site — not re-run for this document:**
 
@@ -673,6 +846,20 @@ all, and are the honest gaps:
   iPhone.
 - Performance at scale. The largest dataset exercised is the seed data plus
   test fixtures — hundreds of rows, not tens of thousands.
+- **A real mail server.** Sending was proved end to end against a local SMTP
+  catcher on 127.0.0.1, which exercises PHPMailer, AUTH, MIME and the log — but
+  no message has crossed the internet, so TLS negotiation against a real
+  provider, certificate verification and deliverability (SPF/DKIM, spam
+  filtering) are untested. `Settings → Email → Send test email` is the one-click
+  way to close that gap on the day it is deployed.
+- **A real calendar client.** The `.ics` output was parsed and checked against
+  RFC 5545's rules (folding, escaping, all-day dates, balanced components) by a
+  reader written for the purpose, but has not been subscribed to by Outlook,
+  Google Calendar or Apple Calendar.
+- **Mobile interaction for stage 12.** The mobile layout was verified by
+  measurement (44px targets, accordion rather than overlay, no horizontal
+  overflow), but the in-app browser would not dispatch clicks at phone widths,
+  so tapping through the new pages on a handset is unproven.
 
 ### 5.3 Deployment tooling (added 2026-08-07)
 
@@ -682,8 +869,9 @@ deployed without following the README step by step.
 | File | What it is |
 |---|---|
 | `install.sh` | ~1400 lines of bash. Detects the distribution and package manager, installs PHP 8.1+/Apache/MariaDB as needed, asks the configuration questions, prints a plan and waits for a yes, creates the database and user, copies the files, writes `.env`, sets ownership and modes, writes the vhost, raises PHP's upload limits, migrates, creates the administrator and verifies with `/health`. Supports `--dry-run`, `--answers=FILE --non-interactive`, `--skip-packages`, `--web-server=`, `--tls=`. |
-| `manage.sh` | ~640 lines. The README's administrative tasks as one command each: `status`, `doctor`, `health`, `users`, `reset-password`, `unlock`, `activate`/`deactivate`, `set-role`, `settings`, `config`, `migrate`, `seed`, `backup`, `restore`, `update`, `permissions`, `package`, `cron-install`, `prune-activity`, `refresh-overdue`, `audit`, `logs`, `restart`. |
-| `bin/console.php` | ~790 lines. Everything that touches the database, through the application's own models — so prepared statements, the last-active-administrator rule and `ActivityLog` entries all still apply. Passwords come from a hidden prompt or `--stdin-password`, never from `argv`. |
+| `manage.sh` | ~700 lines. The README's administrative tasks as one command each: `status`, `doctor`, `health`, `users`, `reset-password`, `unlock`, `activate`/`deactivate`, `set-role`, `settings`, `config`, `migrate`, `seed`, `backup`, `restore`, `update`, `permissions`, `package`, `cron-install`, `prune-activity`, `refresh-overdue`, `audit`, `logs`, `restart`, and (stage 12) `mail-status`, `mail-test`, `send-reminders`, `calendar-url`. |
+| `bin/console.php` | ~1,030 lines. Everything that touches the database, through the application's own models — so prepared statements, the last-active-administrator rule and `ActivityLog` entries all still apply. Passwords come from a hidden prompt or `--stdin-password`, never from `argv`. Stage 12 added `key:generate`, `mail:status`, `mail:test`, `mail:prune` and `calendar:url`, and an Email section in `doctor`. |
+| `bin/send-reminders.php` | The cron entry point. `--dry-run`, `--force`, `--type=`, `--quiet`. Exit 0 all good, 1 something failed to send, 2 mail is not usable — so a misconfigured install stops loudly on the first run instead of logging one failure per recipient for ever. |
 
 Decisions worth keeping:
 
@@ -698,6 +886,16 @@ Decisions worth keeping:
 - **The database user is granted exactly the README's rights and no `DROP`.**
 - **Backups prefer root over the local socket**, so the application user does
   not need rights beyond its own database.
+- **The installer generates `APP_KEY`** so email can be configured from the
+  Settings page on day one without shell access. An answers file carrying one
+  over from an existing install wins — reusing the old key is what keeps an
+  already-stored SMTP password readable.
+- **`composer install` is now load-bearing but still not fatal.** It is what
+  installs PHPMailer; if Composer is absent the installer says so and carries
+  on, because everything except sending email works without it.
+- **`cron-install` schedules the reminder run** (daily 08:00) alongside the
+  nightly backup and hourly overdue refresh. It does nothing until a reminder
+  type is switched on in Settings.
 - **`tests/security-audit.php` scans `bin/` as well as `src/`, `routes/` and
   `templates/`.** Its SQL check matches from `Database::…(` to the next `, [`
   or `);`, so a `Database::scalar('…')` written inline inside an array literal
@@ -753,6 +951,8 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
    large table. `manage.sh prune-activity DAYS` exists for when a site does
    want one, and refuses to go below 30 days; `cron-install` deliberately does
    **not** schedule it, because the retention period is the operator's call.
+   `email_log` and `email_reminders` follow exactly the same rule:
+   `console.php mail:prune --days=N`, minimum 30, not scheduled.
 4. **Overdue hires are refreshed lazily, not by cron by default.**
    `manage.sh cron-install` adds an hourly `refresh-overdue`; without it,
    `Hire::STATUS_SQL`
@@ -772,12 +972,15 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
    `style-src 'unsafe-inline'` could be dropped today, and `script-src` could
    follow with a nonce plumbed through `View`. Off-origin scripts are blocked
    either way, which is the property the barcode-scanner decision rests on.
-7. **No password reset by email.** Deliberate — the app sends no mail at all.
-   An administrator resets passwords from `/admin/users`;
-   `manage.sh reset-password EMAIL` (or `bin/create-admin.php --email=…`) is the
-   lockout escape hatch (README §"If you lock yourself out"). The `manage.sh`
-   route also reactivates the account and clears `login_attempts`, so the
-   lockout lifts at once.
+7. **Still no password reset by email**, even though the application can now
+   send mail. This is a decision, not an oversight: a self-service reset needs
+   single-use expiring tokens, rate limiting and careful handling of the "does
+   this account exist" oracle, and stage 12 was asked for reminders and sharing,
+   not for a new authentication path. An administrator resets passwords from
+   `/admin/users`; `manage.sh reset-password EMAIL` (or `bin/create-admin.php
+   --email=…`) is the lockout escape hatch (README §"If you lock yourself out"),
+   and it also reactivates the account and clears `login_attempts` so the
+   lockout lifts at once. **If this is ever added, it is its own prompt.**
 8. **No soft delete for assets.** There is archive (`status = 'Retired'`,
    `retired_on`) and there is hard delete, gated behind `assets.delete`. Deleting
    an asset cascades its photos, manuals, PAT records and maintenance history —
@@ -802,6 +1005,28 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   written inline inside an array literal ends in `)]`, which its SQL regex
   cannot see as a terminator, so it is reported as uncontrolled concatenation.
   Assign the result on its own line.
+- **Never name a view variable `$template`.** `View::renderFile(string $template,
+  array $data)` takes the template path in a parameter of that name, and its
+  `extract($data, EXTR_SKIP)` therefore *silently drops* your variable — the
+  page sees the path string instead and dies with "Cannot access offset of type
+  string on string". `Admin\EmailController::editTemplate()` passes
+  `emailTemplate` and says why. The same applies to any other name in
+  `renderFile`'s scope: `$data`, `$path`.
+- **Don't interpolate a SQL verb and a variable into the same double-quoted
+  string**, even in a status message. `tests/security-audit.php` matches
+  `"…DELETE…$var"` and cannot tell a message from a query. Use `sprintf` with a
+  single-quoted format — `bin/console.php` `cmdMailPrune()` carries a comment.
+- **A switched-off email template writes no log row.** `Mailer::sendTemplate()`
+  returns false without logging, because a deliberate silence is not a failure.
+  Anything reporting the outcome to a person must call
+  `Mailer::isTemplateActive()` first, or it tells them to check a log entry that
+  does not exist.
+- **`.nav-user-text` cannot be shown on a desktop.** `.container` caps at
+  1200px, and brand + six nav items + a chip carrying the name + the scan button
+  exceeds that. It used to be revealed at 1100px — a width the header can never
+  reach — so "Settings" wrapped to a second row at *every* desktop size. The
+  name now lives in the account drop-down instead. **If you add a seventh
+  top-level nav item, re-measure.**
 - **`install.sh` and `manage.sh` must keep LF line endings.** `.gitattributes`
   enforces it; a CRLF shebang fails with a misleading "not found".
 - **Adding a required field to the settings form** breaks every test that POSTs a
@@ -834,3 +1059,9 @@ php tests/security-audit.php && php tests/escape-audit.php
 3. Adding a report, an importer or a permission should not require a schema
    change or a new page. If it seems to, re-read §4.4.
 4. `database/migrations/` is append-only.
+5. Email is **off** on a fresh install and stays off until someone configures it
+   in Settings → Email. That is deliberate (§4.8). If mail "does not work", the
+   first two things to check are `manage.sh mail-status` and whether
+   `composer install` has been run.
+6. The one runtime package is PHPMailer. Everything else is still first-party,
+   and the app still runs from a plain file copy — it just cannot send.

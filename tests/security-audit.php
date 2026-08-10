@@ -106,7 +106,16 @@ foreach ($routes as $route) {
 check('every POST/PUT/DELETE route verifies CSRF', $missingCsrf === [], implode("\n        ", $missingCsrf));
 
 // 2. Every route must be authenticated, except the deliberately public ones.
-$publicRoutes = ['/login', '/health'];
+//
+//    The calendar feed is the third. It carries its own credential — a
+//    64-character random token in the path, unique to one user and revocable
+//    by them — because a calendar client cannot complete an interactive
+//    sign-in. What the feed *contains* still runs through the ordinary
+//    permission model: App\Services\CalendarFeed asks
+//    User::holdsPermission() for the token's owner, which is the same rule
+//    Auth::can() applies. So this is an alternative way of proving who you
+//    are, not an exemption from what you may see.
+$publicRoutes = ['/login', '/health', '/calendar/{token:[a-f0-9]+}.ics'];
 $unauthed     = [];
 
 foreach ($routes as $route) {
@@ -130,6 +139,13 @@ $permissionExempt = [
     '/login', '/logout', '/health', '/', '/profile', '/profile/password',
     '/my-hires', '/my-hires/{hireId:\d+}', '/my-hires/{hireId:\d+}/photo',
     '/my-hires/{hireId:\d+}/manuals/{manualId:\d+}',
+    // A user's own calendar subscription. Self-scoping in the strongest
+    // sense: these three only ever read or replace the signed-in user's own
+    // token, there is no id in the path, and the feed they produce is
+    // filtered by that user's permissions. An administrator has no route to
+    // anybody else's — a feed URL is a credential, not an admin surface.
+    '/profile/calendar', '/profile/calendar/revoke',
+    '/calendar/{token:[a-f0-9]+}.ics',
 ];
 
 $noPermission = [];
