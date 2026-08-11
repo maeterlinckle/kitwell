@@ -97,6 +97,9 @@ $rows = $result['rows'];
                 <th scope="col">By</th>
                 <th scope="col">Result</th>
                 <th scope="col">Cost</th>
+                <?php if (can('maintenance.manage')): ?>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                <?php endif; ?>
             </tr>
             </thead>
             <tbody>
@@ -124,6 +127,11 @@ $rows = $result['rows'];
                     <td><?= e($log['performed_by_user_name'] ?? $log['performed_by_name'] ?? '—') ?></td>
                     <td><span class="badge result-<?= e(strtolower((string) $log['result'])) ?>"><?= e($log['result']) ?></span></td>
                     <td class="nowrap"><?= $log['cost'] !== null ? e(format_money($log['cost'])) : '—' ?></td>
+                    <?php if (can('maintenance.manage')): ?>
+                        <td class="nowrap">
+                            <a class="btn btn-sm" href="<?= e(url('/maintenance/logs/' . $log['id'] . '/edit')) ?>">Edit</a>
+                        </td>
+                    <?php endif; ?>
                 </tr>
             <?php endforeach; ?>
             </tbody>

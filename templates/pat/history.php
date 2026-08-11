@@ -28,7 +28,9 @@
     </div>
 </div>
 
-<?= partial('partials/pat-status', ['asset' => $asset, 'status' => $status]) ?>
+<?php /* Status only: "Record test" and "Back to asset" are already in the page
+         head above, and a banner repeating them is two of every button. */ ?>
+<?= partial('partials/pat-status', ['asset' => $asset, 'status' => $status, 'actions' => false]) ?>
 
 <?php if ($records === []): ?>
     <div class="card empty-state">

@@ -4,10 +4,23 @@
  *
  * @var array<string,mixed> $asset
  * @var array<string,mixed>|null $status
+ * @var bool $actions       show the buttons (the PAT history page has its own)
+ * @var bool $hideIfCurrent render nothing at all when the test is in date
  */
+$actions       = (bool) ($actions ?? true);
+$hideIfCurrent = (bool) ($hideIfCurrent ?? false);
+
 $requiresPat = (int) $asset['requires_pat'] === 1;
 $state       = $status['pat_status'] ?? ($requiresPat ? 'Never tested' : 'Not required');
 $days        = $status['days_until_due'] ?? null;
+
+/* A banner that says "everything is fine" is noise on a page that has a PAT
+   section of its own; a banner only earns its place when it needs acting on.
+   "Fine" means in date, not required, or retired — everything else, including
+   a failed test, is something the person standing at the machine must see. */
+if ($hideIfCurrent && in_array($state, ['Current', 'Not required', 'Retired'], true)) {
+    return;
+}
 
 $tone = match ($state) {
     'Current'        => 'ok',
@@ -64,6 +77,7 @@ $headline = match ($state) {
         <?php endif; ?>
     </div>
 
+    <?php if ($actions): ?>
     <div class="pat-status-actions">
         <?php if ($requiresPat && can('pat.manage')): ?>
             <a class="btn btn-sm btn-primary" href="<?= e(url('/pat/create?asset=' . $asset['id'])) ?>">Record test</a>
@@ -87,4 +101,5 @@ $headline = match ($state) {
             </form>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 </div>

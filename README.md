@@ -893,6 +893,25 @@ Three ways in, because this is how most workshop repairs actually get recorded:
 
 None of them needs a schedule to exist first.
 
+#### Correcting a record
+
+People write records on the day, in a workshop, sometimes on a phone. Dates get
+mistyped and a contractor's invoice turns up a week later. **Edit** on any
+completed record — on the asset's page or in the maintenance history — opens
+the record for correction.
+
+Corrections are not silent. Every save writes an entry to the activity log
+holding **what changed, field by field, with the old and new value**, who
+changed it, when, and the reason if one was given. That trail is shown on the
+edit page itself, so the person making the correction can see the record's whole
+history, and it also appears under **Settings → Activity log**.
+
+Recording maintenance needs *Record maintenance*; correcting a record afterwards
+needs *Manage maintenance* — a deliberate step up, because rewriting history is
+a bigger act than writing it. The asset and the schedule a record belongs to
+cannot be changed: moving a record to a different machine is not a correction,
+it is a different record.
+
 #### Follow-up checks
 
 Any completion — scheduled or unplanned — can schedule a **follow-up check**:
@@ -1127,8 +1146,16 @@ Three ways in, all landing at the same lookup:
 
 Scan modes: **Look up** jumps to the asset, **Check out** goes straight to the
 checkout form, **Book in** goes to that item's return form, **Record work**
-goes to the maintenance form. A successful read beeps and vibrates, so you are
-not staring at the screen.
+goes to the maintenance form, **PAT test** goes to the test form. A successful
+read beeps and vibrates, so you are not staring at the screen.
+
+**A good scan does not ask you to confirm it.** An asset tag identifies exactly
+one asset, so there is nothing to choose between: the scan goes straight to
+wherever the mode leads. You only see a result panel when the scan did not
+resolve to one asset — nothing matched, or it would not decode — which is the
+case where there is actually a decision to make. Every route in, whether the
+camera, a USB scanner or typing, goes through the same server-side decision, so
+they cannot drift apart.
 
 #### What it reads
 
@@ -1237,9 +1264,10 @@ rejected, so importing the same sheet twice is safe.
 
 #### Exporting
 
-**Export CSV** on the register exports exactly what you are looking at — it
-carries the current search and filters — or tick rows and use **Export
-selected**. The core columns are the same shape the importer accepts, so an
+**Settings → Export assets** exports the whole register, or tick rows on the
+register and use **Export selected** to take just those. (The register itself
+no longer carries a general Export button: exporting is an occasional job, and
+it lives with the other occasional jobs.) The core columns are the same shape the importer accepts, so an
 export can be edited in a spreadsheet and fed straight back in; the test suite
 verifies that round trip.
 

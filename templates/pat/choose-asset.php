@@ -22,7 +22,9 @@
 
     <form method="post" action="<?= e(url('/scan')) ?>" class="form">
         <?= csrf_field() ?>
-        <input type="hidden" name="mode" value="view">
+        <?php /* "pat", not "view": a scan here means "test this one", so it
+                 goes to the test form rather than to the asset page. */ ?>
+        <input type="hidden" name="mode" value="pat">
         <div class="field">
             <label class="sr-only" for="code">Asset tag</label>
             <div class="input-with-button">

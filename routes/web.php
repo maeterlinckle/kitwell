@@ -132,6 +132,12 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/assets/{assetId:\d+}/maintenance/log',  [MaintenanceController::class, 'logForm'], ['can:maintenance.complete']);
     $router->post('/assets/{assetId:\d+}/maintenance/log', [MaintenanceController::class, 'log'],     ['can:maintenance.complete', 'csrf']);
 
+    // Correcting a record after the fact. Recording work needs
+    // `maintenance.complete`; rewriting what a record says is a bigger thing,
+    // and every edit is written to the activity log.
+    $router->get('/maintenance/logs/{logId:\d+}/edit', [MaintenanceController::class, 'editLog'],   ['can:maintenance.manage']);
+    $router->post('/maintenance/logs/{logId:\d+}',     [MaintenanceController::class, 'updateLog'], ['can:maintenance.manage', 'csrf']);
+
     // Photos attached to a completion.
     $router->get('/maintenance/logs/{logId:\d+}/photos/{photoId:\d+}', [MaintenanceController::class, 'photo'], ['can:maintenance.view']);
 });

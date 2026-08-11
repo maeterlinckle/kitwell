@@ -29,7 +29,7 @@ Where something is *not* verified, it says so.
 | Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
 | `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 169 PHP files (69 of them templates), 123 routes (66 GET, 57 POST), 18 migrations |
+| Counted at time of writing | 170 PHP files (70 of them templates), 125 routes (67 GET, 58 POST), 18 migrations |
 | Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
@@ -425,7 +425,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   └── js/   app.js, barcode.js, scanner.js, pat-wizard.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 123 routes, 266 lines
+│   └── web.php              the whole route table, 125 routes, 272 lines
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -460,7 +460,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            assets/{id}/manuals, maintenance/{logId},
 │                            hires/{hireId}, imports/
 │
-├── templates/               69 .php templates
+├── templates/               70 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, flash, photo-gallery, photo-upload,
 │   │                        pat-status, pat-record, maintenance-log-photos,
@@ -570,7 +570,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
   as a global function in `helpers.php` alongside `e()`, `can()`, `old()`,
   `format_date()`, `format_money()` and friends.
 - **Every variable reaching output goes through `e()`.** `tests/escape-audit.php`
-  parses all 1827 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
+  parses all 1874 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
 - Three layouts: `layouts/app` (signed in, with nav), `layouts/auth` (slim),
   `layouts/print` (label sheets and report printing).
 - `templates/partials/nav.php` carries a `'built' => true|false` flag per
@@ -784,6 +784,17 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
    `/maintenance/log`. A follow-up check creates an `ad-hoc` schedule
    deliberately, so "check it again in three weeks" cannot become an accidental
    recurrence.
+   A completed record can be **corrected** afterwards at
+   `/maintenance/logs/{id}/edit` (`maintenance.manage`, a level above the
+   `maintenance.complete` needed to write one in the first place). The
+   correction is the smaller half of that feature: every save writes an
+   `activity_log` row carrying the field-level before/after, the user, the time
+   and an optional stated reason, plus a second row against the asset so the
+   machine's own trail shows its history was rewritten. Nothing is overwritten
+   silently, and the trail is rendered on the edit page itself so it is visible
+   to the person doing the correcting, not only to an administrator.
+   The asset and the schedule are deliberately **not** editable there: moving a
+   record to another machine is not a correction, it is a different record.
 5. **PAT** — `requires_pat` toggle, full per-asset test history, class-conditional
    readings, SQL-computed status in which `Failed` outranks the retest date,
    configurable window and default interval.
@@ -819,9 +830,9 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 169 PHP files | 0 failures |
+| `php -l` on all 170 PHP files | 0 failures |
 | `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **1827 output expressions across 69 templates, 0 unescaped** |
+| `tests/escape-audit.php` | **1874 output expressions across 70 templates, 0 unescaped** |
 | All 18 migrations against an empty database | applied cleanly; schema as documented above |
 | Seed data counts | 4 roles / 32 permissions / 65 grants / 37 settings / 0 template overrides |
 | Migration 018 on the **populated** dev database | applied cleanly; existing rows untouched |
@@ -1174,6 +1185,16 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   things outside itself — the module geometry, the ISO Annex I worked example,
   the defining properties of each symbology. Keep new tests honest the same
   way.
+- **`element.hidden = true` does nothing to a `.btn`.** The browser's
+  `[hidden] { display: none }` lives in the *user-agent* stylesheet, so any
+  author rule that sets `display` outranks it — and `.btn` sets
+  `display: inline-flex`. Four separate features were silently broken by this
+  for months: the PAT wizard showed Next on its last step and Back on its
+  first, the scanner showed Start and Stop at the same time, and the photo
+  upload showed its submit before a file was picked. There is now one
+  `[hidden] { display: none !important; }` in the reset. If you find yourself
+  adding a per-component `[hidden]` rule, that is the bug — the global one
+  already covers it.
 - **A switched-off email template writes no log row.** `Mailer::sendTemplate()`
   returns false without logging, because a deliberate silence is not a failure.
   Anything reporting the outcome to a person must call

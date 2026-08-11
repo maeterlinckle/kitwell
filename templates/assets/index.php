@@ -27,13 +27,11 @@ $hasFilters = ($filters['q'] ?? '') !== ''
         </p>
     </div>
     <div class="head-actions">
-        <?php if (can('assets.create')): ?>
-        <?php endif; ?>
-        <?php if (can('assets.export')): ?>
-            <a class="btn" href="<?= e(url('/assets/export' . ($queryString !== '' ? '?' . $queryString : ''))) ?>">
-                Export CSV
-            </a>
-        <?php endif; ?>
+        <?php /* No Export CSV here: the whole-register export lives under
+                 Settings, where the other occasional tools are. Exporting a
+                 selection is still on the bulk actions below, because that acts
+                 on what you have picked on this page and has nowhere else to
+                 live. */ ?>
         <?php if (can('assets.create')): ?>
             <a class="btn btn-primary" href="<?= e(url('/assets/create')) ?>">Add asset</a>
         <?php endif; ?>

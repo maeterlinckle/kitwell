@@ -27,14 +27,19 @@ $links = [
 
     ['label' => 'Assets', 'href' => '/assets', 'permission' => 'assets.view'],
 
+    // The doing comes before the reading: recording work and sending an item
+    // out are the errands people arrive with, so each group leads with its
+    // action rather than with its list.
     ['label' => 'Maintenance', 'href' => '/maintenance', 'permission' => null, 'children' => [
-        ['label' => 'Schedules',   'href' => '/maintenance', 'permission' => 'maintenance.view'],
-        ['label' => 'PAT records', 'href' => '/pat',         'permission' => 'pat.view'],
+        ['label' => 'Add maintenance', 'href' => '/maintenance/log', 'permission' => 'maintenance.complete'],
+        ['label' => 'Schedules',       'href' => '/maintenance',     'permission' => 'maintenance.view'],
+        ['label' => 'PAT records',     'href' => '/pat',             'permission' => 'pat.view'],
     ]],
 
     ['label' => 'Hires', 'href' => '/hires', 'permission' => null, 'children' => [
-        ['label' => 'Current & history', 'href' => '/hires',  'permission' => 'hires.view'],
-        ['label' => 'Hirers',            'href' => '/hirers', 'permission' => 'hirers.view'],
+        ['label' => 'Check out',         'href' => '/hires/checkout', 'permission' => 'hires.create'],
+        ['label' => 'Current & history', 'href' => '/hires',          'permission' => 'hires.view'],
+        ['label' => 'Hirers',            'href' => '/hirers',         'permission' => 'hirers.view'],
     ]],
 
     // A hirer sees only their own, and has no group to nest it under.

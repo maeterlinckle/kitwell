@@ -32,7 +32,11 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <span class="badge status-<?= e(strtolower(str_replace(' ', '-', (string) $asset['status']))) ?>"><?= e($asset['status']) ?></span>
             <span class="badge condition-<?= e(strtolower(str_replace(' ', '-', (string) $asset['condition_rating']))) ?>"><?= e($asset['condition_rating']) ?></span>
             <?php if ((int) $asset['requires_pat'] === 1): ?>
-                <span class="badge badge-warn">Requires PAT</span>
+                <?php /* Colour by the actual test state, the same way the PAT
+                         list does. Yellow is for "do something soon"; an asset
+                         whose test is in date has nothing needing attention. */ ?>
+                <?php $patState = (string) ($patStatus['pat_status'] ?? 'Never tested'); ?>
+                <span class="badge pat-status-<?= e(strtolower(str_replace(' ', '-', $patState))) ?>">Requires PAT</span>
             <?php endif; ?>
             <?php if ((int) $asset['is_hireable'] === 0): ?>
                 <span class="badge badge-muted">Not hireable</span>
@@ -96,7 +100,10 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
 <?php endif; ?>
 
 <?php if (can('pat.view') && ((int) $asset['requires_pat'] === 1 || (int) ($patStatus['test_count'] ?? 0) > 0)): ?>
-    <?= partial('partials/pat-status', ['asset' => $asset, 'status' => $patStatus]) ?>
+    <?php /* Only when it needs acting on. This page already has a PAT card in
+             the sidebar and the badge in the heading, so a green "in date"
+             banner across the top says nothing the page has not said twice. */ ?>
+    <?= partial('partials/pat-status', ['asset' => $asset, 'status' => $patStatus, 'hideIfCurrent' => true]) ?>
 <?php endif; ?>
 
 <?php if ($retired): ?>
@@ -308,6 +315,9 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                                 <p class="cell-sub muted">
                                     <?= e($log['performed_by_user_name'] ?? $log['performed_by_name'] ?? 'Not recorded') ?>
                                     <?php if ($log['cost'] !== null): ?> · <?= e(format_money($log['cost'])) ?><?php endif; ?>
+                                    <?php if (can('maintenance.manage')): ?>
+                                        · <a href="<?= e(url('/maintenance/logs/' . $log['id'] . '/edit')) ?>">Edit</a>
+                                    <?php endif; ?>
                                 </p>
                                 <?php if ((int) $log['photo_count'] > 0): ?>
                                     <?= partial('partials/maintenance-log-photos', ['log' => $log]) ?>
@@ -468,7 +478,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
         <?php endif; ?>
     </div>
 
-    <aside class="detail-side">
+    <aside class="detail-side detail-side-flow">
         <div class="card barcode-card">
             <?php if (Barcode::isEncodable((string) $asset['asset_tag'])): ?>
                 <div class="barcode-holder"><?= Barcode::svg((string) $asset['asset_tag'], 0.4, 16.0) ?></div>

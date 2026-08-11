@@ -26,7 +26,7 @@ use App\Models\Hire;
  */
 final class ScanController extends Controller
 {
-    private const MODES = ['view', 'checkout', 'return', 'maintenance'];
+    private const MODES = ['view', 'checkout', 'return', 'maintenance', 'pat'];
 
     public function index(): void
     {
@@ -98,10 +98,12 @@ final class ScanController extends Controller
                 'checkout'    => Auth::can('hires.create') && $blocked === null,
                 'return'      => Auth::can('hires.return') && $openHire !== null,
                 'maintenance' => Auth::can('maintenance.complete'),
+                'pat'         => Auth::can('pat.manage'),
             ],
             'blocked'         => $blocked,
             'checkout_url'    => url('/hires/checkout?asset=' . $assetId),
             'maintenance_url' => url('/assets/' . $assetId . '/maintenance/log'),
+            'pat_url'         => url('/pat/create?asset=' . $assetId),
         ]);
     }
 
@@ -147,6 +149,11 @@ final class ScanController extends Controller
         // Recording the work is the errand; the asset page is a detour.
         if ($mode === 'maintenance' && Auth::can('maintenance.complete')) {
             Response::redirect('/assets/' . $assetId . '/maintenance/log');
+        }
+
+        // Same for a PAT test: the tester has the appliance in their hand.
+        if ($mode === 'pat' && Auth::can('pat.manage')) {
+            Response::redirect('/pat/create?asset=' . $assetId);
         }
 
         if ($mode === 'return' && Auth::can('hires.return')) {

@@ -300,6 +300,166 @@ final class MaintenanceController extends Controller
     }
 
     /**
+     * The fields a completed record may be corrected on, and what to call each
+     * one in the audit trail. Deliberately excludes the asset and the schedule:
+     * moving a record to a different machine is not a correction, it is a
+     * different record.
+     */
+    private const EDITABLE_LOG_FIELDS = [
+        'performed_on'         => 'Date performed',
+        'maintenance_type'     => 'Type of work',
+        'result'               => 'Result',
+        'performed_by_user_id' => 'Performed by (staff)',
+        'performed_by_name'    => 'Performed by (contractor)',
+        'work_done'            => 'Work done',
+        'parts_used'           => 'Parts used',
+        'cost'                 => 'Cost',
+        'downtime_minutes'     => 'Downtime (minutes)',
+        'condition_after'      => 'Condition afterwards',
+        'notes'                => 'Notes',
+    ];
+
+    /** Correct a completed record after the fact. */
+    public function editLog(string $logId): void
+    {
+        $log = MaintenanceLog::find((int) $logId);
+
+        if ($log === null) {
+            $this->notFound();
+        }
+
+        $this->view('maintenance/edit-log', [
+            'pageTitle' => 'Edit maintenance record · ' . $log['asset_tag'],
+            'log'       => $log,
+            'users'     => MaintenanceSchedule::assignableUsers(),
+            'history'   => ActivityLog::recent(50, [
+                'entity_type' => 'maintenance_log',
+                'entity_id'   => (int) $log['id'],
+            ]),
+        ]);
+    }
+
+    public function updateLog(string $logId): void
+    {
+        $id  = (int) $logId;
+        $log = MaintenanceLog::find($id);
+
+        if ($log === null) {
+            $this->notFound();
+        }
+
+        $redirectTo = '/maintenance/logs/' . $id . '/edit';
+
+        $data = $this->validate([
+            'performed_on'         => 'required|date',
+            'maintenance_type'     => 'required|in:' . implode(',', MaintenanceLog::TYPES),
+            'result'               => 'required|in:' . implode(',', MaintenanceLog::RESULTS),
+            'performed_by_user_id' => 'integer',
+            'performed_by_name'    => 'max:191',
+            'work_done'            => 'required|max:5000',
+            'parts_used'           => 'max:5000',
+            'cost'                 => 'numeric|min_value:0|max_value:9999999',
+            'downtime_minutes'     => 'integer|min_value:0|max_value:65535',
+            'condition_after'      => 'in:' . implode(',', Asset::CONDITIONS),
+            'notes'                => 'max:5000',
+            'edit_reason'          => 'max:191',
+        ], [
+            'performed_on'     => 'Date performed',
+            'maintenance_type' => 'Type of work',
+            'work_done'        => 'Work done',
+            'edit_reason'      => 'Reason for the correction',
+        ], $redirectTo);
+
+        if ($data['performed_on'] > date('Y-m-d')) {
+            $this->failValidation(['performed_on' => 'The date performed cannot be in the future.'], $redirectTo);
+        }
+
+        $performedByUserId = (int) $data['performed_by_user_id'];
+
+        $after = [
+            'maintenance_type'     => $data['maintenance_type'],
+            'performed_on'         => $data['performed_on'],
+            'performed_by_user_id' => $performedByUserId > 0 ? $performedByUserId : null,
+            'performed_by_name'    => $data['performed_by_name'] !== '' ? $data['performed_by_name'] : null,
+            'work_done'            => $data['work_done'],
+            'parts_used'           => $data['parts_used'] !== '' ? $data['parts_used'] : null,
+            'cost'                 => $data['cost'] !== '' ? $data['cost'] : null,
+            'downtime_minutes'     => $data['downtime_minutes'] !== '' ? (int) $data['downtime_minutes'] : null,
+            'result'               => $data['result'],
+            'condition_after'      => $data['condition_after'] !== '' ? $data['condition_after'] : null,
+            'notes'                => $data['notes'] !== '' ? $data['notes'] : null,
+        ];
+
+        // Diff against the row as it stands, not against the form's own idea of
+        // what was there — the record may have been edited by someone else
+        // while this form was open.
+        $changes = ActivityLog::diff($log, $after);
+
+        if ($changes === []) {
+            Flash::info('Nothing was changed.');
+            Response::redirect('/maintenance/history?asset_id=' . (int) $log['asset_id']);
+        }
+
+        MaintenanceLog::update($id, $after);
+
+        $reason = trim((string) $data['edit_reason']);
+
+        // The audit entry is the point of the feature, so it carries the
+        // field-level before and after, who and when (ActivityLog fills those
+        // in), and a readable summary naming the fields that moved.
+        ActivityLog::record(
+            'updated',
+            'maintenance_log',
+            $id,
+            sprintf(
+                'Corrected the maintenance record of %s on %s (%s)%s',
+                $log['asset_tag'],
+                format_date((string) $log['performed_on']),
+                $this->describeChangedFields($changes),
+                $reason === '' ? '' : ' — ' . str_limit($reason, 200)
+            ),
+            $reason === '' ? $changes : ['reason' => $reason] + $changes
+        );
+
+        // Also against the asset, so the machine's own trail shows that its
+        // maintenance history was rewritten.
+        ActivityLog::record(
+            'maintenance_record_edited',
+            'asset',
+            (int) $log['asset_id'],
+            sprintf(
+                'Maintenance record of %s was corrected (%s)',
+                format_date((string) $log['performed_on']),
+                $this->describeChangedFields($changes)
+            )
+        );
+
+        Flash::success('Record updated. The change is in the activity log.');
+        Response::redirect('/maintenance/logs/' . $id . '/edit');
+    }
+
+    /**
+     * "Date performed, Cost and 2 more" — a summary a person can read without
+     * opening the JSON payload.
+     *
+     * @param array<string,array{from:mixed,to:mixed}> $changes
+     */
+    private function describeChangedFields(array $changes): string
+    {
+        $labels = [];
+
+        foreach (array_keys($changes) as $field) {
+            $labels[] = self::EDITABLE_LOG_FIELDS[$field] ?? $field;
+        }
+
+        if (count($labels) <= 3) {
+            return implode(', ', $labels);
+        }
+
+        return implode(', ', array_slice($labels, 0, 3)) . ' and ' . (count($labels) - 3) . ' more';
+    }
+
+    /**
      * Shared by both completion routes: validate, write the log, attach any
      * photos, then update the schedule and the asset.
      *

@@ -91,6 +91,16 @@
 /* --- Reset ---------------------------------------------------------------- */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* The browser's own `[hidden] { display: none }` sits in the user-agent
+   stylesheet, so *any* author rule setting `display` beats it — and `.btn` sets
+   `display: inline-flex`. Every `element.hidden = true` on a button in this
+   application was therefore doing nothing at all: the PAT wizard showed Next on
+   its last step and Back on its first, the scanner showed Start and Stop
+   together, and the photo upload showed its submit before a file was chosen.
+   This is the one place `!important` is the right tool — `hidden` means hidden,
+   and no component should have to opt in. */
+[hidden] { display: none !important; }
+
 html {
     -webkit-text-size-adjust: 100%;
 }
@@ -941,6 +951,13 @@ textarea.input { min-height: 120px; resize: vertical; }
 @media (min-width: 900px) {
     .detail-grid { grid-template-columns: minmax(0, 1fr) 320px; }
     .detail-side { position: sticky; top: 76px; }
+
+    /* A sticky element taller than the viewport can never be scrolled to its
+       end — the overhang is simply unreachable. The asset sidebar runs from the
+       barcode down to Manage, so on a short window the delete and archive
+       buttons could not be reached at all. It scrolls with the page instead.
+       The other detail pages have short sidebars, where sticky still helps. */
+    .detail-side-flow { position: static; }
 
     /* The template editor's side column carries the merge-field reference and
        a preview, both of which need more room than a 320px rail. */
@@ -2037,3 +2054,17 @@ tr.preview-warning td { background: var(--warn-soft); }
 @media (prefers-reduced-motion: reduce) {
     .nav-caret { transition: none; }
 }
+
+/* --- Audit trail on a maintenance record ---------------------------------- */
+
+.audit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }
+
+.audit-entry + .audit-entry { border-top: 1px solid var(--border); padding-top: var(--space-4); }
+
+.audit-meta { margin-bottom: var(--space-2); font-size: 0.92rem; color: var(--text-muted); }
+.audit-reason { font-style: italic; }
+
+/* The old value is the thing being corrected, so it reads as struck through
+   rather than merely quieter — at a glance you want to see what it *was*. */
+.audit-table { font-size: 0.92rem; }
+.audit-table .audit-was { text-decoration: line-through; color: var(--text-muted); }

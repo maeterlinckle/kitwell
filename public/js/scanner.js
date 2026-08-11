@@ -129,10 +129,6 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    function slug(value) {
-        return String(value || '').toLowerCase().replace(/\s+/g, '-');
-    }
-
     /* --- The full-page scanner ------------------------------------------- */
 
     (function () {
@@ -147,7 +143,6 @@
         var statusEl  = page.querySelector('[data-scan-status]');
         var resultEl  = page.querySelector('[data-scan-result]');
         var input     = page.querySelector('[data-scan-input]');
-        var mode      = page.getAttribute('data-scan-mode') || 'view';
         var lookupUrl = page.getAttribute('data-lookup-url');
 
         var stream = null;
@@ -172,75 +167,57 @@
                 credentials: 'same-origin'
             })
                 .then(function (response) { return response.json(); })
-                .then(function (data) { render(data, code); })
+                .then(function (data) {
+                    // An asset tag identifies exactly one asset, so a hit is
+                    // not a question worth asking — go there. The result card
+                    // is only for a scan that did not resolve to one asset.
+                    if (data.found) {
+                        handOff(code, data);
+                        return;
+                    }
+
+                    reportMiss(data, code);
+                })
                 .catch(function () {
                     setStatus(statusEl, 'Could not reach the server. Check your connection.', 'error');
                 });
         }
 
-        function render(data, code) {
-            if (!resultEl) return;
+        /**
+         * Go where this scan leads.
+         *
+         * Preferably by submitting the page's own form, which carries the mode
+         * and the CSRF token: ScanController::go() is then the single
+         * definition of a scan's destination, shared with the USB scanner and
+         * the typed path — including the flash messages for an item that is
+         * already out, or one that is not on hire to book in.
+         */
+        function handOff(code, data) {
+            stop();
+            setStatus(statusEl, 'Found ' + data.asset.tag + ' — opening…', 'ok');
 
-            if (!data.found) {
-                setStatus(statusEl, data.message || ('No asset matches ' + code), 'error');
-                resultEl.innerHTML = '<p class="muted">Nothing found for <span class="mono">'
-                    + escapeHtml(code) + '</span>. Check the tag, or search the register.</p>';
-                resultEl.hidden = false;
+            if (input && input.form) {
+                input.value = code;
+
+                if (typeof input.form.requestSubmit === 'function') {
+                    input.form.requestSubmit();
+                } else {
+                    input.form.submit();
+                }
+
                 return;
             }
 
-            setStatus(statusEl, 'Found ' + data.asset.tag, 'ok');
+            window.location.href = data.asset.url;
+        }
 
-            var html = '<div class="scan-hit">'
-                + '<p class="eyebrow mono">' + escapeHtml(data.asset.tag) + '</p>'
-                + '<h2>' + escapeHtml(data.asset.name) + '</h2>'
-                + '<p class="badge-row">'
-                + '<span class="badge status-' + escapeHtml(slug(data.asset.status)) + '">' + escapeHtml(data.asset.status) + '</span>'
-                + '<span class="badge">' + escapeHtml(data.asset.condition) + '</span>'
-                + (data.asset.location ? '<span class="badge badge-muted">' + escapeHtml(data.asset.location) + '</span>' : '')
-                + '</p>';
+        function reportMiss(data, code) {
+            setStatus(statusEl, data.message || ('No asset matches ' + code), 'error');
 
-            if (data.hire) {
-                html += '<p class="' + (data.hire.overdue ? 'scan-warn' : 'muted') + '">'
-                    + 'Out with ' + escapeHtml(data.hire.hirer) + ', due ' + escapeHtml(data.hire.due)
-                    + (data.hire.overdue ? ' — overdue' : '') + '</p>';
-            }
+            if (!resultEl) return;
 
-            if (data.blocked && !data.hire) {
-                html += '<p class="scan-warn">' + escapeHtml(data.blocked) + '</p>';
-            }
-
-            html += '<div class="scan-actions">';
-
-            if (mode === 'checkout' && data.can.checkout) {
-                html += '<a class="btn btn-primary btn-lg" href="' + escapeHtml(data.checkout_url) + '">Check out</a>';
-            }
-
-            if (mode === 'return' && data.can.return) {
-                html += '<a class="btn btn-primary btn-lg" href="' + escapeHtml(data.hire.return_url) + '">Book in</a>';
-            }
-
-            if (mode === 'maintenance' && data.can.maintenance) {
-                html += '<a class="btn btn-primary btn-lg" href="' + escapeHtml(data.maintenance_url) + '">Record work</a>';
-            }
-
-            if (mode !== 'checkout' && data.can.checkout) {
-                html += '<a class="btn" href="' + escapeHtml(data.checkout_url) + '">Check out</a>';
-            }
-
-            if (mode !== 'return' && data.can.return) {
-                html += '<a class="btn" href="' + escapeHtml(data.hire.return_url) + '">Book in</a>';
-            }
-
-            if (mode !== 'maintenance' && data.can.maintenance) {
-                html += '<a class="btn" href="' + escapeHtml(data.maintenance_url) + '">Record work</a>';
-            }
-
-            html += '<a class="btn' + (mode === 'view' ? ' btn-primary btn-lg' : '') + '" href="'
-                + escapeHtml(data.asset.url) + '">Open asset</a>';
-            html += '</div></div>';
-
-            resultEl.innerHTML = html;
+            resultEl.innerHTML = '<p class="muted">Nothing found for <span class="mono">'
+                + escapeHtml(code) + '</span>. Check the tag, or search the register.</p>';
             resultEl.hidden = false;
         }
 
