@@ -1,13 +1,14 @@
 # Verification tooling
 
-Four checks that can be re-run after any change. They are plain PHP scripts
+Five checks that can be re-run after any change. Four are plain PHP scripts
 with no test-framework dependency — run them with the same PHP binary the site
-uses.
+uses. The fifth is a web page, because the thing it tests is JavaScript.
 
 | Script | Needs | Writes? |
 |--------|-------|---------|
 | `security-audit.php` | Nothing — reads the source | No |
 | `escape-audit.php` | Nothing — reads the templates | No |
+| `barcode-decode.html` | A browser | No |
 | `report-figures.php` | A running site + seeded database | No |
 | `permission-matrix.php` | A running site + seeded database | **Yes** |
 
@@ -72,6 +73,41 @@ prints doubles as the written specification of who can see what.
 
 It expects the demo accounts from `bin/seed.php`, plus a hirer login; adjust
 the `$accounts` array at the top if your test data differs.
+
+## The barcode decoder
+
+```
+tests/barcode-decode.html
+```
+
+Open it in a browser — double-click it, or serve it alongside `public/` and
+visit it. No server, build step or network access is needed. It goes green or
+it names what failed.
+
+It exercises `public/js/barcode.js`, the reader used wherever the browser has
+no `BarcodeDetector` of its own (Safari, and so every iPhone). Because that is
+the only implementation in the project, the fixtures come from an encoder
+written inside the test page from the specification, and are rendered to a real
+canvas and read back through the same entry point the camera uses.
+
+An encoder and decoder written by the same hand can agree with each other and
+both be wrong, so the page also checks against things outside itself:
+
+- the **module geometry** — the free modules left once the function patterns
+  are placed must equal what the error-correction block table claims, for all
+  160 version/level pairs;
+- the **ISO/IEC 18004 Annex I worked example**, whose data and error-correction
+  codewords are published;
+- the **defining properties** of each symbology (every Code 39 character is
+  three wide elements of nine; every Code 128 symbol is eleven modules);
+- frames that must decode to **nothing** — random noise, even stripes, a blank
+  frame, and a QR damaged past its correction capacity.
+
+What it cannot cover is a QR produced by somebody else's encoder. That was
+checked once by hand against a third-party generator (versions 1-6, all four
+error-correction levels, UTF-8 and URL payloads) and is not part of the suite,
+because a test that needs the internet is a test that fails on a Monday for
+reasons nobody can see.
 
 ## Adding to these
 

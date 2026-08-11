@@ -1122,26 +1122,52 @@ Three ways in, all landing at the same lookup:
 | Input | Notes |
 |-------|-------|
 | **USB barcode scanner** | Works with no setup — these act as keyboards. The input keeps focus so you can scan one item after another |
-| **Device camera** | Uses the browser's native `BarcodeDetector` where available (Chrome/Edge). Where it is not — Safari, including every iPhone — falls back to a Code 128 reader written for this project |
+| **Device camera** | Uses the browser's native `BarcodeDetector` where available (Chrome/Edge). Where it is not — Safari, including every iPhone — falls back to the reader written for this project |
 | **Typing** | Always available |
 
 Scan modes: **Look up** jumps to the asset, **Check out** goes straight to the
-checkout form, **Book in** goes to that item's return form. A successful read
-beeps and vibrates, so you are not staring at the screen.
+checkout form, **Book in** goes to that item's return form, **Record work**
+goes to the maintenance form. A successful read beeps and vibrates, so you are
+not staring at the screen.
 
-There is no third-party scanning library. The CSP only permits scripts from
-this origin, and the labels this system prints are Code 128 — which the
-encoder in `src/Core/Barcode.php` already describes completely, so
-`public/js/scanner.js` is its mirror image. It reads a scan line, run-length
-encodes it, normalises against the module width, matches the pattern table and
-verifies the checksum. The checksum is what stops a misread becoming a wrong
-asset: garbage does not decode, it fails.
+#### What it reads
 
-Its limits, stated plainly: it reads Code 128 only (fine for tags this system
-prints, not for arbitrary manufacturer barcodes), and it wants the barcode
-roughly horizontal. Where the browser has a native detector, that is used
-instead and handles far more formats. If a code will not read, type it —
-nothing is lost.
+Three symbologies, in `public/js/barcode.js`:
+
+| Format | Why |
+|--------|-----|
+| **Code 128** | What this system prints. `src/Core/Barcode.php` is the encoder; the decoder shares its pattern table |
+| **Code 39** | Still the default on older label printers, and on tags that arrived stuck to the equipment |
+| **QR** | What is on the plate of most machinery bought this decade |
+
+A scan is looked up against both the asset tag *and* the barcode field, so a
+Code 39 or QR label already on a machine can be recorded against the asset and
+then scanned like any other.
+
+There is no third-party scanning library: the CSP only permits scripts from
+this origin, and a reader is not worth a vendored blob nobody can audit. The
+1D half reads a scan line, run-length encodes it, normalises against the module
+width and matches the pattern table. The QR half is the standard pipeline from
+ISO/IEC 18004 — locate the three finder patterns, find the alignment pattern,
+correct the perspective, read the format information, undo the data mask,
+de-interleave the blocks and Reed-Solomon correct them.
+
+**A misread must not become the wrong asset.** Code 128 has a checksum and QR
+has Reed-Solomon, so garbage does not decode, it fails — and where damage
+exceeds the correction capacity the QR decoder refuses rather than guesses.
+Code 39 has no checksum at all, so it is only believed when the same value
+comes off two different scan lines of the same frame, with a clear quiet zone
+either side.
+
+Its limits, stated plainly: 1D barcodes want to be roughly horizontal (QR does
+not care, and reads upside down); the QR reader handles all 40 versions but not
+Micro QR; and EAN/UPC product barcodes are read only where the browser has a
+native detector. If a code will not read, type it — nothing is lost.
+
+`tests/barcode-decode.html` is the check: open it in any browser and it
+renders known values through an independent encoder and reads them back, plus
+the specification's own worked example and a set of frames that must *not*
+decode.
 
 ### The Hirer role
 
@@ -1472,8 +1498,10 @@ straighten or resize. Install them and re-upload.
 
 **Barcodes will not scan** — check the label printed at 100% scale, not "fit to
 page". The print view warns when a tag is too long for the chosen label size.
-On iPhone the camera scanner falls back to the built-in Code 128 reader; a USB
-scanner or typing the tag always works.
+On iPhone the camera scanner falls back to the reader built into this project,
+which handles Code 128, Code 39 and QR but not EAN/UPC product barcodes; a USB
+scanner or typing the tag always works. A 1D barcode needs to be roughly
+horizontal in the frame — QR does not, and reads upside down.
 
 **"The uploaded file could not be found" during an import** — the preview and
 the confirm step are separate requests; if the session expired or the server

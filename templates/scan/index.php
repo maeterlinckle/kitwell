@@ -82,13 +82,17 @@ $blurbs = [
         <p class="scan-status" data-scan-status>The camera is off. Start it, or use the box above.</p>
 
         <p class="field-hint">
-            Uses your browser's built-in barcode reader where it has one. Where it does not — Safari
-            and iPhones — it falls back to reading the Code 128 labels this system prints. If a code
-            will not read, type it instead; nothing is lost.
+            Reads Code 128 — the labels this system prints — as well as Code 39 and QR codes, so a
+            tag that came with the equipment usually works too. Uses your browser's built-in reader
+            where it has one, and its own where it does not (Safari and iPhones). If a code will not
+            read, type it instead; nothing is lost.
         </p>
     </div>
 
     <div class="card scan-result" data-scan-result hidden></div>
 </div>
 
+<?php /* barcode.js first: scanner.js uses its decoder, and deferred scripts run
+         in document order. */ ?>
+<script src="<?= e(asset_url('js/barcode.js')) ?>" defer></script>
 <script src="<?= e(asset_url('js/scanner.js')) ?>" defer></script>

@@ -15,9 +15,14 @@ use App\Models\Hire;
  * Quick scan, reachable from every page.
  *
  * Three input routes, all landing in the same place:
- *   - the device camera (native BarcodeDetector, or our own Code 128 reader)
+ *   - the device camera (native BarcodeDetector, or our own reader in
+ *     public/js/barcode.js: Code 128, Code 39 and QR)
  *   - a USB barcode scanner, which behaves as a keyboard
  *   - typing the tag by hand
+ *
+ * A code is looked up against both the asset tag and the barcode field, so a
+ * Code 39 or QR label that arrived on the equipment can be recorded against
+ * the asset and then scanned like any other.
  */
 final class ScanController extends Controller
 {

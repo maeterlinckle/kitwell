@@ -8,8 +8,9 @@
  *     <?= partial('partials/scan-button', ['target' => 'q', 'submit' => true]) ?>
  *
  * Wrap the input and this button in <div class="input-with-scan"> so they sit
- * together. The behaviour lives in public/js/scanner.js, which reuses the one
- * Code 128 decoder rather than shipping a second.
+ * together. The behaviour lives in public/js/scanner.js and the decoding in
+ * public/js/barcode.js, so there is one reader in the application rather than
+ * one per scanning surface.
  *
  * @var string $target  id of the input to fill
  * @var bool   $submit  submit the field's form after a successful scan
@@ -24,12 +25,15 @@ if ($target === '') {
     return;
 }
 
-// scanner.js is not in the base layout — most pages have no barcode field and
-// should not carry the decoder. Emit it once per response, on demand.
+// These are not in the base layout — most pages have no barcode field and
+// should not carry the decoder. Emit them once per response, on demand.
 $needsScript = empty($GLOBALS['__scan_button_script']);
 $GLOBALS['__scan_button_script'] = true;
 ?>
 <?php if ($needsScript): ?>
+    <?php /* barcode.js first: scanner.js uses its decoder, and deferred
+             scripts run in document order. */ ?>
+    <script src="<?= e(asset_url('js/barcode.js')) ?>" defer></script>
     <script src="<?= e(asset_url('js/scanner.js')) ?>" defer></script>
 <?php endif; ?>
 <?php /* Hidden until scanner.js enables it: without JavaScript there is no

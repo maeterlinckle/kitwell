@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Barcode decoder tests</title>
+<style>
+    body { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 2rem; max-width: 60rem; }
+    h1 { font-size: 1.2rem; }
+    h2 { font-size: 1rem; margin: 1.6rem 0 .4rem; border-bottom: 1px solid #ccc; }
+    .ok   { color: #0a6b2d; }
+    .fail { color: #a11; font-weight: bold; }
+    #summary { position: sticky; top: 0; background: #fff; padding: .6rem 0; font-size: 1.1rem; }
+    #canvases { margin-top: 2rem; opacity: .6; }
+    canvas { border: 1px solid #ddd; margin: 2px; vertical-align: top; }
+</style>
+</head>
+<body>
+<h1>Barcode decoder tests</h1>
+
+<p>
+    Exercises <code>public/js/barcode.js</code>: Code 128, Code 39 and QR, each
+    rendered to a canvas by an encoder written here from the specification and
+    then read back. Open this file in a browser; no server or build step is
+    needed.
+</p>
+
+<div id="summary">Running…</div>
+<div id="results"></div>
+<div id="canvases"></div>
+
+<script src="../public/js/barcode.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var results = document.getElementById('results');
+    var passed = 0, failed = 0;
+    var section = null;
+
+    function heading(title) {
+        section = document.createElement('h2');
+        section.textContent = title;
+        results.appendChild(section);
+    }
+
+    function check(label, ok, detail) {
+        var line = document.createElement('div');
+        line.className = ok ? 'ok' : 'fail';
+        line.textContent = (ok ? '  ok  ' : ' FAIL ') + label + (detail ? '  — ' + detail : '');
+        results.appendChild(line);
+        if (ok) passed++; else failed++;
+        return ok;
+    }
+
+    var internals = window.AssetBarcode.internals;
+    var gf = internals.gf;
+    var EC = internals.ecBlocks;
+    var ALIGNMENT = internals.alignment;
+    var ALPHANUMERIC = internals.alphanumeric;
+
+    /* ==================================================================
+       1. The tables, checked against the specification's own arithmetic
+       ================================================================== */
+
+    heading('1. Tables');
+
+    // Code 39: every character is nine elements — five bars and four spaces —
+    // of which exactly three are wide. That is the defining property of the
+    // symbology, so it tests the table without restating it.
+    (function () {
+        var encodings = internals.code39.encodings;
+        var alphabet = internals.code39.alphabet;
+        var all = encodings.concat([internals.code39.asterisk]);
+        var bad = [], wideBars = [], i, j, wide, bars, value;
+
+        for (i = 0; i < all.length; i++) {
+            value = all[i];
+            wide = 0;
+            bars = 0;
+
+            for (j = 0; j < 9; j++) {
+                if (value & (1 << j)) {
+                    wide++;
+                    // Bit 8 is the first element (a bar); elements alternate.
+                    if ((8 - j) % 2 === 0) bars++;
+                }
+            }
+
+            if (wide !== 3) bad.push(i);
+            if (value > 0x1FF) bad.push(i);
+            wideBars.push(bars);
+        }
+
+        check('Code 39: 44 patterns (43 characters plus the asterisk)', all.length === 44,
+            'got ' + all.length);
+        check('Code 39: the alphabet matches the table', alphabet.length === encodings.length,
+            alphabet.length + ' vs ' + encodings.length);
+        check('Code 39: every character has exactly three wide elements', bad.length === 0,
+            bad.length ? 'indexes ' + bad.join(', ') : '');
+
+        var duplicates = {}, clash = 0;
+        for (i = 0; i < all.length; i++) {
+            if (duplicates[all[i]]) clash++;
+            duplicates[all[i]] = true;
+        }
+        check('Code 39: no two characters share a pattern', clash === 0, clash + ' clashes');
+    })();
+
+    // Code 128: 107 patterns, each six elements (seven for the stop), and the
+    // module counts must be 11 (13 for the stop).
+    (function () {
+        var patterns = internals.code128.patterns;
+        var bad = [], i, j, sum;
+
+        for (i = 0; i < patterns.length; i++) {
+            sum = 0;
+            for (j = 0; j < patterns[i].length; j++) sum += parseInt(patterns[i].charAt(j), 10);
+
+            if (i < 106 && (patterns[i].length !== 6 || sum !== 11)) bad.push(i);
+            if (i === 106 && (patterns[i].length !== 7 || sum !== 13)) bad.push(i);
+        }
+
+        check('Code 128: 107 symbols', patterns.length === 107, 'got ' + patterns.length);
+        check('Code 128: every symbol is 11 modules (the stop is 13)', bad.length === 0,
+            bad.length ? 'values ' + bad.join(', ') : '');
+    })();
+
+    // Alignment patterns: the first is always at 6, the last at dimension - 7,
+    // and the gaps are even and equal apart from the first.
+    (function () {
+        var bad = [], version, centres, dimension, i, gap, firstGap;
+
+        for (version = 2; version <= 40; version++) {
+            centres = ALIGNMENT[version];
+            dimension = (version * 4) + 17;
+
+            if (centres[0] !== 6) { bad.push(version + ':start'); continue; }
+            if (centres[centres.length - 1] !== dimension - 7) { bad.push(version + ':end'); continue; }
+
+            firstGap = null;
+            for (i = 2; i < centres.length; i++) {
+                gap = centres[i] - centres[i - 1];
+                if (gap % 2 !== 0) { bad.push(version + ':odd'); break; }
+                if (firstGap === null) firstGap = gap;
+                else if (gap !== firstGap) { bad.push(version + ':uneven'); break; }
+            }
+        }
+
+        check('Alignment patterns: positions well formed for versions 2-40', bad.length === 0,
+            bad.join(', '));
+    })();
+
+    /**
+     * The strongest check available without a second implementation: the number
+     * of modules left over once the function patterns are placed — worked out
+     * from the geometry — must equal the codewords the block table claims,
+     * plus the specification's remainder bits. Three independent sources for
+     * one number.
+     */
+    (function () {
+        function remainderBits(version) {
+            if (version === 1) return 0;
+            if (version <= 6) return 7;
+            if (version <= 13) return 0;
+            if (version <= 20) return 3;
+            if (version <= 27) return 4;
+            if (version <= 34) return 3;
+            return 0;
+        }
+
+        var bad = [], version, level, dimension, map, free, i, spec, total;
+
+        for (version = 1; version <= 40; version++) {
+            dimension = (version * 4) + 17;
+            map = internals.functionPattern(version, dimension);
+
+            free = 0;
+            for (i = 0; i < map.length; i++) if (!map[i]) free++;
+
+            for (level = 0; level < 4; level++) {
+                spec = EC[version][level];
+                total = ((spec[1] + spec[3]) * spec[0]) + (spec[1] * spec[2]) + (spec[3] * spec[4]);
+
+                if (free !== (total * 8) + remainderBits(version)) {
+                    bad.push('v' + version + ' ' + 'LMQH'.charAt(level)
+                        + ' (' + free + ' free, table says ' + ((total * 8) + remainderBits(version)) + ')');
+                }
+            }
+        }
+
+        check('Block table agrees with the module geometry for all 160 version/level pairs',
+            bad.length === 0, bad.slice(0, 4).join('; '));
+    })();
+
+    // A published constant: the format information for level L with mask 0.
+    check('Format information for (L, mask 0) is 0x77C4',
+        internals.formatBits(0x08) === 0x77C4,
+        '0x' + internals.formatBits(0x08).toString(16));
+
+    (function () {
+        // BCH(15,5) keeps every pair of codewords at least 7 bits apart, which
+        // is what makes three-bit correction safe.
+        var worst = 99, i, j, d;
+
+        for (i = 0; i < 32; i++) {
+            for (j = i + 1; j < 32; j++) {
+                d = 0;
+                var x = internals.formatBits(i) ^ internals.formatBits(j);
+                while (x) { x &= x - 1; d++; }
+                if (d < worst) worst = d;
+            }
+        }
+
+        check('Format codewords are at least 7 bits apart', worst >= 7, 'minimum ' + worst);
+    })();
+
+    /* ==================================================================
+       2. GF(256) and Reed-Solomon
+       ================================================================== */
+
+    heading('2. Reed-Solomon');
+
+    (function () {
+        var bad = 0, i;
+        for (i = 1; i < 256; i++) {
+            if (gf.mul(i, gf.inverse(i)) !== 1) bad++;
+        }
+        check('Every non-zero element has a multiplicative inverse', bad === 0, bad + ' failures');
+
+        bad = 0;
+        for (i = 0; i < 255; i++) {
+            if (gf.exp[i] === 0) bad++;
+        }
+        check('The exponent table never hits zero', bad === 0);
+
+        var seen = {}, clash = 0;
+        for (i = 0; i < 255; i++) {
+            if (seen[gf.exp[i]]) clash++;
+            seen[gf.exp[i]] = true;
+        }
+        check('2 generates all 255 non-zero elements', clash === 0, clash + ' repeats');
+    })();
+
+    function rsGenerator(count) {
+        var g = [1], i;
+        for (i = 0; i < count; i++) g = internals.polyMul(g, [1, gf.pow(2, i)]);
+        return g;
+    }
+
+    function rsEncode(data, ecCount) {
+        var generator = rsGenerator(ecCount);
+        var message = data.slice(), i, j, coefficient;
+
+        for (i = 0; i < ecCount; i++) message.push(0);
+
+        for (i = 0; i < data.length; i++) {
+            coefficient = message[i];
+            if (coefficient === 0) continue;
+            for (j = 1; j < generator.length; j++) {
+                message[i + j] ^= gf.mul(generator[j], coefficient);
+            }
+        }
+
+        return message.slice(data.length);
+    }
+
+    (function () {
+        // Correct up to t errors, where 2t = the number of parity codewords.
+        var data = [], i, trial, message, corrupted, positions, position, corrected;
+        for (i = 0; i < 20; i++) data.push((i * 37) & 0xFF);
+
+        var ec = 10;
+        var parity = rsEncode(data, ec);
+        message = data.concat(parity);
+
+        var clean = internals.reedSolomon(message.slice(), ec);
+        check('An undamaged block decodes unchanged',
+            clean !== null && clean.join(',') === message.join(','));
+
+        var recovered = 0;
+        for (trial = 0; trial < 200; trial++) {
+            corrupted = message.slice();
+            positions = {};
+            while (Object.keys(positions).length < ec / 2) {
+                position = Math.floor(Math.random() * corrupted.length);
+                positions[position] = true;
+            }
+            Object.keys(positions).forEach(function (p) {
+                corrupted[p] = (corrupted[p] ^ (1 + Math.floor(Math.random() * 255))) & 0xFF;
+            });
+
+            corrected = internals.reedSolomon(corrupted, ec);
+            if (corrected !== null && corrected.join(',') === message.join(',')) recovered++;
+        }
+
+        check('Corrects the full ' + (ec / 2) + ' codeword errors, 200 times out of 200',
+            recovered === 200, recovered + '/200');
+
+        // Beyond capacity it must refuse rather than invent. Some over-damaged
+        // blocks land on another valid codeword and cannot be detected at all —
+        // that is inherent to the code — but a wrong answer must be rare.
+        var wrong = 0, refused = 0;
+        for (trial = 0; trial < 200; trial++) {
+            corrupted = message.slice();
+            positions = {};
+            while (Object.keys(positions).length < ec) {
+                position = Math.floor(Math.random() * corrupted.length);
+                positions[position] = true;
+            }
+            Object.keys(positions).forEach(function (p) {
+                corrupted[p] = (corrupted[p] ^ (1 + Math.floor(Math.random() * 255))) & 0xFF;
+            });
+
+            corrected = internals.reedSolomon(corrupted, ec);
+            if (corrected === null) refused++;
+            else if (corrected.join(',') !== message.join(',')) wrong++;
+        }
+
+        check('Refuses blocks damaged beyond capacity rather than guessing',
+            wrong === 0, refused + ' refused, ' + wrong + ' silently wrong');
+    })();
+
+    // The worked example from ISO/IEC 18004 Annex I: "01234567" at version 1-M.
+    (function () {
+        var expectedData = [0x10, 0x20, 0x0C, 0x56, 0x61, 0x80, 0xEC, 0x11,
+                            0xEC, 0x11, 0xEC, 0x11, 0xEC, 0x11, 0xEC, 0x11];
+        var expectedEc = [0xA5, 0x24, 0xD4, 0xC1, 0xED, 0x36, 0xC7, 0x87, 0x2C, 0x55];
+
+        var data = dataCodewords('01234567', 1, 1);   // version 1, level M
+        check('ISO 18004 Annex I: "01234567" gives the documented data codewords',
+            data.join(',') === expectedData.join(','),
+            '[' + hex(data) + ']');
+
+        var parity = rsEncode(expectedData, 10);
+        check('ISO 18004 Annex I: and the documented error-correction codewords',
+            parity.join(',') === expectedEc.join(','),
+            '[' + hex(parity) + ']');
+    })();
+
+    function hex(bytes) {
+        return bytes.map(function (b) { return b.toString(16).toUpperCase(); }).join(' ');
+    }
+
+    /* ==================================================================
+       An encoder, written here from the specification, so the decoder has
+       something to read.
+       ================================================================== */
+
+    // A declaration rather than a constructor with a prototype, so the checks
+    // above can call the encoder before this point in the file.
+    function bitWriter() {
+        var bits = [];
+
+        return {
+            bits: bits,
+            put: function (value, length) {
+                var i;
+                for (i = length - 1; i >= 0; i--) bits.push((value >> i) & 1);
+            }
+        };
+    }
+
+    function countBits(mode, version) {
+        var sizes;
+        if (version <= 9) sizes = { 1: 10, 2: 9, 4: 8 };
+        else if (version <= 26) sizes = { 1: 12, 2: 11, 4: 16 };
+        else sizes = { 1: 14, 2: 13, 4: 16 };
+        return sizes[mode];
+    }
+
+    function utf8Bytes(text) {
+        var out = [], i, code;
+        var encoded = unescape(encodeURIComponent(text));
+        for (i = 0; i < encoded.length; i++) {
+            code = encoded.charCodeAt(i);
+            out.push(code);
+        }
+        return out;
+    }
+
+    function chooseMode(text) {
+        if (/^[0-9]+$/.test(text)) return 1;
+        var i;
+        for (i = 0; i < text.length; i++) {
+            if (ALPHANUMERIC.indexOf(text.charAt(i)) === -1) return 4;
+        }
+        return 2;
+    }
+
+    /** Mode indicator, character count, payload, terminator and padding. */
+    function dataCodewords(text, version, level) {
+        var spec = EC[version][level];
+        var capacity = (spec[1] * spec[2]) + (spec[3] * spec[4]);
+        var writer = bitWriter();
+        var mode = chooseMode(text);
+        var i, value, bytes;
+
+        writer.put(mode, 4);
+
+        if (mode === 4) {
+            bytes = utf8Bytes(text);
+            writer.put(bytes.length, countBits(4, version));
+            for (i = 0; i < bytes.length; i++) writer.put(bytes[i], 8);
+        } else if (mode === 1) {
+            writer.put(text.length, countBits(1, version));
+            for (i = 0; i + 3 <= text.length; i += 3) writer.put(parseInt(text.substr(i, 3), 10), 10);
+            if (text.length - i === 2) writer.put(parseInt(text.substr(i, 2), 10), 7);
+            else if (text.length - i === 1) writer.put(parseInt(text.substr(i, 1), 10), 4);
+        } else {
+            writer.put(text.length, countBits(2, version));
+            for (i = 0; i + 2 <= text.length; i += 2) {
+                value = (ALPHANUMERIC.indexOf(text.charAt(i)) * 45)
+                    + ALPHANUMERIC.indexOf(text.charAt(i + 1));
+                writer.put(value, 11);
+            }
+            if (i < text.length) writer.put(ALPHANUMERIC.indexOf(text.charAt(i)), 6);
+        }
+
+        if (writer.bits.length > capacity * 8) {
+            throw new Error('"' + text + '" does not fit in version ' + version);
+        }
+
+        // Terminator, then pad to a byte boundary.
+        var terminator = Math.min(4, (capacity * 8) - writer.bits.length);
+        writer.put(0, terminator);
+        while (writer.bits.length % 8 !== 0) writer.bits.push(0);
+
+        var codewords = [];
+        for (i = 0; i < writer.bits.length; i += 8) {
+            value = 0;
+            for (var j = 0; j < 8; j++) value = (value << 1) | writer.bits[i + j];
+            codewords.push(value);
+        }
+
+        // The specification's alternating pad bytes.
+        var pad = [0xEC, 0x11], k = 0;
+        while (codewords.length < capacity) codewords.push(pad[(k++) % 2]);
+
+        return codewords;
+    }
+
+    /** Split into blocks, add parity, and interleave the way the standard says. */
+    function interleave(data, version, level) {
+        var spec = EC[version][level];
+        var blocks = [];
+        var offset = 0, i, j, count;
+
+        for (i = 0; i < spec[1]; i++) {
+            blocks.push(data.slice(offset, offset + spec[2]));
+            offset += spec[2];
+        }
+        for (i = 0; i < spec[3]; i++) {
+            blocks.push(data.slice(offset, offset + spec[4]));
+            offset += spec[4];
+        }
+
+        var parity = blocks.map(function (block) { return rsEncode(block, spec[0]); });
+        var out = [];
+        var longest = Math.max(spec[2], spec[4]);
+
+        for (i = 0; i < longest; i++) {
+            for (j = 0; j < blocks.length; j++) {
+                if (i < blocks[j].length) out.push(blocks[j][i]);
+            }
+        }
+
+        for (i = 0; i < spec[0]; i++) {
+            for (j = 0; j < parity.length; j++) out.push(parity[j][i]);
+        }
+
+        return out;
+    }
+
+    function buildMatrix(codewords, version, level, mask) {
+        var dimension = (version * 4) + 17;
+        var m = new Uint8Array(dimension * dimension);
+        var i, j, x, y;
+
+        function set(px, py, value) {
+            if (px >= 0 && py >= 0 && px < dimension && py < dimension) {
+                m[(py * dimension) + px] = value;
+            }
+        }
+
+        function finder(px, py) {
+            for (y = -1; y <= 7; y++) {
+                for (x = -1; x <= 7; x++) {
+                    var edge = (x === 0 || x === 6 || y === 0 || y === 6);
+                    var core = (x >= 2 && x <= 4 && y >= 2 && y <= 4);
+                    var inside = x >= 0 && x <= 6 && y >= 0 && y <= 6;
+                    set(px + x, py + y, (inside && (edge || core)) ? 1 : 0);
+                }
+            }
+        }
+
+        finder(0, 0);
+        finder(dimension - 7, 0);
+        finder(0, dimension - 7);
+
+        for (i = 8; i < dimension - 8; i++) {
+            set(i, 6, (i % 2 === 0) ? 1 : 0);
+            set(6, i, (i % 2 === 0) ? 1 : 0);
+        }
+
+        var centres = ALIGNMENT[version];
+        var last = centres.length - 1;
+
+        for (i = 0; i <= last; i++) {
+            for (j = 0; j <= last; j++) {
+                if ((i === 0 && j === 0) || (i === 0 && j === last) || (i === last && j === 0)) continue;
+
+                for (y = -2; y <= 2; y++) {
+                    for (x = -2; x <= 2; x++) {
+                        var ring = Math.max(Math.abs(x), Math.abs(y));
+                        set(centres[j] + x, centres[i] + y, (ring === 1) ? 0 : 1);
+                    }
+                }
+            }
+        }
+
+        // The module that is always dark.
+        set(8, dimension - 8, 1);
+
+        // Data, in the standard zigzag, masked as it is written.
+        var map = internals.functionPattern(version, dimension);
+        var maskFn = internals.masks[mask];
+        var readingUp = true;
+        var bitIndex = 0;
+        var col, bit;
+
+        for (j = dimension - 1; j > 0; j -= 2) {
+            if (j === 6) j--;
+
+            for (var count = 0; count < dimension; count++) {
+                i = readingUp ? dimension - 1 - count : count;
+
+                for (col = 0; col < 2; col++) {
+                    x = j - col;
+                    if (map[(i * dimension) + x]) continue;
+
+                    bit = 0;
+                    if (bitIndex < codewords.length * 8) {
+                        bit = (codewords[bitIndex >> 3] >> (7 - (bitIndex & 7))) & 1;
+                    }
+                    bitIndex++;
+
+                    if (maskFn(i, x)) bit ^= 1;
+                    m[(i * dimension) + x] = bit;
+                }
+            }
+
+            readingUp = !readingUp;
+        }
+
+        // Format information, in both of its locations.
+        var format = internals.formatBits(([1, 0, 3, 2][level] << 3) | mask);
+
+        function formatBit(n) { return (format >> (14 - n)) & 1; }
+
+        for (i = 0; i <= 5; i++) set(i, 8, formatBit(i));
+        set(7, 8, formatBit(6));
+        set(8, 8, formatBit(7));
+        set(8, 7, formatBit(8));
+        for (i = 5; i >= 0; i--) set(8, i, formatBit(14 - i));
+
+        var n = 0;
+        for (i = dimension - 1; i >= dimension - 7; i--) set(8, i, formatBit(n++));
+        for (i = dimension - 8; i < dimension; i++) set(i, 8, formatBit(n++));
+
+        if (version >= 7) {
+            var versionInfo = internals.versionBits(version);
+            n = 0;
+            for (i = 5; i >= 0; i--) {
+                for (j = dimension - 9; j >= dimension - 11; j--) {
+                    set(i, j, (versionInfo >> (17 - n)) & 1);
+                    n++;
+                }
+            }
+        }
+
+        return { matrix: m, dimension: dimension };
+    }
+
+    function qrEncode(text, version, level, mask) {
+        var data = dataCodewords(text, version, level);
+        var codewords = interleave(data, version, level);
+        return buildMatrix(codewords, version, level, mask);
+    }
+
+    /* ==================================================================
+       Rendering to a canvas
+       ================================================================== */
+
+    var canvasHolder = document.getElementById('canvases');
+    var shown = 0;
+
+    function makeCanvas(width, height, show) {
+        var canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        if (show && shown < 24) {
+            canvasHolder.appendChild(canvas);
+            shown++;
+        }
+
+        return canvas;
+    }
+
+    function drawQr(built, scale, quiet, show) {
+        var dimension = built.dimension;
+        var size = (dimension + (quiet * 2)) * scale;
+        var canvas = makeCanvas(size, size, show);
+        var context = canvas.getContext('2d', { willReadFrequently: true });
+        var x, y;
+
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, size, size);
+        context.fillStyle = '#000';
+
+        for (y = 0; y < dimension; y++) {
+            for (x = 0; x < dimension; x++) {
+                if (built.matrix[(y * dimension) + x]) {
+                    context.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+                }
+            }
+        }
+
+        return { canvas: canvas, context: context };
+    }
+
+    // Code 128, from the same table the PHP encoder uses.
+    function code128Patterns(value) {
+        var patterns = internals.code128.patterns;
+        var useC = /^[0-9]+$/.test(value) && value.length % 2 === 0 && value.length >= 4;
+        var codes = [useC ? 105 : 104];
+        var i;
+
+        if (useC) {
+            for (i = 0; i < value.length; i += 2) codes.push(parseInt(value.substr(i, 2), 10));
+        } else {
+            for (i = 0; i < value.length; i++) codes.push(value.charCodeAt(i) - 32);
+        }
+
+        var sum = codes[0];
+        for (i = 1; i < codes.length; i++) sum += codes[i] * i;
+
+        codes.push(sum % 103);
+        codes.push(106);
+
+        return codes.map(function (code) { return patterns[code]; });
+    }
+
+    function drawCode128(value, moduleWidth, show) {
+        var patterns = code128Patterns(value);
+        var modules = 20, i, j;
+
+        for (i = 0; i < patterns.length; i++) {
+            for (j = 0; j < patterns[i].length; j++) modules += parseInt(patterns[i].charAt(j), 10);
+        }
+
+        var canvas = makeCanvas(Math.ceil(modules * moduleWidth), 70, show);
+        var context = canvas.getContext('2d', { willReadFrequently: true });
+
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = '#000';
+
+        var x = 10 * moduleWidth;
+
+        for (i = 0; i < patterns.length; i++) {
+            var bar = true;
+            for (j = 0; j < patterns[i].length; j++) {
+                var width = parseInt(patterns[i].charAt(j), 10) * moduleWidth;
+                if (bar) context.fillRect(x, 0, width, canvas.height);
+                x += width;
+                bar = !bar;
+            }
+        }
+
+        return { canvas: canvas, context: context };
+    }
+
+    function drawCode39(value, moduleWidth, wideRatio, show) {
+        var alphabet = internals.code39.alphabet;
+        var encodings = internals.code39.encodings;
+        var characters = ('*' + value + '*').split('');
+        var widths = [];
+        var i, j, pattern;
+
+        for (i = 0; i < characters.length; i++) {
+            if (characters[i] === '*') pattern = internals.code39.asterisk;
+            else pattern = encodings[alphabet.indexOf(characters[i])];
+
+            for (j = 8; j >= 0; j--) {
+                widths.push((pattern & (1 << j)) ? wideRatio : 1);
+            }
+
+            if (i < characters.length - 1) widths.push(1); // inter-character gap
+        }
+
+        var modules = 20, total = 0;
+        for (i = 0; i < widths.length; i++) total += widths[i];
+        modules += total;
+
+        var canvas = makeCanvas(Math.ceil(modules * moduleWidth), 70, show);
+        var context = canvas.getContext('2d', { willReadFrequently: true });
+
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = '#000';
+
+        var x = 10 * moduleWidth;
+        var bar = true;
+        var elementInCharacter = 0;
+
+        for (i = 0; i < widths.length; i++) {
+            var width = widths[i] * moduleWidth;
+            if (bar) context.fillRect(x, 0, width, canvas.height);
+            x += width;
+
+            elementInCharacter++;
+            if (elementInCharacter === 9) {
+                // The inter-character gap is always a space, and the next
+                // character always starts with a bar.
+                bar = false;
+                elementInCharacter = -1;
+            } else {
+                bar = !bar;
+            }
+        }
+
+        return { canvas: canvas, context: context };
+    }
+
+    function read(drawn) {
+        return window.AssetBarcode.scanCanvas(drawn.context, drawn.canvas.width, drawn.canvas.height);
+    }
+
+    /* ==================================================================
+       3. Code 128
+       ================================================================== */
+
+    heading('3. Code 128 round trip');
+
+    (function () {
+        var values = ['AST-0001', 'AST-1234', 'A', 'PAT-99', '12345678', 'Bosch GSB 18V-55',
+                      'X', 'abc-XYZ_012', 'HIRE/2026/0042'];
+        var scales = [2, 3, 5];
+        var failures = [], i, s, drawn, result;
+
+        for (i = 0; i < values.length; i++) {
+            for (s = 0; s < scales.length; s++) {
+                drawn = drawCode128(values[i], scales[s], s === 0 && i < 4);
+                result = read(drawn);
+
+                if (result === null || result.text !== values[i] || result.format !== 'code_128') {
+                    failures.push(values[i] + '@' + scales[s] + '='
+                        + (result ? result.text + '/' + result.format : 'null'));
+                }
+            }
+        }
+
+        check('Reads ' + values.length + ' values at three print scales',
+            failures.length === 0, failures.slice(0, 3).join(', '));
+    })();
+
+    /* ==================================================================
+       4. Code 39
+       ================================================================== */
+
+    heading('4. Code 39 round trip');
+
+    (function () {
+        var values = ['AST-0001', 'ABC123', 'PAT99', '1234567890', 'A-1', 'MACHINE 42',
+                      'XYZ.001', '12', 'QWERTYUIOPASDFGH'];
+        var scales = [2, 3, 5];
+        var ratios = [2, 3];
+        var failures = [], i, s, r, drawn, result;
+
+        for (i = 0; i < values.length; i++) {
+            for (s = 0; s < scales.length; s++) {
+                for (r = 0; r < ratios.length; r++) {
+                    drawn = drawCode39(values[i], scales[s], ratios[r], s === 0 && r === 1 && i < 4);
+                    result = read(drawn);
+
+                    if (result === null || result.text !== values[i] || result.format !== 'code_39') {
+                        failures.push(values[i] + '@' + scales[s] + 'x' + ratios[r] + '='
+                            + (result ? result.text + '/' + result.format : 'null'));
+                    }
+                }
+            }
+        }
+
+        check('Reads ' + values.length + ' values at three scales and both wide/narrow ratios',
+            failures.length === 0, failures.slice(0, 3).join(', '));
+    })();
+
+    /* ==================================================================
+       5. QR
+       ================================================================== */
+
+    heading('5. QR round trip');
+
+    (function () {
+        var failures = [], mask, drawn, result;
+
+        for (mask = 0; mask < 8; mask++) {
+            drawn = drawQr(qrEncode('AST-0001', 2, 1, mask), 4, 4, mask < 4);
+            result = read(drawn);
+
+            if (result === null || result.text !== 'AST-0001') {
+                failures.push('mask ' + mask + '=' + (result ? result.text : 'null'));
+            }
+        }
+
+        check('All eight data masks', failures.length === 0, failures.join(', '));
+    })();
+
+    (function () {
+        var failures = [], level, drawn, result;
+        var names = ['L', 'M', 'Q', 'H'];
+
+        for (level = 0; level < 4; level++) {
+            drawn = drawQr(qrEncode('AST-0042', 3, level, 3), 4, 4, false);
+            result = read(drawn);
+
+            if (result === null || result.text !== 'AST-0042') {
+                failures.push(names[level] + '=' + (result ? result.text : 'null'));
+            } else if (result.level !== names[level]) {
+                failures.push(names[level] + ' reported as ' + result.level);
+            }
+        }
+
+        check('All four error-correction levels, each reported correctly',
+            failures.length === 0, failures.join(', '));
+    })();
+
+    (function () {
+        // One version from each block-structure and character-count band,
+        // including the ones that carry version information.
+        var versions = [1, 2, 5, 6, 7, 9, 10, 14, 20, 26, 27, 32, 40];
+        var failures = [], i, text, drawn, result, version;
+
+        for (i = 0; i < versions.length; i++) {
+            version = versions[i];
+            text = 'ASSET-' + version + '-';
+            while (text.length < Math.min(40, version * 3)) text += 'x';
+
+            drawn = drawQr(qrEncode(text, version, 1, 4), version > 20 ? 2 : 4, 4, i < 4);
+            result = read(drawn);
+
+            if (result === null || result.text !== text) {
+                failures.push('v' + version + '=' + (result ? result.text : 'null'));
+            } else if (result.version !== version) {
+                failures.push('v' + version + ' read as v' + result.version);
+            }
+        }
+
+        check('Versions ' + versions.join(', ') + ' — each reported at the right version',
+            failures.length === 0, failures.slice(0, 4).join(', '));
+    })();
+
+    (function () {
+        var cases = [
+            ['numeric', '01234567890123456789'],
+            ['alphanumeric', 'AST-0001 REV.2'],
+            ['byte', 'Bosch GSB 18V-55 (blue)'],
+            ['url', 'https://assets.example.org/assets/1234'],
+            ['accented', 'Étau d’établi — 150mm'],
+            ['single character', 'A']
+        ];
+        var failures = [], i, drawn, result;
+
+        for (i = 0; i < cases.length; i++) {
+            drawn = drawQr(qrEncode(cases[i][1], 6, 1, 2), 4, 4, i < 3);
+            result = read(drawn);
+
+            if (result === null || result.text !== cases[i][1]) {
+                failures.push(cases[i][0] + '="' + (result ? result.text : 'null') + '"');
+            }
+        }
+
+        check('Numeric, alphanumeric, byte, URL and UTF-8 payloads',
+            failures.length === 0, failures.join('; '));
+    })();
+
+    (function () {
+        var scales = [2, 3, 4, 6, 9];
+        var quiets = [4, 2];
+        var failures = [], s, q, drawn, result;
+
+        for (s = 0; s < scales.length; s++) {
+            for (q = 0; q < quiets.length; q++) {
+                drawn = drawQr(qrEncode('AST-0007', 4, 2, 5), scales[s], quiets[q], false);
+                result = read(drawn);
+
+                if (result === null || result.text !== 'AST-0007') {
+                    failures.push(scales[s] + 'px/quiet ' + quiets[q] + '='
+                        + (result ? result.text : 'null'));
+                }
+            }
+        }
+
+        check('Module sizes from 2px to 9px, with a four- and two-module quiet zone',
+            failures.length === 0, failures.join(', '));
+    })();
+
+    (function () {
+        // Off-centre in a large frame, as it would be through a camera.
+        var built = qrEncode('AST-0123', 3, 1, 6);
+        var canvas = makeCanvas(640, 480, true);
+        var context = canvas.getContext('2d', { willReadFrequently: true });
+        var scale = 6, x, y;
+
+        context.fillStyle = '#f2f0ec';
+        context.fillRect(0, 0, 640, 480);
+
+        // Some clutter that is not a barcode.
+        context.fillStyle = '#bbb';
+        context.fillRect(20, 20, 180, 40);
+        context.fillRect(430, 380, 160, 70);
+
+        context.fillStyle = '#fff';
+        context.fillRect(300 - (scale * 4), 120 - (scale * 4),
+            (built.dimension + 8) * scale, (built.dimension + 8) * scale);
+        context.fillStyle = '#000';
+
+        for (y = 0; y < built.dimension; y++) {
+            for (x = 0; x < built.dimension; x++) {
+                if (built.matrix[(y * built.dimension) + x]) {
+                    context.fillRect(300 + (x * scale), 120 + (y * scale), scale, scale);
+                }
+            }
+        }
+
+        var result = window.AssetBarcode.scanCanvas(context, 640, 480);
+        check('Finds a QR off-centre in a 640x480 frame with other things in it',
+            result !== null && result.text === 'AST-0123',
+            result ? result.text : 'null');
+    })();
+
+    (function () {
+        // Damage within the correction capacity must still read.
+        var recovered = 0, trial, built, drawn, result, i, x, y;
+
+        for (trial = 0; trial < 20; trial++) {
+            built = qrEncode('AST-0099', 4, 3, trial % 8); // level H
+            drawn = drawQr(built, 4, 4, trial === 0);
+
+            drawn.context.fillStyle = '#000';
+            for (i = 0; i < 12; i++) {
+                x = 6 + Math.floor(Math.random() * (built.dimension - 12));
+                y = 6 + Math.floor(Math.random() * (built.dimension - 12));
+                drawn.context.fillRect((x + 4) * 4, (y + 4) * 4, 4, 4);
+            }
+
+            result = read(drawn);
+            if (result !== null && result.text === 'AST-0099') recovered++;
+        }
+
+        check('Reads through 12 blacked-out modules at level H, 20 times out of 20',
+            recovered === 20, recovered + '/20');
+    })();
+
+    (function () {
+        // Rotated 180 degrees: a label upside down is the commonest way to
+        // hold a phone at a machine.
+        var built = qrEncode('AST-0180', 3, 1, 1);
+        var flipped = { dimension: built.dimension, matrix: new Uint8Array(built.matrix.length) };
+        var d = built.dimension, x, y;
+
+        for (y = 0; y < d; y++) {
+            for (x = 0; x < d; x++) {
+                flipped.matrix[(y * d) + x] = built.matrix[((d - 1 - y) * d) + (d - 1 - x)];
+            }
+        }
+
+        var result = read(drawQr(flipped, 5, 4, true));
+        check('Reads a QR rotated 180 degrees', result !== null && result.text === 'AST-0180',
+            result ? result.text : 'null');
+    })();
+
+    /* ==================================================================
+       6. Not reading things that are not barcodes
+       ================================================================== */
+
+    heading('6. False positives');
+
+    (function () {
+        var hits = [], trial, canvas, context, image, i, result;
+
+        for (trial = 0; trial < 40; trial++) {
+            canvas = makeCanvas(320, 240, trial === 0);
+            context = canvas.getContext('2d', { willReadFrequently: true });
+            image = context.createImageData(320, 240);
+
+            for (i = 0; i < image.data.length; i += 4) {
+                var value = Math.random() < 0.5 ? 0 : 255;
+                image.data[i] = image.data[i + 1] = image.data[i + 2] = value;
+                image.data[i + 3] = 255;
+            }
+
+            context.putImageData(image, 0, 0);
+
+            result = window.AssetBarcode.scanCanvas(context, 320, 240);
+            if (result !== null) hits.push(result.format + ':' + result.text);
+        }
+
+        check('40 frames of random noise decode to nothing', hits.length === 0,
+            hits.slice(0, 3).join(', '));
+    })();
+
+    (function () {
+        var canvas = makeCanvas(320, 240, true);
+        var context = canvas.getContext('2d', { willReadFrequently: true });
+        var i;
+
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, 320, 240);
+        context.fillStyle = '#000';
+
+        // Evenly spaced stripes: plenty of dark/light transitions, no barcode.
+        for (i = 0; i < 40; i++) context.fillRect(i * 8, 0, 4, 240);
+
+        var result = window.AssetBarcode.scanCanvas(context, 320, 240);
+        check('A page of even stripes decodes to nothing', result === null,
+            result ? result.format + ':' + result.text : '');
+    })();
+
+    (function () {
+        var canvas = makeCanvas(200, 150, false);
+        var context = canvas.getContext('2d', { willReadFrequently: true });
+
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, 200, 150);
+
+        var result = window.AssetBarcode.scanCanvas(context, 200, 150);
+        check('A blank frame decodes to nothing', result === null,
+            result ? result.text : '');
+    })();
+
+    (function () {
+        // A QR damaged well past its correction capacity must be refused, not
+        // guessed at. Level L, a quarter of the symbol destroyed.
+        var wrong = 0, trial, built, drawn, result;
+
+        for (trial = 0; trial < 20; trial++) {
+            built = qrEncode('AST-0500', 4, 0, trial % 8);
+            drawn = drawQr(built, 4, 4, false);
+
+            drawn.context.fillStyle = '#000';
+            drawn.context.fillRect(4 * 4, 12 * 4, built.dimension * 4 * 0.6, 12 * 4);
+
+            result = read(drawn);
+            if (result !== null && result.text !== 'AST-0500') wrong++;
+        }
+
+        check('A QR destroyed past its correction capacity never reads as something else',
+            wrong === 0, wrong + ' wrong readings');
+    })();
+
+    /* ================================================================== */
+
+    var summary = document.getElementById('summary');
+    summary.className = failed === 0 ? 'ok' : 'fail';
+    summary.textContent = failed === 0
+        ? passed + ' checks passed.'
+        : passed + ' passed, ' + failed + ' FAILED.';
+
+    window.TEST_RESULT = { passed: passed, failed: failed };
+
+    // The encoder and the renderers, for poking at a failure from the console.
+    window.TEST_HELPERS = {
+        qrEncode: qrEncode,
+        drawQr: drawQr,
+        drawCode128: drawCode128,
+        drawCode39: drawCode39,
+        dataCodewords: dataCodewords,
+        interleave: interleave
+    };
+})();
+</script>
+</body>
+</html>
