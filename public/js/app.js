@@ -553,7 +553,10 @@
     var groups = document.querySelectorAll('[data-nav-group]');
     if (!groups.length) return;
 
-    var desktop = window.matchMedia('(min-width: 900px)');
+    // Must match the horizontal bar's breakpoint in app.css. Below it the nav
+    // is a drawer, where an open group is an accordion rather than an overlay
+    // and closing the others would be unhelpful.
+    var desktop = window.matchMedia('(min-width: 1150px)');
 
     function closeAll(except) {
         Array.prototype.forEach.call(groups, function (group) {

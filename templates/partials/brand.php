@@ -19,16 +19,23 @@ $light = Branding::url('light');
 $dark  = Branding::url('dark');
 $name  = (string) ($appName ?? config('app.name', 'Asset Register'));
 ?>
-<?php if ($light !== null || $dark !== null): ?>
-    <span class="brand-logo-wrap">
-        <?php if ($light !== null): ?>
-            <img class="brand-logo brand-logo-light" src="<?= e($light) ?>" alt="<?= e($name) ?>">
-        <?php endif; ?>
-        <?php if ($dark !== null && $dark !== $light): ?>
-            <img class="brand-logo brand-logo-dark" src="<?= e($dark) ?>" alt="<?= e($name) ?>">
-        <?php endif; ?>
-    </span>
-<?php else: ?>
-    <span class="brand-mark" aria-hidden="true"><?= e(config('app.mark', 'KW')) ?></span>
-<?php endif; ?>
-<span class="brand-name"><?= e($name) ?></span>
+<?php /* The stack wrapper is always emitted, and says whether it holds a logo,
+         so the layout can differ between the two without a :has() selector.
+         With a logo the two sit one above the other on a desktop: a wide
+         wordmark image *beside* a wordmark in text is the widest the brand can
+         possibly be, and every pixel it takes is one the menu cannot have. */ ?>
+<span class="brand-stack<?= ($light !== null || $dark !== null) ? ' brand-stack-logo' : '' ?>">
+    <?php if ($light !== null || $dark !== null): ?>
+        <span class="brand-logo-wrap">
+            <?php if ($light !== null): ?>
+                <img class="brand-logo brand-logo-light" src="<?= e($light) ?>" alt="<?= e($name) ?>">
+            <?php endif; ?>
+            <?php if ($dark !== null && $dark !== $light): ?>
+                <img class="brand-logo brand-logo-dark" src="<?= e($dark) ?>" alt="<?= e($name) ?>">
+            <?php endif; ?>
+        </span>
+    <?php else: ?>
+        <span class="brand-mark" aria-hidden="true"><?= e(config('app.mark', 'KW')) ?></span>
+    <?php endif; ?>
+    <span class="brand-name"><?= e($name) ?></span>
+</span>

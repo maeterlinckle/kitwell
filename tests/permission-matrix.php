@@ -23,11 +23,19 @@ declare(strict_types=1);
 
 define('BASE', rtrim($argv[1] ?? 'http://127.0.0.1:8321', '/'));
 
+/*
+ * The four accounts bin/seed.php creates, with its DEMO_PASSWORD. Keep this in
+ * step with the seeder: a sign-in that fails here does not fail loudly, it just
+ * leaves the session signed out, and every "deny" then looks like an "allow"
+ * because the redirect to /login is not a 403. A stale hirer address in this
+ * array once produced 70 phantom mismatches that read exactly like a
+ * permissions hole.
+ */
 $accounts = [
-    'admin'    => ['admin@example.com',        'Workshop!Demo2026'],
-    'manager'  => ['manager@example.com',      'Workshop!Demo2026'],
-    'viewer'   => ['viewer@example.com',       'Workshop!Demo2026'],
-    'hirer' => ['chris.portal@example.com', 'PortalTest!2026x'],
+    'admin'   => ['admin@example.com',   'Workshop!Demo2026'],
+    'manager' => ['manager@example.com', 'Workshop!Demo2026'],
+    'viewer'  => ['viewer@example.com',  'Workshop!Demo2026'],
+    'hirer'   => ['hirer@example.com',   'Workshop!Demo2026'],
 ];
 
 /**
@@ -134,6 +142,20 @@ $writeMatrix = [
     '/import/assets/preview'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
 ];
 
+/*
+ * Extra fields for routes that look something up before they validate.
+ *
+ * The write checks deliberately post almost nothing, so a permitted role fails
+ * validation and redirects — which still proves it got past the permission
+ * gate. That breaks down where a controller resolves a record first:
+ * PatController::store() reads asset_id and 404s when it finds nothing, so an
+ * empty payload proved nothing about permissions either way. Give those routes
+ * the minimum they need to reach their validation.
+ */
+$writePayloads = [
+    '/pat' => ['asset_id' => '1'],
+];
+
 final class Session
 {
     public string $jar;
@@ -148,6 +170,22 @@ final class Session
         $this->get('/login');
         preg_match('/name="_token" value="([a-f0-9]+)"/', $this->body, $m);
         $this->post('/login', ['_token' => $m[1] ?? '', 'email' => $email, 'password' => $password]);
+
+        // Stop dead if that did not sign in. A failed sign-in is invisible
+        // otherwise: every later request redirects to /login, which is not a
+        // 403, so the whole run reports "allow" where it should report "deny"
+        // — a false permissions hole in a script whose entire job is to prove
+        // there is not one. Better to refuse to run than to lie.
+        $this->get('/profile');
+
+        if (!str_contains($this->body, 'Sign out')) {
+            fwrite(STDERR, sprintf(
+                "Could not sign in as %s (%s).\nThe accounts at the top of this script must match bin/seed.php.\nRe-seed with:  php bin/migrate.php && php bin/seed.php\n",
+                $role,
+                $email
+            ));
+            exit(1);
+        }
     }
 
     public function get(string $path): self
@@ -247,7 +285,7 @@ foreach ($writeMatrix as $path => $expectations) {
         // Deliberately incomplete payloads: a permitted role should get past
         // the permission gate and fail validation (a redirect), which is still
         // "allow" for our purposes. A forbidden role must get 403.
-        $status = $session->post($path, ['_token' => $token])->status;
+        $status = $session->post($path, ['_token' => $token] + ($writePayloads[$path] ?? []))->status;
         $checks++;
 
         $actual = $status === 403 ? 'deny' : (($status >= 200 && $status < 400) ? 'allow' : 'other:' . $status);

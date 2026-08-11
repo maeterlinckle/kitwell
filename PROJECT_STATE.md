@@ -947,6 +947,19 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 | Export CSVs | whole register 26 columns, with PAT+hire extras 35, hand-picked subset 2 rows |
 | `/assets` export entry points | none remain — no button, no bulk action, no column options |
 
+**Header layout and the reseed (2026-08-11), verified on this machine:**
+
+| Check | Result |
+|---|---|
+| Menu rows, with a logo | **1 row at 1150, 1280, 1440 and 1920px**; header back to 61px from 90 |
+| Menu rows, no logo (KW mark) | 1 row at 1150 and above; was 2 rows at every width below ~1230 **before** any logo existed |
+| Breakpoint boundary | 1150px → bar, 1149px → drawer, header 61px either side |
+| Worst-case logo (1200×120, 10:1) | capped at 150×26, letterboxed by `object-fit`, still 1 row at 1150px with no overflow |
+| Brand width | 238px → **104px** stacked (150px for the 10:1 banner) |
+| Wordmark | visible in every case, on its own line on a desktop |
+| Mobile (390px) | side by side, `bottomsDelta` **0.0px** — the wordmark's bottom sits exactly on the logo's, signed in and signed out |
+| Permission matrix after the reseed | **284 checks, 0 mismatches** — the first clean run; the harness's hirer account was stale and it now refuses to run rather than report a false hole |
+
 **Shipped in `tests/` but requiring something more than PHP:**
 
 | Check | What it proves |
@@ -1245,6 +1258,18 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   things outside itself — the module geometry, the ISO Annex I worked example,
   the defining properties of each symbology. Keep new tests honest the same
   way.
+- **The horizontal nav bar needs 1150px, and the breakpoint says so.** It was
+  900px, which was never wide enough: six menu items (613px), the account block
+  (243px), Scan (86px) and the brand (112–150px) come to over 1050px before any
+  gaps, so between 900 and 1150 the items wrapped onto a second row and doubled
+  the header height — with or without a logo. Below 1150px the drawer is used.
+  Three places have to agree: the two `@media` blocks in `app.css` and the
+  `matchMedia` in `app.js` that closes the drop-downs.
+- **`flex-wrap: wrap` on a nav list is not a safety net, it is the bug.** It
+  turns "does not fit" into a silently taller header. `nowrap` plus a
+  breakpoint that is honest about the width needed is the fix; the same applies
+  one level down, where a squeezed `Sign out` wrapped its own text and made the
+  header taller than the menu had.
 - **`element.hidden = true` does nothing to a `.btn`.** The browser's
   `[hidden] { display: none }` lives in the *user-agent* stylesheet, so any
   author rule that sets `display` outranks it — and `.btn` sets

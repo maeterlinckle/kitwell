@@ -803,7 +803,15 @@ replaces the **KW** box in the top-left corner; the wordmark beside it stays
 either way. Upload only one and it is used for both themes.
 
 The logo is scaled by height and never stretched, so any shape works; make it at
-least 72px tall so it stays crisp on a high-resolution screen. It appears in the
+least 72px tall so it stays crisp on a high-resolution screen. A very wide
+banner is capped in width and padded rather than squashed.
+
+On a desktop the wordmark sits **under** the logo rather than beside it: a
+wordmark image next to a wordmark in text is the widest the branding can be, and
+every pixel it takes is one the menu cannot have. On a phone the two sit side by
+side, sharing a baseline.
+
+It appears in the
 site header, on the sign-in page, on both printed documents above, and in the
 header of outbound email — where it is embedded in the message rather than
 linked, so it still shows when the mail is read from outside your network.

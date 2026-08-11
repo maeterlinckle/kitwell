@@ -295,8 +295,36 @@ a:hover { color: var(--accent-hover); }
 .nav-logout { margin: 0; }
 
 /* Desktop navigation */
-@media (min-width: 900px) {
+/* The horizontal bar appears at 1150px, not 900px.
+   ---------------------------------------------------------------------------
+   Measured on the seeded register at the tightest width the bar can occupy:
+   six menu items need 613px, the account chip 243px, Scan 86px and the brand
+   112-150px depending on whether a logo is set. That is a little over 1050px of
+   content before any gaps, so between 900px and 1150px the bar could never fit
+   on one line — with or without a logo — and the items wrapped onto a second
+   row, doubling the header's height.
+
+   Below 1150px the drawer is used instead. A drawer is a vertical list, so it
+   cannot wrap, and it is the same control phones already use. Widening the
+   window brings the bar back. */
+@media (min-width: 1150px) {
     .nav-toggle { display: none; }
+
+    /* The block padding is a mobile tap-target concern; on a desktop the row's
+       own min-height and centring do that job, and dropping it here is what
+       lets the stacked brand fit inside 60px. */
+    .brand { padding-block: 0; }
+
+    /* Logo above, wordmark beneath. Roughly halves the width of the brand when
+       a logo is set. */
+    .brand-stack-logo {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1px;
+    }
+
+    .brand-stack-logo .brand-logo { height: 26px; max-width: 150px; }
+    .brand-stack-logo .brand-name { font-size: 0.9rem; padding-bottom: 0; }
 
     .primary-nav {
         display: flex;
@@ -316,10 +344,28 @@ a:hover { color: var(--accent-hover); }
         align-items: center;
         gap: var(--space-1);
         margin: 0;
-        flex-wrap: wrap;
+        /* Never wrap. A menu that reflows onto a second row doubles the header
+           height and pushes the page down; below the width where the bar fits
+           on one line the drawer is used instead. */
+        flex-wrap: nowrap;
     }
 
-    .nav-link { min-height: 40px; }
+    .nav-item { flex: 0 0 auto; }
+
+    /* Nothing in the bar wraps its own text either. A squeezed "Sign out"
+       breaking onto two lines made the header 10px taller than the menu did,
+       which is the same bug one level down. */
+    .site-header .btn,
+    .nav-account .btn,
+    .brand-name { white-space: nowrap; }
+
+    /* The account block keeps its natural width rather than being squeezed
+       into one: it is the thing that gets compressed first otherwise. */
+    .nav-account { flex: 0 0 auto; }
+
+    /* Slightly tighter than the touch-sized padding used on a phone: six items
+       at 12px a side is 144px of air, which is most of a menu item. */
+    .nav-link { min-height: 40px; padding-inline: var(--space-2); white-space: nowrap; }
 
     .nav-link.is-active {
         box-shadow: inset 0 -3px 0 var(--accent);
@@ -2023,7 +2069,9 @@ tr.preview-warning td { background: var(--warn-soft); }
 }
 .nav-sublink { font-weight: 500; }
 
-@media (min-width: 900px) {
+/* Matches the bar's own breakpoint above: these rules describe the horizontal
+   bar's drop-downs, so they have to appear and disappear with it. */
+@media (min-width: 1150px) {
     .scan-action-label { display: inline; }
 
     .nav-item-group { position: relative; }
@@ -2091,7 +2139,17 @@ tr.preview-warning td { background: var(--warn-soft); }
    pushing the navigation off the bar. object-fit: contain letterboxes rather
    than stretches, which is the whole point. */
 
-.brand-logo-wrap { display: inline-flex; align-items: center; }
+.brand-logo-wrap { display: inline-flex; align-items: flex-end; }
+
+/* Mobile: logo and wordmark side by side, sitting on the same baseline — the
+   text aligns with the *bottom* of the logo rather than its middle, which is
+   what makes the pair read as one lockup instead of two loose objects. */
+.brand-stack {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-2);
+    min-width: 0;
+}
 
 .brand-logo {
     display: block;
@@ -2100,6 +2158,10 @@ tr.preview-warning td { background: var(--warn-soft); }
     max-width: 190px;
     object-fit: contain;
 }
+
+/* The wordmark's own line box carries space under the baseline; trimming it is
+   what actually lines the text bottom up with the foot of the logo. */
+.brand-stack .brand-name { line-height: 1; padding-bottom: 2px; }
 
 /* Both variants ship in the markup and CSS picks: the theme can change without
    a page load, so the server cannot know which one to send. */
