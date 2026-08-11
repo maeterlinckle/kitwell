@@ -7,12 +7,13 @@ The original nine build prompts finished on 2026-08-06. Since then:
 deployment tooling on 2026-08-07 (§5.3), the PAT workflow overhaul on
 2026-08-08, the navigation and Hires/Hirers rename on 2026-08-09, outbound
 email plus calendar feeds on 2026-08-10, and on 2026-08-11 three fixes found by
-deploying it — the database grant, Composer installation, and the navigation
-and maintenance corrections in §5.4.
+deploying it (§5.4) followed by stages 13, 14 and 15 — fixes and small changes,
+then branding, HTML email, export and print, then teams, invitations and
+password recovery.
 
 Everything below was checked against the files and the database at the time of
 writing, not recalled. The schema section was produced by creating an empty
-database, applying all eighteen migrations in order and then reading
+database, applying all twenty-one migrations in order and then reading
 `information_schema`, so it describes exactly what a fresh install produces.
 Where something is *not* verified, it says so.
 
@@ -29,7 +30,7 @@ Where something is *not* verified, it says so.
 | Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
 | `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 182 PHP files (78 of them templates), 135 routes (74 GET, 61 POST), 18 migrations |
+| Counted at time of writing | 188 PHP files (85 of them templates), 151 routes (81 GET, 70 POST), 21 migrations |
 | Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
@@ -41,13 +42,13 @@ Where something is *not* verified, it says so.
 
 ## 2. Database schema as implemented
 
-Built by applying `database/migrations/001` … `018` to an empty database. All
-eighteen applied cleanly with no errors.
+Built by applying `database/migrations/001` … `021` to an empty database. All
+twenty-one applied cleanly with no errors.
 
-**Totals:** 22 domain tables, 279 columns, 39 foreign keys, 106 indexes.
+**Totals:** 26 domain tables, 306 columns, 48 foreign keys, 120 indexes.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
-A database migrated with `php bin/migrate.php` has a **23rd** table,
+A database migrated with `php bin/migrate.php` has a **27th** table,
 `migrations` (`id`, `migration`, `batch`, `applied_at`, unique on `migration`),
 created by `src/Core/Migrator.php`. It does not appear below because it is
 tracking, not domain data — and note that it is *not* created if you pipe the
@@ -75,6 +76,9 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 | `016_pat_guideline_settings.sql` | the six `pat_guide_*` guideline settings |
 | `017_rename_loans_to_hires.sql` | **`loans`→`hires`, `borrowers`→`hirers`, `loan_photos`→`hire_photos`**, plus the columns, permissions, role, settings and `assets.status` value that carried the old words |
 | `018_email_and_calendar.sql` | `email_templates`, `email_log`, `email_reminders`; `users.calendar_token` + `calendar_token_created_at`; the `mail_*` and `reminder_*` settings; the `email.manage` and `email.send` permissions |
+| `019_maintenance_log_documents.sql` | `maintenance_log_documents` — the paperwork attached to a completion (a contractor's report, a certificate), shaped after `asset_manuals` but hanging off the log |
+| `020_teams.sql` | `teams`, `team_members`; `maintenance_schedules.assigned_to_team_id`; the `teams.manage` permission, granted to `admin` only |
+| `021_user_tokens.sql` | `user_tokens` — single-use invitation and password-reset links, stored as SHA-256; the `invite_expiry_hours` and `password_reset_expiry_hours` settings |
 
 Migrations are applied in filename order and recorded. **Never edit an applied
 file** — add a new numbered one.
@@ -202,9 +206,45 @@ Indexes `(asset_id, created_at)`, `(asset_id, is_primary)`, `(asset_id, taken_at
 schedule when the job is logged), `notes`, `created_by`, timestamps.
 Indexes `(asset_id, performed_on)`, `performed_on`, `created_at`, `schedule_id`.
 
+`maintenance_schedules` also carries **`assigned_to_team_id`** (migration 020),
+mutually exclusive with `assigned_to_user_id` — see §2.5 item 10.
+
 #### `maintenance_log_photos`
 `id`, `maintenance_log_id` NN, `file_path` NN, `original_filename`, `mime_type` NN,
 `file_size_bytes` NN 0, `caption`, `uploaded_by`, `created_at`.
+
+#### `maintenance_log_documents` (migration 019)
+`id` bigint, `maintenance_log_id` NN, `title` varchar(191) NN, `file_path` NN,
+`original_filename`, `mime_type` NN default `application/pdf`,
+`file_size_bytes` NN 0, `notes`, `uploaded_by`, `created_at`.
+Index `(maintenance_log_id, created_at)`; the log FK CASCADEs, `uploaded_by`
+SET NULLs.
+
+The paperwork a visit produces. Attached to the **log**, not the asset: a
+service report belongs to the visit it describes, and filing it against the
+machine would lose which visit produced it.
+
+#### `teams` / `team_members` (migration 020)
+`teams`: `id`, `name` varchar(120) NN **unique**, `description` varchar(255),
+`is_active` NN 1 (archive, never delete), `created_by`, timestamps.
+Index `idx_teams_active(is_active)`.
+
+`team_members`: `team_id`, `user_id` — composite PK — plus `added_by`,
+`created_at` and `idx_team_members_user(user_id)`. Both ends CASCADE: a
+membership row is meaningless without both, and the audit trail is what records
+who was added and when.
+
+#### `user_tokens` (migration 021)
+`id` bigint, `user_id` NN, `purpose` enum('invite','password_reset') NN,
+`token_hash` char(64) NN **unique**, `expires_at` datetime NN, `used_at`
+datetime, `created_by`, `created_ip`, `created_at`.
+Indexes `(user_id, purpose, expires_at)` and `expires_at`.
+
+One table for both link types because they are the same object with a different
+purpose. **`token_hash` is a SHA-256 — the raw token exists only in the email
+that was sent**, so a database dump is not a set of working account-takeover
+links. `used_at` rather than a delete, so "already used" is a state the page can
+explain instead of an indistinguishable "not found".
 
 #### `pat_records` (24 columns)
 `id`, `asset_id` NN, `test_date` date NN, `retest_due_date` date,
@@ -287,13 +327,17 @@ purpose: an item crossing from "due soon" to "overdue" is a *different*
 reminder and goes out at once rather than waiting out the earlier one's repeat
 window.
 
-### 2.3 Foreign keys (39)
+### 2.3 Foreign keys (48)
 
 | Delete rule | Where it is used |
 |---|---|
-| **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id` |
+| **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id` |
 | **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id` |
-| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id` |
+| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id` |
+
+`maintenance_schedules.assigned_to_team_id` is SET NULL on purpose: archiving is
+the ordinary way to retire a team, so deleting one is a deliberate act that
+should not be blocked by a schedule which can simply become unassigned.
 
 `email_reminders` has **no foreign keys at all** — it is a de-duplication
 ledger, and a row that outlives the record it refers to is harmless.
@@ -306,20 +350,23 @@ deleting a user never destroys the records they touched.
 
 - **4 roles**: `admin` (Administrator, `is_superuser=1`), `manager` (Manager / Staff),
   `viewer` (Read-only), `hirer` (Hirer). All four are `is_system=1`.
-- **32 permissions** in groups Assets, Hirers, Hires, Maintenance,
+- **33 permissions** in groups Assets, Hirers, Hires, Maintenance,
   Photos & files, PAT testing, Reports, Email, Administration:
   `assets.view/create/edit/delete/export`, `hirers.view/manage`,
   `hires.view/view_own/create/return/manage`, `maintenance.view/manage/complete`,
   `media.photo.upload/delete`, `media.manual.upload/delete`,
   `pat.view/manage/delete`, `reports.view`, `email.manage/send`,
-  `users.view/manage`, `roles.manage`, `categories.manage`, `locations.manage`,
-  `settings.manage`, `audit.view`.
-- **65 role_permissions rows** — admin 32, manager 25, viewer 7, hirer 1.
+  `users.view/manage`, `roles.manage`, **`teams.manage`**, `categories.manage`,
+  `locations.manage`, `settings.manage`, `audit.view`.
+- **66 role_permissions rows** — admin 33, manager 25, viewer 7, hirer 1.
   - viewer: `assets.view`, `assets.export`, `hirers.view`, `hires.view`,
     `maintenance.view`, `pat.view`, `reports.view`
   - hirer: **`hires.view_own` and nothing else**
   - manager gained `email.send` (not `email.manage`) in 018
-- **37 settings**:
+  - `teams.manage` (020) is **admin only**: membership decides who is reminded
+    about a job and who it is expected of, which makes it administrative
+- **39 settings** on a fresh install (43 once both logo variants have been
+  uploaded — the four `logo_*` keys are written on upload, never seeded):
 
   | Key | Default | |
   |---|---|---|
@@ -350,8 +397,10 @@ deleting a user never destroys the records they touched.
   | `reminder_pat_days` / `_maintenance_` / `_hire_` | `0` | **0 = use the register's own window** |
   | `reminder_repeat_days` | `7` | |
   | `reminder_recipient_user_ids` | *(empty)* | comma-separated user ids |
-  | `reminder_maintenance_assignee` | `1` | |
+  | `reminder_maintenance_assignee` | `1` | a team assignment reaches every member |
   | `reminder_hire_notify_hirer` | `0` | |
+  | `invite_expiry_hours` | `72` | how long an invitation link lasts |
+  | `password_reset_expiry_hours` | `2` | deliberately shorter — see §4.10 |
 
 ### 2.5 Divergences from the original build brief
 
@@ -385,6 +434,20 @@ Nothing here is accidental, but a reader coming from the brief should know:
    install and gains a row only when an administrator edits one. See §2.2.
 9. **The calendar feed is iCalendar, not CalDAV** — a deliberate reading of the
    brief's "use your judgement". See §4.9.
+10. **An assignment is one thing, held in two columns.** A maintenance schedule
+    is assigned to a user **or** a team **or** nobody;
+    `assigned_to_user_id` and `assigned_to_team_id` are mutually exclusive and
+    the application writes exactly one of them
+    (`MaintenanceController::validateSchedule()`). Two nullable columns rather
+    than a polymorphic `(type, id)` pair, because this way both are real foreign
+    keys — deleting a team cannot leave a schedule pointing at nothing. The form
+    carries a single prefixed value (`user:7` / `team:2`) so the two cannot
+    contradict each other, and `MaintenanceSchedule::parseAssignee()` is the only
+    thing that knows that shape.
+11. **Invitations and password resets share one table**, `user_tokens`, because
+    they are one object with two purposes. See §4.10 — and note that **the token
+    is stored only as a SHA-256**, which is the reason a lost link cannot be
+    looked up and re-sent.
 
 ---
 
@@ -425,7 +488,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   └── js/   app.js, barcode.js, scanner.js, pat-wizard.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 135 routes, 297 lines
+│   └── web.php              the whole route table, 151 routes
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -436,47 +499,56 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── Core/                Auth, Barcode, Config, Crypto, Csrf, Csv, CsvReader,
 │   │                        Database, Env, Flash, Image, LoginThrottle, Migrator,
 │   │                        Request, Response, Router, Session, Upload, Validator, View
-│   ├── Controllers/         Controller (base) + Asset, AssetCopy, AssetExport,
-│   │                        Auth, Calendar, Hirer, Dashboard, Import, Label, Hire,
+│   ├── Controllers/         Controller (base) + Account, Asset, AssetCopy,
+│   │                        AssetExport, Auth, Branding, Calendar, Hirer,
+│   │                        Dashboard, Export, Import, Label, Hire,
 │   │                        Maintenance, Manual, MyHires, Pat, Photo, Profile,
 │   │                        Report, Scan
-│   │   └── Admin/           Activity, Category, Email, Location, Role, Settings, User
+│   │   └── Admin/           Activity, Category, Email, Location, Role, Settings,
+│   │                        Team, User
 │   ├── Mail/                Mailer, EmailTemplate, EmailLog, EmailReminder,
-│   │                        Reminders, Merge
+│   │                        Reminders, Merge, Layout, AccountMail
 │   ├── Middleware/          Auth, Csrf, Guest, Permission, MiddlewareRunner
 │   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto, Hirer,
 │   │                        Category, Hire, Location, MaintenanceLog,
 │   │                        MaintenanceSchedule, PatRecord, Permission, Role,
-│   │                        Setting, User
+│   │                        Setting, Team, User, UserToken
 │   ├── Reports/             Report (base), ReportRegistry, AllAssets,
 │   │                        MaintenanceDue, PatDue, AssetsOnHire, HiresDueBack
 │   ├── Imports/             Importer (base), ImportRegistry, AssetImporter,
 │   │                        PatImporter
-│   └── Services/            AssetTagger, AssetCopier, CalendarFeed
+│   └── Services/            AssetTagger, AssetCopier, CalendarFeed, Branding
 │
 ├── storage/                 ← outside the docroot
 │   ├── logs/                app.log
 │   └── uploads/             assets/{id}/photos, .../photos/thumbs,
 │                            assets/{id}/manuals, maintenance/{logId},
-│                            hires/{hireId}, imports/
+│                            maintenance/{logId}/documents,
+│                            hires/{hireId}, branding/, imports/
 │
-├── templates/               78 .php templates
+├── templates/               85 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
-│   ├── partials/            nav, flash, photo-gallery, photo-upload,
-│   │                        pat-status, pat-record, maintenance-log-photos,
-│   │                        report-table, scan-button, verdict, verdict-cell,
-│   │                        email-nav
-│   ├── assets/              index, show, form, copy, apply, photos, labels
-│   ├── auth/ dashboard/ errors/ scan/
+│   ├── partials/            nav, brand, footer, print-header, flash,
+│   │                        photo-gallery, photo-upload, photo-inputs,
+│   │                        pat-status, pat-record, maintenance-log-evidence,
+│   │                        assignee, report-table, scan-button, verdict,
+│   │                        verdict-cell, email-nav
+│   ├── assets/              index, show, form, copy, apply, photos, labels,
+│   │                        print, print-list
+│   ├── auth/                login, invite, forgot-password, reset-password
+│   ├── dashboard/ errors/ scan/
 │   ├── profile/             edit, calendar
-│   ├── maintenance/         index, show, form, complete, history, choose-asset
+│   ├── maintenance/         index, show, form, complete, edit-log, history,
+│   │                        choose-asset
 │   ├── pat/                 index, show, form, history, wizard, choose-asset
 │   ├── hires/               index, show, checkout, return
 │   ├── hirers/              index, show, form
 │   ├── my-hires/            index, show, unlinked
 │   ├── import/              index, show, preview
+│   ├── export/              index, assets, assets-select
 │   ├── reports/             index, show, print
-│   └── admin/               users, roles, categories, locations, settings, activity,
+│   └── admin/               users, roles, teams, categories, locations,
+│                            settings, activity,
 │                            email/ (index, reminders, templates, template-form, log)
 │
 └── tests/                   shipped verification tooling (see §5)
@@ -570,12 +642,13 @@ Nothing here is accidental, but a reader coming from the brief should know:
   as a global function in `helpers.php` alongside `e()`, `can()`, `old()`,
   `format_date()`, `format_money()` and friends.
 - **Every variable reaching output goes through `e()`.** `tests/escape-audit.php`
-  parses all 2028 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
+  parses all 2136 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
 - Three layouts: `layouts/app` (signed in, with nav), `layouts/auth` (slim),
   `layouts/print` (label sheets and report printing).
-- `templates/partials/nav.php` carries a `'built' => true|false` flag per
-  section; unbuilt sections render greyed out with a "Soon" badge. **All
-  sections are currently `built => true`.**
+- `templates/partials/nav.php` holds the whole menu as one `$links` array,
+  filtered by permission; a group whose children are all hidden disappears
+  rather than opening onto an empty list. Five top-level items since stage 15 —
+  **the header's width budget assumes that number** (§7 item 10).
 - **Reports and imports are registries, not pages.** Adding a report = write a
   `Report` subclass + one line in `ReportRegistry::REPORTS`; the controller,
   table, filters, print view and CSV are generic and driven by the report's own
@@ -675,7 +748,9 @@ Nothing here is accidental, but a reader coming from the brief should know:
   | Thumbnails | `assets/{assetId}/photos/thumbs` |
   | PDF manuals | `assets/{assetId}/manuals` |
   | Maintenance completion photos | `maintenance/{logId}` |
+  | Maintenance documents (PDF) | `maintenance/{logId}/documents` |
   | Hire condition photos (out/in) | `hires/{hireId}` |
+  | The uploaded logo (light/dark) | `branding` |
   | Uploaded CSVs awaiting preview/commit | `imports` |
 
 - Only the **relative path** is stored in the database. Never a BLOB, never an
@@ -776,11 +851,77 @@ Nothing here is accidental, but a reader coming from the brief should know:
   else's; `console.php calendar:url` exists for support and writes an audit
   entry.
 
+### 4.10 Teams, and links into an account
+
+Two features added in stage 15 that both touch identity, and both have rules
+worth keeping.
+
+**Teams** (`src/Models/Team.php`, `Controllers/Admin/TeamController.php`)
+
+- A team is a group *work* is assigned to. **Membership grants nothing** — a
+  member still needs `maintenance.view` to be reminded and
+  `maintenance.complete` to record the work, and the reminder run re-checks both
+  at send time through `Team::membersWithPermission()`, exactly as it does for
+  the notify list. Do not let membership become a second access model.
+- **Assignment is one value, two columns.** See §2.5 item 10. Every display site
+  reads `assigned_to_name` + `assigned_to_kind` from
+  `MaintenanceSchedule::selectSql()`, so there is one definition:
+  `partials/assignee.php` on screen, `MaintenanceSchedule::assigneeLabel()`
+  where there is only text (report column, CSV, calendar feed, reminder email).
+  **When adding a display, use one of those two — not the raw columns.**
+- **Archive, never delete.** An archived team keeps the work already assigned to
+  it and its members keep those reminders; it is only withheld from new
+  assignments (`Team::assignable()`).
+- `Reminders::runMaintenance()` expands a team assignment to its members and
+  narrows each member's digest to the work that is theirs — by name or through a
+  team they are in — so nobody gets a list of somebody else's jobs.
+- **Maintenance is the only assignment there is.** PAT is not scheduled per job;
+  its dates come from each asset's retest interval, and `tester_user_id` records
+  who *did* a test. There is nothing there for a team to take over.
+
+**Invitations and password resets** (`src/Models/UserToken.php`,
+`src/Mail/AccountMail.php`, `src/Controllers/AccountController.php`)
+
+- **One table, two purposes.** Issue, expire, consume — the same lifecycle, so
+  one implementation.
+- **The token is stored as a SHA-256.** The raw value exists only in the email
+  that was sent. A database dump is therefore not a set of working
+  account-takeover links — and a lost link cannot be looked up, only reissued.
+- **Issuing revokes the outstanding ones**, or "resend the invitation" would
+  leave the previous link working and a mis-sent invite could not be withdrawn.
+  Setting a password directly from `/admin/users` revokes both kinds too.
+- **`consume()` updates `WHERE used_at IS NULL`** and checks that the row moved.
+  That, not a prior SELECT, is what makes a double submission safe.
+- **The forgotten-password response never reveals whether an address exists** —
+  the same sentence whether it matched, whether the account was active, and
+  whether the send itself failed. The failure goes to `email_log`, which is
+  where an administrator will look.
+- **Requests share the sign-in throttle** (`LoginThrottle`), counted on a hit as
+  well as a miss: a counter that only moved on a miss would itself say which
+  addresses are real.
+- **Setting a password never signs anybody in.** Proving control of a mailbox is
+  enough to set a password; the password is what gets you in, through the normal
+  path with its own throttle and audit entry.
+- **`user_invite` and `password_reset` cannot be switched off** from the
+  templates screen (`EmailTemplate::LOCKED_ACTIVE`). A silenced template returns
+  false *without a log row*, which is right for a reminder and disastrous here:
+  the screen would go on saying "we have emailed you a link", nothing would
+  arrive, and nothing would record it. Switching email off entirely is the
+  supported way to have no invitations — it makes the application fall back to
+  an administrator setting the password directly.
+- **Everything degrades.** `AccountMail::isAvailable()` is `Mailer::isReady()`,
+  and it decides whether the user form asks for a password and whether the
+  forgotten-password page shows a form or an explanation. Nothing offers a flow
+  that cannot finish.
+- **The audit entries are written with `ActivityLog::recordAs()`**, because
+  nobody is signed in on these routes and `record()` would file them all under
+  "System" — true of the request, useless in the trail.
+
 ---
 
 ## 5. Build-prompt status
 
-All twelve prompts are **complete**. Nothing is partial or unstarted.
+All fifteen prompts are **complete**. Nothing is partial or unstarted.
 
 > **Terminology:** the application says **Hires** and **Hirers**, never loans or borrowers. Migration 017 renamed the schema to match, so code and interface use the same words — there is no compatibility shim and nothing left calling it a loan. Only the filenames of migrations 006 and 013 still carry the old words, because an applied migration is never edited.
 
@@ -802,6 +943,9 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 | 10 | PAT workflow: fixed values on the asset, guided test, scan buttons | complete | 2026-08-08 |
 | 11 | Navigation declutter, Hires/Hirers rename, scan as a quick action | complete | 2026-08-09 |
 | 12 | Outbound email, templates, reminders, calendar feeds | complete | 2026-08-10 |
+| 13 | Ten fixes: PAT wizard, scanner hand-off, editable maintenance records | complete | 2026-08-11 |
+| 14 | Role creation, branding/logo, HTML email, export page, print documents | complete | 2026-08-11 |
+| 15 | Nav polish, dashboard order, maintenance evidence, Teams, invites, password recovery | complete | 2026-08-11 |
 
 ### 5.1 What each prompt delivered
 
@@ -857,7 +1001,8 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
     guided step-by-step test with server-side enforcement of the verdict;
     configurable guideline pass ranges shown as helper text but never used to
     decide a result; a reusable scan button beside barcode fields.
-11. **Navigation and terminology** — six top-level destinations with the rest
+11. **Navigation and terminology** — six top-level destinations (five since
+    stage 15) with the rest
     nested under them, one markup for desktop drop-downs and mobile accordions,
     scan promoted to a persistent quick action, and loans/borrowers renamed to
     hires/hirers everywhere including the schema (migration 017).
@@ -866,6 +1011,25 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
     PAT, maintenance and hire reminders on a cron schedule with per-recipient
     de-duplication; one-click sends to a hirer; a log of every message; and a
     per-user authenticated `.ics` calendar feed scoped by role.
+13. **Ten fixes** — the PAT wizard's dead Next button (really a global
+    `[hidden]` bug, §6), the In Date banner, two nav entries, Export removed
+    from the register, the scanner handing off without a confirmation step,
+    editable maintenance records with a field-level audit trail, and three
+    presentation fixes on the asset page.
+14. **Branding and documents** — role creation, a logo (light and dark) reaching
+    the header, the sign-in page, both print mastheads and outbound email; HTML
+    email in a fixed shell with a plain-text alternative; a dedicated Export
+    page mirroring Import; and print documents for one asset and for a filtered
+    list.
+15. **Teams and accounts** — the nav bar down to five items with the wordmark
+    level with them and drop-downs that open on hover; Quick actions above a
+    more compact dashboard; a filter caret and no per-row Label button on the
+    register; camera capture and PDF attachments in maintenance evidence;
+    **Teams**, which maintenance can be assigned to instead of one person, with
+    every member reminded and able to act; **email invitations**, so a new user
+    sets their own password; and **self-service password recovery**. The last
+    two share one expiring, single-use, hash-at-rest link mechanism (§4.10) and
+    both fall back cleanly when no SMTP is configured.
 
 ### 5.2 What has been verified, and how
 
@@ -873,12 +1037,14 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 182 PHP files | 0 failures |
+| `php -l` on all 188 PHP files | 0 failures |
 | `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **2028 output expressions across 78 templates, 0 unescaped** |
-| All 18 migrations against an empty database | applied cleanly; schema as documented above |
-| Seed data counts | 4 roles / 32 permissions / 65 grants / 37 settings / 0 template overrides |
-| Migration 018 on the **populated** dev database | applied cleanly; existing rows untouched |
+| `tests/escape-audit.php` | **2136 output expressions across 85 templates, 0 unescaped** |
+| All 21 migrations against an empty database | applied cleanly; schema as documented above |
+| Seed data counts | 4 roles / 33 permissions / 66 grants / 39 settings / 0 template overrides / 1 demo team |
+| `tests/permission-matrix.php` | **312 checks, 0 mismatches** |
+| `tests/report-figures.php` | every figure agrees with the database |
+| Migrations 019–021 on the **populated** dev database | applied cleanly; existing rows untouched |
 
 **Stage 12 specifically, verified on this machine:**
 
@@ -959,6 +1125,24 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 | Wordmark | visible in every case, on its own line on a desktop |
 | Mobile (390px) | side by side, `bottomsDelta` **0.0px** — the wordmark's bottom sits exactly on the logo's, signed in and signed out |
 | Permission matrix after the reseed | **284 checks, 0 mismatches** — the first clean run; the harness's hirer account was stale and it now refuses to run rather than report a false hole |
+
+**Stage 15 (2026-08-11), verified on this machine:**
+
+| Check | Result |
+|---|---|
+| Nav bar with a logo at 1150 / 1280 / 1920px | **1 row**, header 61px, no horizontal overflow; five items, no Dashboard |
+| The wordmark against the menu | same 17px, same weight 600, **centres level to 0.0px**; not inside any link |
+| Breakpoint boundary | 1150px bar / 1149px drawer, 61px either side; the bar needs 1097px, so 53px of headroom |
+| Mobile (390px) | logo and wordmark side by side, `bottomsDelta` **0.0px** — unchanged from stage 14 |
+| Hover drop-downs | open after 140ms, close 260ms after leaving, only one open at a time; click still toggles both ways; gated on `(hover: hover) and (pointer: fine)` |
+| Dashboard | Quick actions second in the DOM, above both stat grids; cards **115px → 73/91px**; each grid's first row reaches the right-hand edge exactly (0px) |
+| Assets page | filter caret 8px after the label, rotates 180° when open; the only row action left is Edit |
+| Maintenance evidence, end to end | **22 checks**: camera and gallery inputs present, a PNG and a PDF posted through the real form, the document streamed inline as `application/pdf` with nosniff, `?download=1` an attachment, a mismatched log id 404, and a fake PDF refused without costing the record |
+| Teams, end to end | **38 checks**: CRUD, duplicate names refused, members added and listed, assignment control, the badge on the schedule page / list / asset page, "(team)" in the report and the CSV, filtering by team, reassignment clearing the other column, an unknown team id refused, and a manager 403'd from every Teams route |
+| A team member can act | **6 checks**: a member with `maintenance.complete` opens and files the completion; a member without it is 403'd — membership grants nothing |
+| Team reminders, real SMTP | **12 checks**: both members reminded, the hirer and the notify list not, the digest naming the team, a removed member no longer told about the team's job while the remaining one still is, and a second run fully suppressed |
+| Invitations and recovery, end to end | **51 checks**: the form asks for no password, one email sent, the token stored **only as a SHA-256**, no sign-in before setup, the "Invited" badge, single use, resend invalidating the old link, a direct password reset revoking it, the identical answer for a real / unknown / deactivated address, throttling, and both fallbacks with email off |
+| Link expiry | **13 checks**: the window comes from the setting, 0 clamps to 1 hour and 99999 to 30 days, the two windows are independent, an expired link explains itself and cannot be used, and deleting a user takes its tokens with it |
 
 **Shipped in `tests/` but requiring something more than PHP:**
 
@@ -1162,15 +1346,14 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
    `style-src 'unsafe-inline'` could be dropped today, and `script-src` could
    follow with a nonce plumbed through `View`. Off-origin scripts are blocked
    either way, which is the property the barcode-scanner decision rests on.
-7. **Still no password reset by email**, even though the application can now
-   send mail. This is a decision, not an oversight: a self-service reset needs
-   single-use expiring tokens, rate limiting and careful handling of the "does
-   this account exist" oracle, and stage 12 was asked for reminders and sharing,
-   not for a new authentication path. An administrator resets passwords from
-   `/admin/users`; `manage.sh reset-password EMAIL` (or `bin/create-admin.php
-   --email=…`) is the lockout escape hatch (README §"If you lock yourself out"),
+7. **Password reset by email exists as of stage 15** — this entry used to say it
+   did not, and that it would need "single-use expiring tokens, rate limiting
+   and careful handling of the *does this account exist* oracle" before it
+   could. It has all three; see §4.10. What remains true is that it needs
+   working SMTP, so `manage.sh reset-password EMAIL` (or `bin/create-admin.php
+   --email=…`) is still the escape hatch when email is the thing that is broken,
    and it also reactivates the account and clears `login_attempts` so the
-   lockout lifts at once. **If this is ever added, it is its own prompt.**
+   lockout lifts at once (README §"If you lock yourself out").
 8. **No soft delete for assets.** There is archive (`status = 'Retired'`,
    `retired_on`) and there is hard delete, gated behind `assets.delete`. Deleting
    an asset cascades its photos, manuals, PAT records and maintenance history —
@@ -1306,6 +1489,29 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   reach — so "Settings" wrapped to a second row at *every* desktop size. The
   name now lives in the account drop-down instead. **If you add a seventh
   top-level nav item, re-measure.**
+- **A route placeholder cannot contain a `{n}` quantifier.** `Router` parses
+  placeholders with `#\{([a-zA-Z_]\w*)(?::([^}]+))?\}#`, and `[^}]+` stops at
+  the first closing brace — so `{token:[a-f0-9]{64}}` compiles to a pattern that
+  matches nothing and the route silently 404s. Use `[a-f0-9]+` (as the calendar
+  feed already did) and check the exact length in the code that consumes it;
+  `UserToken::inspect()` does.
+- **A media query adds no specificity.** Two single-class rules for
+  `.brand-stack` — one mobile, one inside `@media (min-width: 1150px)` — are
+  decided by source order alone, so the desktop block has to come *after* the
+  mobile one in the file or it silently loses. The desktop brand rules therefore
+  sit at the end of the branding section, not with the rest of the desktop
+  navigation, and both places say why.
+- **`rem` is not the body size here.** The body is 17px and the root is left at
+  16px, so `font-size: 1rem` on something meant to match a nav item is a
+  *smaller* font. Use `inherit`.
+- **Assert on what a message says, not on who received it.** A team-reminder
+  test that checked "the removed member gets no email" failed for an honest
+  reason: they still had a job of their own assigned by name. What had to stop
+  was the *team's* job appearing in their digest. Assert on contents.
+- **A test fixture on a retired asset proves nothing.** Every maintenance query
+  carries `a.status <> 'Retired'`, so a schedule created against a retired asset
+  is correctly invisible everywhere and reads as five separate feature failures.
+  Seeded asset 1 is retired.
 - **`install.sh` and `manage.sh` must keep LF line endings.** `.gitattributes`
   enforces it; a CRLF shebang fails with a misleading "not found".
 - **Adding a required field to the settings form** breaks every test that POSTs a
@@ -1350,3 +1556,12 @@ php tests/security-audit.php && php tests/escape-audit.php
 8. The four kinds of maintenance are set out in §5.1 item 4. If a change makes
    *unplanned work* harder to reach, it is a regression — that is the one that
    has already been reported as missing once.
+9. Email now does more than remind people: **new users are invited by email and
+   anyone can reset their own password** (§4.10). Both fall back sensibly with
+   no SMTP, and both stop working the moment somebody switches email off — which
+   is deliberate, but worth knowing before switching it off.
+10. **Adding a seventh top-level nav item means re-measuring the header.** The
+    bar needs 1097px as it stands and the breakpoint is 1150px; the arithmetic
+    is in the comment above the `@media` block in `app.css`, and three places
+    have to agree on the number (two blocks there plus the `matchMedia` in
+    `app.js`).

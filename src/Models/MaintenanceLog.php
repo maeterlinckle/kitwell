@@ -23,7 +23,8 @@ final class MaintenanceLog
                                    s.title AS schedule_title, s.maintenance_type AS schedule_type,
                                    u.name AS performed_by_user_name,
                                    cu.name AS created_by_name,
-                                   (SELECT COUNT(*) FROM maintenance_log_photos p WHERE p.maintenance_log_id = m.id) AS photo_count
+                                   (SELECT COUNT(*) FROM maintenance_log_photos p WHERE p.maintenance_log_id = m.id) AS photo_count,
+                                   (SELECT COUNT(*) FROM maintenance_log_documents d WHERE d.maintenance_log_id = m.id) AS document_count
                               FROM maintenance_logs m
                               INNER JOIN assets a ON a.id = m.asset_id
                               LEFT JOIN maintenance_schedules s ON s.id = m.schedule_id
@@ -221,5 +222,40 @@ final class MaintenanceLog
     public static function deletePhoto(int $photoId): void
     {
         Database::run('DELETE FROM maintenance_log_photos WHERE id = ?', [$photoId]);
+    }
+
+    // -- Documents ----------------------------------------------------------
+    // The paperwork behind a visit: a contractor's service report, a
+    // certificate, an invoice. Same shape as asset manuals, hung off the log
+    // rather than the asset so it stays with the visit it describes.
+
+    /** @return array<int,array<string,mixed>> */
+    public static function documents(int $logId): array
+    {
+        return Database::select(
+            'SELECT d.*, u.name AS uploaded_by_name
+               FROM maintenance_log_documents d
+               LEFT JOIN users u ON u.id = d.uploaded_by
+              WHERE d.maintenance_log_id = ?
+              ORDER BY d.id',
+            [$logId]
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public static function findDocument(int $documentId): ?array
+    {
+        return Database::selectOne('SELECT * FROM maintenance_log_documents WHERE id = ?', [$documentId]);
+    }
+
+    /** @param array<string,mixed> $data */
+    public static function addDocument(array $data): int
+    {
+        return Database::insert('maintenance_log_documents', $data);
+    }
+
+    public static function deleteDocument(int $documentId): void
+    {
+        Database::run('DELETE FROM maintenance_log_documents WHERE id = ?', [$documentId]);
     }
 }

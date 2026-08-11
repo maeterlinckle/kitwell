@@ -60,6 +60,8 @@ final class EmailController extends Controller
             'mail_reply_to'     => 'email|max:190',
             'mail_timeout'      => 'required|integer|min_value:5|max_value:120',
             'mail_password'     => 'max:255',
+            'invite_expiry_hours'         => 'required|integer|min_value:1|max_value:720',
+            'password_reset_expiry_hours' => 'required|integer|min_value:1|max_value:168',
         ], [
             'mail_host'         => 'SMTP host',
             'mail_port'         => 'Port',
@@ -70,6 +72,8 @@ final class EmailController extends Controller
             'mail_reply_to'     => 'Reply-to address',
             'mail_timeout'      => 'Timeout',
             'mail_password'     => 'Password',
+            'invite_expiry_hours'         => 'Invitation link expiry',
+            'password_reset_expiry_hours' => 'Password reset link expiry',
         ], '/admin/email');
 
         $enabled = Request::boolean('mail_enabled');
@@ -103,6 +107,12 @@ final class EmailController extends Controller
         Setting::put('mail_from_name',    (string) $data['mail_from_name']);
         Setting::put('mail_reply_to',     (string) $data['mail_reply_to']);
         Setting::put('mail_timeout',      (string) (int) $data['mail_timeout']);
+
+        // How long an invitation and a password-reset link stay usable. Kept on
+        // this page because both only exist when email works, and this is where
+        // somebody comes to make email work.
+        Setting::put('invite_expiry_hours',         (string) (int) $data['invite_expiry_hours']);
+        Setting::put('password_reset_expiry_hours', (string) (int) $data['password_reset_expiry_hours']);
 
         // The password field is left blank on every page load, so a blank
         // submission means "leave it alone" rather than "clear it" — clearing
@@ -432,7 +442,11 @@ final class EmailController extends Controller
             (string) $data['subject'],
             (string) $data['body'],
             Request::boolean('is_html'),
-            Request::boolean('is_active')
+            // The invite and reset messages carry a link somebody is waiting
+            // for, so they cannot be silenced from here — see
+            // EmailTemplate::LOCKED_ACTIVE. The form hides the switch; this is
+            // what makes hiding it more than a suggestion.
+            EmailTemplate::canBeDisabled($key) ? Request::boolean('is_active') : true
         );
 
         ActivityLog::record('updated', 'email_template', null, 'Edited the “' . $template['name'] . '” email template');

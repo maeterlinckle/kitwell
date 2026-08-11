@@ -82,11 +82,12 @@ $typePermission = [
                     <label class="checkbox">
                         <input type="checkbox" name="reminder_maintenance_assignee" value="1"
                             <?= $setting('reminder_maintenance_assignee', '1') === '1' ? 'checked' : '' ?>>
-                        <span>Also tell the person a job is assigned to</span>
+                        <span>Also tell whoever a job is assigned to</span>
                     </label>
                     <p class="field-hint">
                         They get their own jobs only, whether or not they are on the notify list below.
-                        They still need permission to see maintenance.
+                        A job assigned to a <a href="<?= e(url('/admin/teams')) ?>">team</a> goes to every
+                        member of it. They still need permission to see maintenance.
                     </p>
                 </div>
             <?php endif; ?>

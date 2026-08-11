@@ -121,12 +121,12 @@ HTML,
             'fields' => [
                 'count' => 'How many jobs are listed',
                 'days'  => 'The “due soon” window, in days',
-                'items' => 'The list itself: job title, asset, and due date',
+                'items' => 'The list itself: job title, asset, who it is assigned to, and due date',
             ],
             'sample' => [
                 'count' => '2',
                 'days'  => '30',
-                'items' => "Annual service — AST-0004 Compressor — due 2 Sep 2026\nBelt inspection — AST-0009 Bandsaw — due 9 Sep 2026",
+                'items' => "Annual service — AST-0004 Compressor — Bench fitters (team) — due 2 Sep 2026\nBelt inspection — AST-0009 Bandsaw — Sam Staff — due 9 Sep 2026",
             ],
         ],
 
@@ -146,11 +146,11 @@ HTML,
 HTML,
             'fields' => [
                 'count' => 'How many jobs are listed',
-                'items' => 'The list itself: job title, asset, and how overdue it is',
+                'items' => 'The list itself: job title, asset, who it is assigned to, and how overdue it is',
             ],
             'sample' => [
                 'count' => '1',
-                'items' => 'Annual service — AST-0004 Compressor — 6 days overdue',
+                'items' => 'Annual service — AST-0004 Compressor — Bench fitters (team) — 6 days overdue',
             ],
         ],
 
@@ -283,6 +283,84 @@ HTML,
             ],
         ],
 
+        // -- Accounts -------------------------------------------------------
+        // Both of these carry a single-use link. Neither may be switched off
+        // from the templates screen — see EmailTemplate::LOCKED_ACTIVE.
+        'user_invite' => [
+            'name'        => 'Invitation to set up an account',
+            'description' => 'Sent when an administrator adds a new user. The link lets them confirm their details and choose their own password.',
+            'group'       => 'Accounts',
+            'subject'     => 'Your {{app_name}} account is ready to set up',
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
+
+<p>{{invited_by}} has set up an account for you on <strong>{{app_name}}</strong>, the
+equipment register for {{organisation_name}}.</p>
+
+<div class="items">
+  <strong>{{recipient_name}}</strong><br>
+  Sign in with: {{email}}<br>
+  Role: {{role_name}}
+</div>
+
+<p>Choose a password to finish setting it up:</p>
+
+<p><a href="{{invite_url}}">Set your password</a></p>
+
+<p>This link works once and expires in {{expires_in}}. If it has lapsed by the time you
+get to it, ask an administrator to send you a fresh one.</p>
+
+<p>If you were not expecting this, you can ignore it — the account cannot be used until
+somebody sets a password on it.</p>
+HTML,
+            'fields' => [
+                'email'      => 'The address they will sign in with',
+                'role_name'  => 'The role they have been given',
+                'invited_by' => 'Name of the administrator who created the account',
+                'invite_url' => 'The single-use link itself. A message without this is a message nobody can act on',
+                'expires_in' => 'How long the link lasts, e.g. “3 days”',
+            ],
+            'sample' => [
+                'email'      => 'jo.fitter@example.com',
+                'role_name'  => 'Manager / Staff',
+                'invited_by' => 'Alex Admin',
+                'invite_url' => 'https://register.example.com/invite/2f6c…',
+                'expires_in' => '3 days',
+            ],
+        ],
+
+        'password_reset' => [
+            'name'        => 'Password reset link',
+            'description' => 'Sent when somebody uses “Forgotten your password?” on the sign-in page.',
+            'group'       => 'Accounts',
+            'subject'     => 'Reset your {{app_name}} password',
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
+
+<p>Somebody asked to reset the password for <strong>{{email}}</strong> on {{app_name}}.</p>
+
+<p><a href="{{reset_url}}">Choose a new password</a></p>
+
+<p>This link works once and expires in {{expires_in}}.</p>
+
+<p><strong>If that was not you, no action is needed.</strong> Your password has not been
+changed, and it will not change unless somebody opens the link above. If you keep
+receiving these, tell an administrator.</p>
+HTML,
+            'fields' => [
+                'email'      => 'The address the reset was requested for',
+                'reset_url'  => 'The single-use link itself',
+                'expires_in' => 'How long the link lasts, e.g. “2 hours”',
+                'requested_at' => 'When the reset was asked for',
+            ],
+            'sample' => [
+                'email'        => 'jo.fitter@example.com',
+                'reset_url'    => 'https://register.example.com/reset-password/9a41…',
+                'expires_in'   => '2 hours',
+                'requested_at' => '11 Aug 2026, 09:14',
+            ],
+        ],
+
         // -- Diagnostics ----------------------------------------------------
         'smtp_test' => [
             'name'        => 'SMTP test message',
@@ -313,6 +391,26 @@ HTML,
             ],
         ],
     ];
+
+    /**
+     * Templates whose wording may be edited but which cannot be switched off.
+     *
+     * A silenced template returns false from Mailer::sendTemplate() *without*
+     * writing a log row, which is right for a reminder somebody has decided
+     * they do not want. It is wrong for these two: the interface would go on
+     * saying "we have emailed you a link", the link would never arrive, and
+     * nothing anywhere would record that it had not. Anyone who genuinely wants
+     * no invitations can switch email off, which makes the application fall
+     * back to an administrator setting the password directly.
+     *
+     * @var array<int,string>
+     */
+    public const LOCKED_ACTIVE = ['user_invite', 'password_reset'];
+
+    public static function canBeDisabled(string $key): bool
+    {
+        return !in_array($key, self::LOCKED_ACTIVE, true);
+    }
 
     /** Every template key the application knows about. */
     public static function keys(): array
@@ -360,7 +458,12 @@ HTML,
             'is_html'         => $override === null
                 ? ($default['is_html'] ?? true)
                 : (int) $override['is_html'] === 1,
-            'is_active'       => $override === null || (int) $override['is_active'] === 1,
+            // Enforced here rather than only at the point of saving, so a row
+            // that predates the rule (or was edited by hand) still sends.
+            'is_active'       => !self::canBeDisabled($key)
+                || $override === null
+                || (int) $override['is_active'] === 1,
+            'can_be_disabled' => self::canBeDisabled($key),
             'is_customised'   => $override !== null,
             'updated_at'      => $override['updated_at'] ?? null,
             'updated_by_name' => $override['updated_by_name'] ?? null,

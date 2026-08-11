@@ -34,6 +34,27 @@ $canReport = can('reports.view');
     <?php endif; ?>
 </div>
 
+<?php /* The errands first, the figures second. Almost everyone arriving here is
+         on their way to scan something or book something out; the counts are
+         what you read when nothing in particular has brought you. */ ?>
+<?php if (can('assets.view')): ?>
+    <div class="card quick-actions">
+        <h2>Quick actions</h2>
+        <div class="quick-action-row">
+            <a class="btn btn-primary btn-lg" href="<?= e(url('/scan')) ?>">Scan an asset</a>
+            <?php if (can('hires.create')): ?>
+                <a class="btn btn-lg" href="<?= e(url('/scan?mode=checkout')) ?>">Check out</a>
+            <?php endif; ?>
+            <?php if (can('hires.return')): ?>
+                <a class="btn btn-lg" href="<?= e(url('/scan?mode=return')) ?>">Book in</a>
+            <?php endif; ?>
+            <?php if (can('assets.create')): ?>
+                <a class="btn btn-lg" href="<?= e(url('/assets/create')) ?>">Add asset</a>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <?php if (isset($stats['assets'])): ?>
     <h2 class="section-title">Assets</h2>
     <div class="stat-grid">
@@ -99,24 +120,6 @@ $canReport = can('reports.view');
                 $canReport ? '/reports/hires-due-back?window=soon' : '/hires',
                 ((int) $stats['hires']['due_soon']) > 0 ? 'warn' : '') ?>
         <?php endif; ?>
-    </div>
-<?php endif; ?>
-
-<?php if (can('assets.view')): ?>
-    <div class="card quick-actions">
-        <h2>Quick actions</h2>
-        <div class="quick-action-row">
-            <a class="btn btn-primary btn-lg" href="<?= e(url('/scan')) ?>">Scan an asset</a>
-            <?php if (can('hires.create')): ?>
-                <a class="btn btn-lg" href="<?= e(url('/scan?mode=checkout')) ?>">Check out</a>
-            <?php endif; ?>
-            <?php if (can('hires.return')): ?>
-                <a class="btn btn-lg" href="<?= e(url('/scan?mode=return')) ?>">Book in</a>
-            <?php endif; ?>
-            <?php if (can('assets.create')): ?>
-                <a class="btn btn-lg" href="<?= e(url('/assets/create')) ?>">Add asset</a>
-            <?php endif; ?>
-        </div>
     </div>
 <?php endif; ?>
 

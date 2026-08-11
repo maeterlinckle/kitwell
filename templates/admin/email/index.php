@@ -199,6 +199,42 @@ $authUser = auth_user();
         </div>
     </div>
 
+    <?php /* Both of these only exist because email does, which is why they live
+             on this page rather than in application settings. */ ?>
+    <div class="card">
+        <h2>Account links</h2>
+        <p class="muted">
+            How long the single-use links in an invitation and a password reset stay usable. Each is
+            good for one use and is invalidated as soon as a newer one is issued.
+        </p>
+
+        <div class="field-row">
+            <div class="field">
+                <label class="label" for="invite_expiry_hours">Invitation expires after (hours)</label>
+                <input class="input<?= isset($errors['invite_expiry_hours']) ? ' has-error' : '' ?>" type="number"
+                       id="invite_expiry_hours" name="invite_expiry_hours" min="1" max="720" step="1" required
+                       value="<?= e(old($old, 'invite_expiry_hours', $setting('invite_expiry_hours', '72'))) ?>">
+                <p class="field-hint">
+                    An invitation is expected, and the person may be away for a day or two — 72 hours is
+                    generous without leaving a working link lying in a mailbox for a month.
+                </p>
+                <?php if (isset($errors['invite_expiry_hours'])): ?><p class="field-error"><?= e($errors['invite_expiry_hours']) ?></p><?php endif; ?>
+            </div>
+
+            <div class="field">
+                <label class="label" for="password_reset_expiry_hours">Password reset expires after (hours)</label>
+                <input class="input<?= isset($errors['password_reset_expiry_hours']) ? ' has-error' : '' ?>" type="number"
+                       id="password_reset_expiry_hours" name="password_reset_expiry_hours" min="1" max="168" step="1" required
+                       value="<?= e(old($old, 'password_reset_expiry_hours', $setting('password_reset_expiry_hours', '2'))) ?>">
+                <p class="field-hint">
+                    A reset is asked for a moment before it arrives, so this should be short — the window
+                    in which a forwarded or intercepted message is worth anything.
+                </p>
+                <?php if (isset($errors['password_reset_expiry_hours'])): ?><p class="field-error"><?= e($errors['password_reset_expiry_hours']) ?></p><?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <div class="form-actions">
         <button type="submit" class="btn btn-primary btn-lg">Save email settings</button>
     </div>

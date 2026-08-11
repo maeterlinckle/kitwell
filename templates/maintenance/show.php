@@ -99,7 +99,7 @@ $id = (int) $schedule['id'];
                             <?php endif; ?>
 
                             <?php if ((int) $log['photo_count'] > 0): ?>
-                                <?= partial('partials/maintenance-log-photos', ['log' => $log]) ?>
+                                <?= partial('partials/maintenance-log-evidence', ['log' => $log]) ?>
                             <?php endif; ?>
                         </li>
                     <?php endforeach; ?>
@@ -115,7 +115,7 @@ $id = (int) $schedule['id'];
                 <div><dt>Next due</dt><dd><?= e(format_date($schedule['next_due_date'])) ?></dd></div>
                 <div><dt>Last completed</dt><dd><?= e(format_date($schedule['last_completed_date'])) ?></dd></div>
                 <div><dt>Repeats</dt><dd><?= e(MaintenanceSchedule::describeFrequency($schedule)) ?></dd></div>
-                <div><dt>Assigned to</dt><dd><?= e($schedule['assigned_to_name'] ?? 'Nobody in particular') ?></dd></div>
+                <div><dt>Assigned to</dt><dd><?= partial('partials/assignee', ['schedule' => $schedule, 'none' => 'Nobody in particular']) ?></dd></div>
                 <?php if ($schedule['estimated_minutes'] !== null): ?>
                     <div><dt>Estimated</dt><dd><?= (int) $schedule['estimated_minutes'] ?> minutes</dd></div>
                 <?php endif; ?>

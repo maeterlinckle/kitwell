@@ -17,6 +17,8 @@ use App\Models\Category;
 use App\Models\Location;
 use App\Models\MaintenanceLog;
 use App\Models\MaintenanceSchedule;
+use App\Models\Team;
+use App\Models\User;
 
 final class MaintenanceController extends Controller
 {
@@ -45,6 +47,7 @@ final class MaintenanceController extends Controller
             'categories'  => Category::all(true),
             'locations'   => Location::forSelect(),
             'users'       => MaintenanceSchedule::assignableUsers(),
+            'teams'       => MaintenanceSchedule::assignableTeams(),
             'queryString' => self::queryString($filters),
         ]);
     }
@@ -100,6 +103,7 @@ final class MaintenanceController extends Controller
             'asset'     => $asset,
             'assets'    => $asset === null ? Asset::search(['type' => ''], 1, 500)['rows'] : [],
             'users'     => MaintenanceSchedule::assignableUsers(),
+            'teams'     => MaintenanceSchedule::assignableTeams(),
         ]);
     }
 
@@ -137,6 +141,7 @@ final class MaintenanceController extends Controller
             'asset'     => Asset::find((int) $schedule['asset_id']),
             'assets'    => [],
             'users'     => MaintenanceSchedule::assignableUsers(),
+            'teams'     => MaintenanceSchedule::assignableTeams(),
         ]);
     }
 
@@ -544,6 +549,7 @@ final class MaintenanceController extends Controller
         ]);
 
         $this->attachPhotos($logId);
+        $this->attachDocuments($logId);
 
         // Roll the schedule forward. The form carries the calculated next due
         // date so it can be overridden before saving.
@@ -580,6 +586,7 @@ final class MaintenanceController extends Controller
             $followUpId = MaintenanceSchedule::createFollowUp($assetId, [
                 'title'               => $title,
                 'due_date'            => $followUpDue,
+                'assigned_to_team_id' => $schedule === null ? null : ($schedule['assigned_to_team_id'] ?? null),
                 'assigned_to_user_id' => $performedByUserId > 0 ? $performedByUserId : null,
                 'instructions'        => "Follow-up on the work recorded on " . format_date($data['performed_on'])
                     . ":\n\n" . str_limit((string) $data['work_done'], 1000),
@@ -679,6 +686,99 @@ final class MaintenanceController extends Controller
         }
     }
 
+    /**
+     * Optional documents attached to a completion.
+     *
+     * The paperwork a visit produces — a contractor's service report, a
+     * calibration certificate, an invoice. Validated exactly as an asset manual
+     * is: the byte size, the extension and the sniffed MIME all against the
+     * `pdf` limits in config/config.php, with the stored name generated rather
+     * than taken from the client.
+     */
+    private function attachDocuments(int $logId): void
+    {
+        $files = Upload::files('documents');
+
+        if ($files === []) {
+            return;
+        }
+
+        $maxBytes   = (int) Config::get('uploads.max_pdf_bytes');
+        $mimes      = (array) Config::get('uploads.pdf_mimes');
+        $extensions = (array) Config::get('uploads.pdf_extensions');
+
+        $title = trim((string) Request::post('document_title', ''));
+
+        foreach ($files as $index => $file) {
+            $error = Upload::validate($file, $mimes, $extensions, $maxBytes);
+
+            if ($error !== null) {
+                Flash::error($error);
+                continue;
+            }
+
+            $displayName = Upload::displayName($file['name']);
+
+            // One title for a single file; several at once fall back to each
+            // file's own name so they stay distinguishable in the list.
+            $documentTitle = ($title !== '' && count($files) === 1)
+                ? $title
+                : ($title !== '' ? $title . ' (' . ($index + 1) . ')' : pathinfo($displayName, PATHINFO_FILENAME));
+
+            MaintenanceLog::addDocument([
+                'maintenance_log_id' => $logId,
+                'title'              => mb_substr($documentTitle, 0, 191),
+                'file_path'          => Upload::store($file, 'maintenance/' . $logId . '/documents', 'pdf'),
+                'original_filename'  => $displayName,
+                'mime_type'          => 'application/pdf',
+                'file_size_bytes'    => (int) $file['size'],
+                'notes'              => null,
+                'uploaded_by'        => Auth::id(),
+            ]);
+        }
+    }
+
+    /** Stream a document attached to a maintenance log. */
+    public function document(string $logId, string $documentId): void
+    {
+        $document = MaintenanceLog::findDocument((int) $documentId);
+
+        if ($document === null || (int) $document['maintenance_log_id'] !== (int) $logId) {
+            $this->notFound('That document is no longer attached to this record.');
+        }
+
+        $path = Upload::absolutePath((string) $document['file_path']);
+
+        if ($path === null) {
+            $this->notFound('The file is missing from the server. It may need re-uploading.');
+        }
+
+        $download = Request::query('download') === '1';
+        $filename = Upload::displayName((string) ($document['original_filename'] ?: $document['title'] . '.pdf'));
+
+        if (!str_ends_with(strtolower($filename), '.pdf')) {
+            $filename .= '.pdf';
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/pdf');
+        header('Content-Length: ' . (string) filesize($path));
+        header(sprintf(
+            '%s; filename="%s"',
+            'Content-Disposition: ' . ($download ? 'attachment' : 'inline'),
+            str_replace('"', '', $filename)
+        ));
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, max-age=600');
+        header_remove('Pragma');
+
+        readfile($path);
+        exit;
+    }
+
     /** Stream a photo attached to a maintenance log. */
     public function photo(string $logId, string $photoId): void
     {
@@ -729,7 +829,7 @@ final class MaintenanceController extends Controller
             'frequency_unit'      => 'in:' . implode(',', MaintenanceSchedule::UNITS),
             'next_due_date'       => 'date',
             'last_completed_date' => 'date',
-            'assigned_to_user_id' => 'integer',
+            'assigned_to'         => 'max:20',
             'estimated_minutes'   => 'integer|min_value:1|max_value:65535',
             'instructions'        => 'max:5000',
         ], [
@@ -739,7 +839,7 @@ final class MaintenanceController extends Controller
             'frequency_interval'  => 'Interval',
             'frequency_unit'      => 'Interval unit',
             'next_due_date'       => 'Next due date',
-            'assigned_to_user_id' => 'Assigned to',
+            'assigned_to'         => 'Assigned to',
         ], $redirect);
 
         $type = (string) $data['maintenance_type'];
@@ -778,7 +878,18 @@ final class MaintenanceController extends Controller
             }
         }
 
-        $assignedTo = (int) $data['assigned_to_user_id'];
+        // One control, one value, and exactly one of the two columns written.
+        // Assigning to a team is not "also assign to a person", so the other
+        // column is always cleared rather than left as it was.
+        [$assigneeKind, $assigneeId] = MaintenanceSchedule::parseAssignee((string) $data['assigned_to']);
+
+        if ($assigneeKind === 'user' && User::find($assigneeId) === null) {
+            $this->failValidation(['assigned_to' => 'That person no longer has an account.'], $redirect);
+        }
+
+        if ($assigneeKind === 'team' && Team::find($assigneeId) === null) {
+            $this->failValidation(['assigned_to' => 'That team no longer exists.'], $redirect);
+        }
 
         return [
             'asset_id'            => (int) $data['asset_id'],
@@ -790,7 +901,8 @@ final class MaintenanceController extends Controller
                 ? $data['frequency_unit'] : null,
             'next_due_date'       => $data['next_due_date'] !== '' ? $data['next_due_date'] : null,
             'last_completed_date' => $data['last_completed_date'] !== '' ? $data['last_completed_date'] : null,
-            'assigned_to_user_id' => $assignedTo > 0 ? $assignedTo : null,
+            'assigned_to_user_id' => $assigneeKind === 'user' ? $assigneeId : null,
+            'assigned_to_team_id' => $assigneeKind === 'team' ? $assigneeId : null,
             'estimated_minutes'   => $data['estimated_minutes'] !== '' ? (int) $data['estimated_minutes'] : null,
             'instructions'        => $data['instructions'] !== '' ? $data['instructions'] : null,
         ];

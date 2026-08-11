@@ -42,6 +42,10 @@
     <button type="submit" class="btn btn-primary btn-block btn-lg">Sign in</button>
 </form>
 
+<?php /* The link is shown whether or not email is configured. The page behind it
+         is honest either way — with no SMTP it says so and names the thing that
+         does work — and hiding it would leave somebody who has forgotten their
+         password looking at a page with no answer on it at all. */ ?>
 <p class="auth-help muted">
-    Forgotten your password? An administrator can reset it for you.
+    <a href="<?= e(url('/forgot-password')) ?>">Forgotten your password?</a>
 </p>

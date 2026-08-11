@@ -163,7 +163,7 @@ final class CalendarFeed
                     'Asset'       => (string) $row['asset_tag'] . ' — ' . (string) $row['asset_name'],
                     'Status'      => (string) $row['due_status'],
                     'Frequency'   => MaintenanceSchedule::describeFrequency($row),
-                    'Assigned to' => (string) ($row['assigned_to_name'] ?? 'nobody'),
+                    'Assigned to' => MaintenanceSchedule::assigneeLabel($row, 'nobody'),
                 ]),
                 'location'    => (string) ($row['location_name'] ?? ''),
                 'path'        => '/maintenance/' . (int) $row['id'],

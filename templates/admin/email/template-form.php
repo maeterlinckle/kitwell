@@ -79,16 +79,25 @@
                     </p>
                 </div>
 
-                <div class="field">
-                    <label class="checkbox">
-                        <input type="checkbox" name="is_active" value="1" <?= $emailTemplate['is_active'] === true ? 'checked' : '' ?>>
-                        <span>Send this message</span>
-                    </label>
+                <?php if (($emailTemplate['can_be_disabled'] ?? true) === true): ?>
+                    <div class="field">
+                        <label class="checkbox">
+                            <input type="checkbox" name="is_active" value="1" <?= $emailTemplate['is_active'] === true ? 'checked' : '' ?>>
+                            <span>Send this message</span>
+                        </label>
+                        <p class="field-hint">
+                            Untick to suppress this one message without switching off email or the reminder
+                            it belongs to.
+                        </p>
+                    </div>
+                <?php else: ?>
                     <p class="field-hint">
-                        Untick to suppress this one message without switching off email or the reminder
-                        it belongs to.
+                        This message carries a link somebody is waiting for, so it cannot be switched off
+                        on its own — the screen would go on promising an email that never arrived. Turn off
+                        email altogether in <a href="<?= e(url('/admin/email')) ?>">Settings → Email</a> and
+                        administrators set passwords directly instead.
                     </p>
-                </div>
+                <?php endif; ?>
             </div>
 
             <div class="form-actions">

@@ -161,6 +161,17 @@ $permissionExempt = [
     // would make sense here: the page that needs it most is the one shown to
     // people who have not signed in.
     '/branding/logo/{variant:light|dark}',
+    // Accepting an invitation and resetting a forgotten password. A permission
+    // check here is a contradiction in terms: the person has no session, and in
+    // the invite case has never had one. What stands in for it is the token —
+    // 32 random bytes, stored only as a SHA-256, good for one use, with an
+    // expiry an administrator sets. The forgotten-password pages take no token
+    // at all and reveal nothing: the same answer is given whether or not the
+    // address exists, and requests are metered on the sign-in throttle.
+    // See App\Controllers\AccountController and App\Models\UserToken.
+    '/invite/{token:[a-f0-9]+}',
+    '/forgot-password',
+    '/reset-password/{token:[a-f0-9]+}',
 ];
 
 $noPermission = [];

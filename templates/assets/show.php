@@ -284,7 +284,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                                     <span class="cell-sub muted">
                                         <?= e(\App\Models\MaintenanceSchedule::describeFrequency($schedule)) ?>
                                         <?php if (!empty($schedule['assigned_to_name'])): ?>
-                                            · <?= e($schedule['assigned_to_name']) ?>
+                                            · <?= partial('partials/assignee', ['schedule' => $schedule]) ?>
                                         <?php endif; ?>
                                     </span>
                                 </div>
@@ -321,7 +321,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                                     <?php endif; ?>
                                 </p>
                                 <?php if ((int) $log['photo_count'] > 0): ?>
-                                    <?= partial('partials/maintenance-log-photos', ['log' => $log]) ?>
+                                    <?= partial('partials/maintenance-log-evidence', ['log' => $log]) ?>
                                 <?php endif; ?>
                             </li>
                         <?php endforeach; ?>

@@ -3,6 +3,8 @@
  * @var array<int,array<string,mixed>> $users
  * @var array<int,array<string,mixed>> $roles
  * @var array<string,string> $filters
+ * @var array<int,string>    $inviteStates  user id => accepted|pending|expired
+ * @var bool                 $canInvite
  */
 ?>
 <div class="page-head">
@@ -79,6 +81,17 @@
                         <span class="badge badge-ok">Active</span>
                     <?php else: ?>
                         <span class="badge badge-muted">Inactive</span>
+                    <?php endif; ?>
+
+                    <?php /* An account nobody has finished setting up looks
+                             exactly like a working one otherwise, which is how
+                             a new starter ends up locked out on their first
+                             morning with nobody able to say why. */ ?>
+                    <?php $invited = $inviteStates[(int) $user['id']] ?? null; ?>
+                    <?php if ($invited === 'pending'): ?>
+                        <div class="cell-sub"><span class="badge badge-warn">Invited</span></div>
+                    <?php elseif ($invited === 'expired'): ?>
+                        <div class="cell-sub"><span class="badge badge-danger">Invite expired</span></div>
                     <?php endif; ?>
                 </td>
                 <td class="nowrap"><?= e(format_datetime($user['last_login_at'])) ?></td>

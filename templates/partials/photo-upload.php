@@ -2,9 +2,8 @@
 /**
  * Photo upload form. Shared by the asset detail page and the photo timeline.
  *
- * Two separate inputs on purpose: on a phone, "Take photo" opens the camera
- * straight away, while "Choose files" opens the gallery for photos taken
- * earlier. One combined input makes the phone ask every time.
+ * The camera/gallery pair itself lives in partials/photo-inputs, because the
+ * maintenance evidence section uses the same control.
  *
  * @var array<string,mixed> $asset
  */
@@ -15,19 +14,7 @@ $maxMb = (int) (config('uploads.max_photo_bytes') / 1048576);
       data-photo-form data-max-bytes="<?= (int) config('uploads.max_photo_bytes') ?>">
     <?= csrf_field() ?>
 
-    <div class="photo-inputs">
-        <label class="btn btn-primary btn-file">
-            <span>Take photo</span>
-            <input type="file" name="photos[]" accept="image/*" capture="environment" multiple
-                   data-photo-input hidden>
-        </label>
-
-        <label class="btn btn-file">
-            <span>Choose files</span>
-            <input type="file" name="photos[]" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
-                   multiple data-photo-input hidden>
-        </label>
-    </div>
+    <?= partial('partials/photo-inputs', ['name' => 'photos[]', 'primary' => true]) ?>
 
     <p class="field-hint">
         JPEG, PNG or WebP (and HEIC from an iPhone), up to <?= (int) $maxMb ?> MB each.

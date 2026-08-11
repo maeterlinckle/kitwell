@@ -17,7 +17,8 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 - **Condition photos** — a dated visual history per asset, straightened and
   resized on upload.
 - **Maintenance** — routine, periodic and one-off schedules, completions with
-  parts, cost and photos, and a clear view of what is overdue or coming up.
+  parts, cost, photos and the contractor's paperwork, and a clear view of what
+  is overdue or coming up. Assign a job to a person or to a **team**.
 - **PAT testing** — full test history per asset with every reading and its
   unit, and an at-a-glance status that treats a failure as a failure.
 - **Hires** — check out by barcode scan or by hand, due dates, returns
@@ -31,6 +32,9 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
   hire list"; editable templates; and a log of every message, sent or failed.
 - **Calendar** — each user can subscribe their own calendar app to the dates
   their role lets them see.
+- **Accounts** — new users are emailed an invitation and set their own
+  password; anyone who forgets theirs can reset it by email. Both links are
+  single-use with a configurable expiry, and both degrade sensibly with no SMTP.
 
 ---
 
@@ -43,6 +47,8 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 - [Upgrading](#upgrading)
 - [Backups](#backups)
 - [Roles and permissions](#roles-and-permissions)
+- [Teams](#teams)
+- [Accounts: invitations and password recovery](#accounts-invitations-and-password-recovery)
 - [Email and reminders](#email-and-reminders)
 - [Calendar feeds](#calendar-feeds)
 - [Using the asset register](#using-the-asset-register)
@@ -496,7 +502,8 @@ src/Imports/            CSV importers (registry: add a class + one line)
 src/Middleware/         auth, guest, csrf, can:<permission>
 src/Models/             Data access (prepared statements only)
 src/Reports/            Reports (registry: add a class + one line)
-src/Services/           Asset tagging, copying
+src/Mail/               SMTP, templates, reminders, invitation and reset links
+src/Services/           Asset tagging, copying, branding, calendar feeds
 storage/                Uploads and logs — not web-reachable
 templates/              PHP templates (layouts, partials, pages)
 ```
@@ -553,6 +560,114 @@ Two permissions cover email:
 The calendar feed needs no permission of its own: every signed-in user can
 create their own, and what it contains is decided by the permissions they
 already hold.
+
+---
+
+## Teams
+
+A **team** is a group work can be assigned to instead of one person. Manage them
+under **Settings → Teams** (`teams.manage`, Administrator only).
+
+Assigning a maintenance schedule to a team rather than an individual changes
+three things:
+
+- **Everyone in it is reminded.** The maintenance reminder that would have gone
+  to one named person goes to every member — so a job does not sit untouched
+  because the one name on it is on holiday.
+- **Anyone in it can action it.** Recording a completion has always needed
+  `maintenance.complete` and never a match against the assignee, so this needs
+  nothing loosened; it is worth saying only because it is the behaviour teams
+  depend on.
+- **The screens say so.** Wherever an assignment is shown — the maintenance
+  list, a schedule's own page, the asset's maintenance card — a team assignment
+  carries a **Team** badge. Where there is only text (the Maintenance due
+  report, its CSV, the calendar feed, the reminder emails) it reads
+  "Bench fitters (team)", because a name alone does not tell you whether it is a
+  person or a group.
+
+A schedule is assigned to a person **or** a team **or** nobody. There is one
+control on the form with the teams and the people in separate groups, and the
+application writes exactly one of the two columns — the two cannot contradict
+each other.
+
+**Membership grants nothing.** It says who is *expected* to do the work. A
+member still needs `maintenance.view` to be reminded and `maintenance.complete`
+to record the work; the reminder run re-checks both at send time, exactly as it
+does for the notify list.
+
+Teams are **archived, not deleted**. An archived team keeps the jobs already
+assigned to it, its members go on being reminded about them, and it stops being
+offered for anything new — because "who was this assigned to last year?" should
+still have an answer.
+
+PAT has no assignment to extend. Its due dates come from each asset's own retest
+interval rather than from a scheduled job, and `pat_records.tester_user_id`
+records who *did* a test rather than who owes one.
+
+---
+
+## Accounts: invitations and password recovery
+
+Both of these need working email (see below). Without it the application falls
+back to what it did before and says so on the page — it never offers a flow that
+cannot finish.
+
+### Inviting a new user
+
+With email configured, **Add user** asks for no password. The new user is emailed
+a link that shows them their name, sign-in address and role, and lets them choose
+their own password. Nobody has to invent a password, write it in a message and
+hope it gets changed later.
+
+- The invitation is good for **one use** and expires after a window set in
+  Settings → Email (72 hours by default).
+- The Users list marks an account **Invited** until it is accepted, and **Invite
+  expired** if it lapses — an account nobody has finished setting up otherwise
+  looks exactly like a working one, which is how a new starter ends up locked out
+  on their first morning with nobody able to say why.
+- **Send it again** on the user's page issues a fresh link and stops the old one
+  working.
+- Setting a password directly on that page also revokes any outstanding
+  invitation, so an account cannot end up with two different passwords depending
+  on which route was used last.
+
+Without email the form asks for an initial password, as it always did.
+
+### Forgotten passwords
+
+**Forgotten your password?** on the sign-in page leads to a form that emails a
+reset link. The link is single-use and expires after a separate, shorter window
+(2 hours by default) — an invitation is expected and may sit for a day; a reset
+is asked for a moment before it arrives, and the shorter it lives the smaller the
+window in which a forwarded message is worth anything.
+
+Deliberate behaviours worth knowing about:
+
+- **The answer never says whether an address is registered.** "If that address
+  has an account here, a link is on its way" is what you get either way,
+  including when the send itself failed. An open form that answers "no such user"
+  is a way to enumerate an organisation's staff list. The failure is in
+  Settings → Email → Log, where an administrator will see it.
+- **Requests are metered on the same counters as failed sign-ins**, so this
+  cannot become an unmetered way to send mail to a chosen address.
+- **A successful reset clears the account's lockout.** A forgotten password and a
+  locked-out account arrive together often enough that leaving the lock in place
+  would send the user straight back round.
+- **Setting a password never signs anybody in.** Proving control of a mailbox is
+  enough to *set* a password; the password is then what gets you in, through the
+  ordinary sign-in path with its own throttle and its own audit entry.
+
+With email switched off, the page explains that and points at an administrator
+rather than showing a form.
+
+### What is stored
+
+Only a **SHA-256 of the token**. The link itself exists in exactly one place —
+the email that was sent — so a stolen database backup is not a set of working
+account-takeover links. It also means a lost link cannot be looked up and
+re-sent; a fresh one has to be issued, which is the right answer anyway.
+
+The two link expiry windows are on **Settings → Email**, under "Account links".
 
 ---
 
@@ -955,6 +1070,28 @@ Three ways in, because this is how most workshop repairs actually get recorded:
 - **Record work** on the asset's own page, when you are already looking at it.
 
 None of them needs a schedule to exist first.
+
+#### Evidence: photos and paperwork
+
+The Evidence section of the completion form takes both.
+
+**Photos** use the same control as the asset's own condition photos: **Take
+photo** opens the camera straight away on a phone or tablet, **Choose files**
+opens the gallery for shots taken earlier, and what you pick is previewed with
+its size checked against the server's limit before anything is uploaded. Two
+inputs rather than one, because a single combined input makes the phone ask
+every time.
+
+**Documents** take the paperwork a visit produces — a contractor's service
+report, a calibration certificate, an invoice. PDF only, validated exactly as an
+asset manual is: byte size, extension, and the MIME sniffed with `finfo` rather
+than trusted from the browser. They are stored against the *maintenance record*
+rather than the asset, because a service report belongs to the visit it
+describes; filing it against the machine would lose which visit produced it.
+
+Both appear under the completion in the asset's maintenance history and on the
+schedule's own page, and both are streamed through PHP from outside the document
+root like every other upload.
 
 #### Correcting a record
 
@@ -1549,6 +1686,12 @@ further checks need the site running; see `tests/README.md`.
 | Report figures | Every report's row count matches the database, and the CSV matches the screen |
 
 ### If you lock yourself out
+
+If email is configured, **Forgotten your password?** on the sign-in page is the
+quickest way back in and needs nobody's help — see
+[Accounts](#accounts-invitations-and-password-recovery). What follows is the
+escape hatch for when email is not working, or when the account you are locked
+out of is the only administrator.
 
 Reset any account from the server:
 

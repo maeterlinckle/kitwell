@@ -9,6 +9,7 @@ use App\Models\Hirer;
 use App\Models\MaintenanceSchedule;
 use App\Models\PatRecord;
 use App\Models\Setting;
+use App\Models\Team;
 use App\Models\User;
 
 /**
@@ -235,9 +236,15 @@ final class Reminders
             $item = [
                 'id'          => (int) $row['id'],
                 'assigned_to' => $row['assigned_to_user_id'] === null ? null : (int) $row['assigned_to_user_id'],
+                'team_id'     => $row['assigned_to_team_id'] === null ? null : (int) $row['assigned_to_team_id'],
                 'line'        => self::line([
                     (string) $row['title'],
                     (string) $row['asset_tag'] . ' ' . (string) $row['asset_name'],
+                    // Named in the digest as well as on screen: a reminder about
+                    // work the bench fitters own reads differently from one about
+                    // work that is yours alone, and the recipient cannot see the
+                    // badge from inside their mail client.
+                    MaintenanceSchedule::assigneeLabel($row, ''),
                     (string) $row['due_status'] === 'Overdue'
                         ? self::overdueWords((int) $row['days_until_due'])
                         : 'due ' . format_date((string) $row['next_due_date']),
@@ -256,18 +263,37 @@ final class Reminders
         $report['due_items']     = count($due);
         $report['overdue_items'] = count($overdue);
 
-        // The person a job is assigned to gets their own jobs, whether or not
+        // Whoever a job is assigned to gets their own jobs, whether or not
         // anybody put them on the notify list — that is the point of assigning
         // it to them. They still have to hold maintenance.view.
+        //
+        // For a team that means *every* member, which is the whole reason teams
+        // exist: a job assigned to a group must not go quiet because the one
+        // person who used to be named on it is away. Each member's `teams` is
+        // recorded so their digest can be narrowed to the work that is actually
+        // theirs rather than every team's.
         $assignees = [];
+
         if (Setting::bool('reminder_maintenance_assignee', true)) {
-            $ids = array_values(array_unique(array_filter(
-                array_merge(array_column($due, 'assigned_to'), array_column($overdue, 'assigned_to')),
+            $allItems = array_merge($due, $overdue);
+
+            $userIds = array_values(array_unique(array_filter(
+                array_column($allItems, 'assigned_to'),
                 static fn (?int $id): bool => $id !== null
             )));
 
-            foreach (User::withPermission('maintenance.view', $ids) as $user) {
-                $assignees[(int) $user['id']] = $user;
+            foreach (User::withPermission('maintenance.view', $userIds) as $user) {
+                $assignees[(int) $user['id']] = ['user' => $user, 'teams' => []];
+            }
+
+            $teamIds = array_values(array_unique(array_filter(
+                array_column($allItems, 'team_id'),
+                static fn (?int $id): bool => $id !== null
+            )));
+
+            foreach (Team::membersWithPermission($teamIds, 'maintenance.view') as $userId => $user) {
+                $assignees[$userId]['user']  = $user;
+                $assignees[$userId]['teams'] = $user['team_ids'];
             }
         }
 
@@ -282,8 +308,16 @@ final class Reminders
         foreach ([['maintenance_overdue', $overdue, []], ['maintenance_due', $due, ['days' => (string) $days]]] as [$templateKey, $items, $extra]) {
             $deliveries = self::asDeliveries($recipients, $items);
 
-            foreach ($assignees as $userId => $user) {
-                $mine = array_values(array_filter($items, static fn (array $i): bool => $i['assigned_to'] === $userId));
+            foreach ($assignees as $userId => $assignee) {
+                $user  = $assignee['user'];
+                $teams = $assignee['teams'];
+
+                // Theirs by name, or theirs because a team they are in owns it.
+                $mine = array_values(array_filter(
+                    $items,
+                    static fn (array $i): bool => $i['assigned_to'] === $userId
+                        || ($i['team_id'] !== null && in_array($i['team_id'], $teams, true))
+                ));
 
                 if ($mine === []) {
                     continue;

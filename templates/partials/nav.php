@@ -2,7 +2,7 @@
 /**
  * Responsive navigation.
  *
- * Six top-level destinations, with the rarely-used ones grouped underneath:
+ * Five top-level destinations, with the rarely-used ones grouped underneath:
  * PAT under Maintenance, Hirers under Hires, and the whole admin area plus the
  * CSV tools under Settings. Everything is filtered by permission, so a user
  * only ever sees what their role can actually reach — and a group with nothing
@@ -20,11 +20,10 @@ $user = auth_user();
  * destination in that case, only a label.
  */
 $links = [
-    // Hidden from hirers: the dashboard only redirects them to My hires, so
-    // showing both would be two links to the same page.
-    ['label' => 'Dashboard', 'href' => '/', 'permission' => null,
-     'unless_all' => ['assets.view', 'hires.view', 'maintenance.view', 'pat.view']],
-
+    // No Dashboard entry: the logo in the top-left is already the way home, and
+    // a menu item pointing at the same page is a menu item's worth of width
+    // spent saying it twice. (A hirer never saw one anyway — the dashboard only
+    // redirects them to My hires.)
     ['label' => 'Assets', 'href' => '/assets', 'permission' => 'assets.view'],
 
     // The doing comes before the reading: recording work and sending an item
@@ -52,6 +51,7 @@ $links = [
     ['label' => 'Settings', 'href' => '/admin/settings', 'permission' => null, 'children' => [
         ['label' => 'Users',        'href' => '/admin/users',      'permission' => 'users.view'],
         ['label' => 'Roles',        'href' => '/admin/roles',      'permission' => 'roles.manage'],
+        ['label' => 'Teams',        'href' => '/admin/teams',      'permission' => 'teams.manage'],
         ['label' => 'Categories',   'href' => '/admin/categories', 'permission' => 'categories.manage'],
         ['label' => 'Locations',    'href' => '/admin/locations',  'permission' => 'locations.manage'],
         ['label' => 'Email',        'href' => '/admin/email',      'permission' => 'email.manage'],
@@ -65,10 +65,6 @@ $links = [
 /** Can this user see this entry at all? */
 $allowed = static function (array $link): bool {
     if (isset($link['unless']) && can((string) $link['unless'])) {
-        return false;
-    }
-
-    if (isset($link['unless_all']) && !can_any(...$link['unless_all'])) {
         return false;
     }
 
@@ -108,9 +104,16 @@ $groupIsOpen = static function (array $link): bool {
 ?>
 <header class="site-header">
     <div class="container header-inner">
-        <a class="brand" href="<?= e(url('/')) ?>">
-            <?= partial('partials/brand', ['appName' => $appName ?? config('app.name', 'Asset Register')]) ?>
-        </a>
+        <?php /* Not itself a link: the logo inside carries the link home, and
+                 the wordmark beside it is a heading sized to sit level with the
+                 menu items. Wrapping both made the whole lockup one large
+                 target, which is why the name had to look like a control. */ ?>
+        <div class="brand">
+            <?= partial('partials/brand', [
+                'appName'  => $appName ?? config('app.name', 'Asset Register'),
+                'homeHref' => '/',
+            ]) ?>
+        </div>
 
         <nav id="primary-nav" class="primary-nav" data-nav aria-label="Main">
             <ul class="nav-list">
@@ -133,7 +136,7 @@ $groupIsOpen = static function (array $link): bool {
                                 <?= $groupIsOpen($link) ? 'open data-nav-autoopen' : '' ?>>
                                 <summary class="nav-link nav-group-toggle<?= $groupIsOpen($link) ? ' is-active' : '' ?>">
                                     <span><?= e($link['label']) ?></span>
-                                    <span class="nav-caret" aria-hidden="true"></span>
+                                    <span class="caret" aria-hidden="true"></span>
                                 </summary>
                                 <ul class="nav-sublist">
                                     <?php foreach ($link['children'] as $child): ?>
@@ -173,7 +176,7 @@ $groupIsOpen = static function (array $link): bool {
                             <span class="nav-user-name"><?= e($user['name'] ?? '') ?></span>
                             <span class="nav-user-role"><?= e($user['role_name'] ?? '') ?></span>
                         </span>
-                        <span class="nav-caret" aria-hidden="true"></span>
+                        <span class="caret" aria-hidden="true"></span>
                     </summary>
                     <ul class="nav-sublist">
                         <?php /* On a desktop the bar shows only the avatar, so the

@@ -247,6 +247,23 @@ try {
         $assetIds[$key] = Database::insert('assets', $asset);
     }
 
+    // --- Teams -------------------------------------------------------------
+    // One team with two members, so the assignment control has something in it
+    // and a reminder run has somebody to demonstrate on.
+    $benchTeam = Database::insert('teams', [
+        'name'        => 'Bench fitters',
+        'description' => 'Machines on the main workshop bench',
+        'is_active'   => 1,
+        'created_by'  => $admin,
+    ]);
+
+    foreach ([$manager, $admin] as $memberId) {
+        Database::run(
+            'INSERT IGNORE INTO team_members (team_id, user_id, added_by) VALUES (?, ?, ?)',
+            [$benchTeam, $memberId, $admin]
+        );
+    }
+
     // --- Maintenance -------------------------------------------------------
     $scheduleId = Database::insert('maintenance_schedules', [
         'asset_id'            => $assetIds['grinder'],
@@ -275,14 +292,17 @@ try {
         'created_by'          => $manager,
     ]);
 
+    // Assigned to a team rather than a person: every member is reminded about
+    // it and any of them can record it as done.
     Database::insert('maintenance_schedules', [
-        'asset_id'           => $assetIds['pillardrill'],
-        'title'              => 'Annual service and belt check',
-        'maintenance_type'   => 'periodic',
-        'frequency_interval' => 1,
-        'frequency_unit'     => 'years',
-        'next_due_date'      => $today->modify('+2 months')->format('Y-m-d'),
-        'created_by'         => $manager,
+        'asset_id'            => $assetIds['pillardrill'],
+        'title'               => 'Annual service and belt check',
+        'maintenance_type'    => 'periodic',
+        'frequency_interval'  => 1,
+        'frequency_unit'      => 'years',
+        'next_due_date'       => $today->modify('+2 months')->format('Y-m-d'),
+        'assigned_to_team_id' => $benchTeam,
+        'created_by'          => $manager,
     ]);
 
     // A one-off job, still open.

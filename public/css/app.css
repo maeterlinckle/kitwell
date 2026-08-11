@@ -178,9 +178,18 @@ a:hover { color: var(--accent-hover); }
     gap: var(--space-2);
     font-weight: 700;
     color: var(--text);
-    text-decoration: none;
     padding-block: var(--space-2);
 }
+
+/* The logo is the link home; the wordmark next to it is not. */
+.brand-home {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    color: inherit;
+    text-decoration: none;
+}
+.brand-home:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .brand-mark {
     display: grid;
@@ -297,12 +306,17 @@ a:hover { color: var(--accent-hover); }
 /* Desktop navigation */
 /* The horizontal bar appears at 1150px, not 900px.
    ---------------------------------------------------------------------------
-   Measured on the seeded register at the tightest width the bar can occupy:
-   six menu items need 613px, the account chip 243px, Scan 86px and the brand
-   112-150px depending on whether a logo is set. That is a little over 1050px of
-   content before any gaps, so between 900px and 1150px the bar could never fit
-   on one line — with or without a logo — and the items wrapped onto a second
-   row, doubling the header's height.
+   Measured on the seeded register as an administrator, who sees every item:
+   five menu items need 460px, the account block 235px, Scan 86px and the brand
+   238px with a logo. With the three gaps that is 1059px of content, so the bar
+   needs about 1091px of viewport — and at 900px it could never fit, which is
+   why it used to wrap onto a second row and double the header's height.
+
+   Dropping the Dashboard item paid for the wider brand: the wordmark moved back
+   alongside the logo rather than under it, which costs ~134px, and the item it
+   replaced was worth ~90px plus a gap. The margin left over covers a longer
+   APP_NAME than "Asset Register", and the wordmark is capped in case it is much
+   longer.
 
    Below 1150px the drawer is used instead. A drawer is a vertical list, so it
    cannot wrap, and it is the same control phones already use. Widening the
@@ -315,16 +329,9 @@ a:hover { color: var(--accent-hover); }
        lets the stacked brand fit inside 60px. */
     .brand { padding-block: 0; }
 
-    /* Logo above, wordmark beneath. Roughly halves the width of the brand when
-       a logo is set. */
-    .brand-stack-logo {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1px;
-    }
-
-    .brand-stack-logo .brand-logo { height: 26px; max-width: 150px; }
-    .brand-stack-logo .brand-name { font-size: 0.9rem; padding-bottom: 0; }
+    /* The desktop brand lockup itself is at the end of the branding section,
+       next to the mobile rules it has to outrank — a media query adds no
+       specificity, so the two have to be read in source order. */
 
     .primary-nav {
         display: flex;
@@ -447,6 +454,20 @@ main.container { padding-block: var(--space-5) var(--space-6); }
 
 .notice-card { border-left: 4px solid var(--accent); }
 
+/* A short explanation inside a form, where a whole card would be too much:
+   "this account will be emailed an invitation", and the like. */
+.notice-inline {
+    padding: var(--space-3);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: var(--bg-sunken);
+    font-size: 0.94rem;
+    margin-bottom: var(--space-4);
+}
+
+/* The invited user's own details, above the password they are about to set. */
+.invite-summary { margin-bottom: var(--space-3); }
+
 /* Status cards: a coloured edge rather than a coloured panel, so the text
    inside keeps the page's normal contrast. */
 .card-ok     { border-left: 4px solid var(--ok); }
@@ -497,11 +518,18 @@ main.container { padding-block: var(--space-5) var(--space-6); }
 .form-inline .field { margin: 0; }
 .form-inline .field-inline { flex: 1 1 16rem; }
 
-/* --- Stats ---------------------------------------------------------------- */
+/* --- Stats ----------------------------------------------------------------
+   Compact by intent. These are a glanceable summary above the day's work, not
+   the point of the page, and at full height a dozen of them pushed everything
+   else below the fold.
+
+   auto-fit rather than auto-fill: a row with fewer cards than it has room for
+   should stretch them across the width, not leave a column of empty space at
+   the right-hand end. */
 .stat-grid {
     display: grid;
-    gap: var(--space-3);
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--space-2);
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
     margin-bottom: var(--space-4);
 }
 
@@ -510,13 +538,14 @@ main.container { padding-block: var(--space-5) var(--space-6); }
     border: 1px solid var(--border);
     border-left: 4px solid var(--border-strong);
     border-radius: var(--radius);
-    padding: var(--space-4);
+    padding: var(--space-3);
     display: grid;
-    gap: var(--space-1);
+    gap: 2px;
+    align-content: start;
 }
 
-.stat-value { font-size: 2rem; font-weight: 700; line-height: 1; }
-.stat-label { font-size: 0.9rem; color: var(--text-muted); }
+.stat-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+.stat-label { font-size: 0.85rem; line-height: 1.35; color: var(--text-muted); }
 
 .stat-card.stat-danger { border-left-color: var(--danger); }
 .stat-card.stat-danger .stat-value { color: var(--danger); }
@@ -890,6 +919,16 @@ textarea.input { min-height: 120px; resize: vertical; }
     align-items: center;
     gap: var(--space-2);
 }
+
+/* `display: flex` above already stops the browser drawing its own marker (a
+   summary only renders one while it is a list-item), and this says so on
+   purpose rather than by accident — the .caret after the label is the
+   indicator. The label is a span so the triangle sits directly after the word
+   rather than being pushed to the far side of a full-width row. */
+.filter-details summary { list-style: none; }
+.filter-details summary::-webkit-details-marker { display: none; }
+.filter-summary-label { flex: 0 0 auto; }
+
 .filter-details summary:hover { background: var(--bg-hover); }
 .filter-details[open] summary { margin-bottom: var(--space-3); }
 
@@ -1199,6 +1238,9 @@ a.stat-link:hover { background: var(--bg-hover); border-color: var(--accent); }
 .log-meta dd { margin: 0; }
 
 .photo-grid-compact { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--space-2); margin-bottom: 0; }
+
+/* Evidence inside a history entry, where photos may already sit above it. */
+.file-list-compact { margin-top: var(--space-2); }
 .photo-grid-compact .photo-link { aspect-ratio: 1 / 1; }
 
 .radio-cards { display: grid; gap: var(--space-2); }
@@ -2049,7 +2091,11 @@ tr.preview-warning td { background: var(--warn-soft); }
     width: 100%;
 }
 
-.nav-caret {
+/* The expand/collapse triangle, wherever a <details> is used as a disclosure:
+   the nav drop-downs, the account menu, the filter panel on the register. One
+   shape and one rotation rule, so a triangle means the same thing everywhere.
+   `.nav-caret` stays as the nav's own hook for the reduced-motion rule. */
+.caret {
     width: 0; height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
@@ -2057,7 +2103,7 @@ tr.preview-warning td { background: var(--warn-soft); }
     flex: 0 0 auto;
     transition: transform 120ms ease;
 }
-.nav-group[open] > summary .nav-caret { transform: rotate(180deg); }
+details[open] > summary .caret { transform: rotate(180deg); }
 
 .nav-sublist {
     list-style: none;
@@ -2116,7 +2162,7 @@ tr.preview-warning td { background: var(--warn-soft); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .nav-caret { transition: none; }
+    .caret { transition: none; }
 }
 
 /* --- Audit trail on a maintenance record ---------------------------------- */
@@ -2170,6 +2216,42 @@ tr.preview-warning td { background: var(--warn-soft); }
 
 /* Where only one variant was uploaded it is used for both themes — one logo is
    better than none. It is the only .brand-logo present, so nothing hides it. */
+
+/* Desktop: logo and wordmark side by side, both centred on the bar's own line
+   so the name sits level with the menu items rather than above or below them.
+   ---------------------------------------------------------------------------
+   They were stacked, which was the cheapest way to buy width back when the menu
+   had one more item in it. Dropping Dashboard paid for the wider lockup; the
+   arithmetic is in the breakpoint comment further up.
+
+   This block has to come *after* the mobile rules above, not with the rest of
+   the desktop navigation: both are single-class selectors, so source order is
+   the only thing deciding which wins. */
+@media (min-width: 1150px) {
+    .brand-stack { align-items: center; }
+
+    /* Large enough to balance a menu-sized wordmark, small enough to leave the
+       header at 60px. max-width caps a wide banner logo — object-fit
+       letterboxes it rather than squashing it. */
+    .brand-stack-logo .brand-logo { height: 36px; max-width: 128px; }
+
+    /* Item for item with the menu: same size (inherited, because the body is
+       17px and a rem is 16px), same weight, same line.
+
+       max-width is the safety net the logo already has: APP_NAME is whatever
+       the operator typed, and an unbounded wordmark is the one thing left in
+       this bar that could put it back on two rows. A flex item is blockified,
+       so overflow and the ellipsis both apply here. */
+    .brand-stack .brand-name {
+        font-size: inherit;
+        font-weight: 600;
+        line-height: 1.2;
+        padding-bottom: 0;
+        max-width: 12rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
 
 .brand-mark-inline {
     display: inline-grid;

@@ -48,7 +48,10 @@ final class MaintenanceDueReport extends Report
             'asset_name'      => ['label' => 'Asset'],
             'title'           => ['label' => 'Job', 'link' => 'maintenance'],
             'frequency'       => ['label' => 'Repeats'],
-            'assigned_to_name'=> ['label' => 'Assigned to'],
+            // Says "(team)" where it is one — see rows(). A report is read away
+            // from the screen that would have shown the badge, and a CSV has
+            // nowhere to put one at all.
+            'assignee'        => ['label' => 'Assigned to'],
             'location_name'   => ['label' => 'Location'],
             'last_completed_date' => ['label' => 'Last done', 'type' => 'date'],
         ];
@@ -100,6 +103,7 @@ final class MaintenanceDueReport extends Report
         foreach ($rows as &$row) {
             $row['frequency']    = MaintenanceSchedule::describeFrequency($row);
             $row['due_in_words'] = self::dueInWords($row['days_until_due']);
+            $row['assignee']     = MaintenanceSchedule::assigneeLabel($row, '');
         }
 
         return $rows;

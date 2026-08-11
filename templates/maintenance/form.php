@@ -9,6 +9,7 @@ use App\Models\MaintenanceSchedule;
  * @var array<string,mixed>|null $asset
  * @var array<int,array<string,mixed>> $assets
  * @var array<int,array<string,mixed>> $users
+ * @var array<int,array<string,mixed>> $teams
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
@@ -28,6 +29,12 @@ $value = static function (string $field, mixed $default = '') use ($old, $schedu
 };
 
 $currentType = $value('maintenance_type', 'routine');
+
+// A rejected form comes back through `old`, which carries the combined value;
+// otherwise it is derived from whichever of the two columns is set.
+$assignedTo = array_key_exists('assigned_to', $old)
+    ? (string) $old['assigned_to']
+    : MaintenanceSchedule::assigneeValue($schedule);
 ?>
 <div class="page-head">
     <div>
@@ -176,16 +183,38 @@ $currentType = $value('maintenance_type', 'routine');
         <h2>Who and how long</h2>
 
         <div class="field-row">
+            <?php /* One control, not two. A schedule belongs to a person or to
+                     a team, never to both, and two separate dropdowns would let
+                     someone say it belongs to both and leave the reminder code
+                     to pick. The prefixed value is unpacked by
+                     MaintenanceSchedule::parseAssignee(). */ ?>
             <div class="field">
-                <label class="label" for="assigned_to_user_id">Assigned to <span class="optional">(optional)</span></label>
-                <select class="input" id="assigned_to_user_id" name="assigned_to_user_id">
+                <label class="label" for="assigned_to">Assigned to <span class="optional">(optional)</span></label>
+                <select class="input" id="assigned_to" name="assigned_to">
                     <option value="">Nobody in particular</option>
-                    <?php foreach ($users as $user): ?>
-                        <option value="<?= (int) $user['id'] ?>" <?= $value('assigned_to_user_id') === (string) $user['id'] ? 'selected' : '' ?>>
-                            <?= e($user['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
+
+                    <?php if ($teams !== []): ?>
+                        <optgroup label="Teams">
+                            <?php foreach ($teams as $team): ?>
+                                <option value="team:<?= (int) $team['id'] ?>" <?= $assignedTo === 'team:' . (int) $team['id'] ? 'selected' : '' ?>>
+                                    <?= e($team['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    <?php endif; ?>
+
+                    <optgroup label="People">
+                        <?php foreach ($users as $user): ?>
+                            <option value="user:<?= (int) $user['id'] ?>" <?= $assignedTo === 'user:' . (int) $user['id'] ? 'selected' : '' ?>>
+                                <?= e($user['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </optgroup>
                 </select>
+                <p class="field-hint">
+                    Assign it to a team and every member is reminded about it, and every member can
+                    record it as done.
+                </p>
             </div>
 
             <div class="field">

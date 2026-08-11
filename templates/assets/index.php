@@ -47,7 +47,16 @@ $hasFilters = ($filters['q'] ?? '') !== ''
     </div>
 
     <details class="filter-details" <?= $hasFilters ? 'open' : '' ?>>
-        <summary>Filters<?= $hasFilters ? ' <span class="badge badge-role">active</span>' : '' ?></summary>
+        <?php /* The triangle is the same one the nav drop-downs use, and turns
+                 the same way: pointing down when the panel is shut, up when it
+                 is open. Without it nothing said the row could be opened at
+                 all. */ ?>
+        <summary>
+            <span class="filter-summary-label">
+                Filters<?= $hasFilters ? ' <span class="badge badge-role">active</span>' : '' ?>
+            </span>
+            <span class="caret" aria-hidden="true"></span>
+        </summary>
 
         <div class="filter-grid">
             <div class="field">
@@ -243,8 +252,12 @@ $hasFilters = ($filters['q'] ?? '') !== ''
                         </td>
                         <td><span class="badge status-<?= e(strtolower(str_replace(' ', '-', (string) $asset['status']))) ?>"><?= e($asset['status']) ?></span></td>
                         <td><span class="badge condition-<?= e(strtolower(str_replace(' ', '-', (string) $asset['condition_rating']))) ?>"><?= e($asset['condition_rating']) ?></span></td>
+                        <?php /* No Label button here. Printing a barcode is
+                                 something you do to one asset you are already
+                                 looking at, and the asset's own page has it —
+                                 as does the bulk "Print labels" action above,
+                                 which is the reason to be on this screen. */ ?>
                         <td class="actions">
-                            <a class="btn btn-sm btn-ghost" href="<?= e(url('/assets/' . $asset['id'] . '/label')) ?>">Label</a>
                             <?php if (can('assets.edit')): ?>
                                 <a class="btn btn-sm" href="<?= e(url('/assets/' . $asset['id'] . '/edit')) ?>">Edit</a>
                             <?php endif; ?>

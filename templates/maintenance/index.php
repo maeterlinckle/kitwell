@@ -101,11 +101,24 @@ $hasFilters = ($filters['q'] ?? '') !== '' || !empty($filters['status']) || !emp
                 <label class="label" for="assignee">Assigned to</label>
                 <select class="input" id="assignee" name="assignee">
                     <option value="">Anyone</option>
-                    <?php foreach ($users as $user): ?>
-                        <option value="<?= (int) $user['id'] ?>" <?= (string) $filters['assigned_to'] === (string) $user['id'] ? 'selected' : '' ?>>
-                            <?= e($user['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
+
+                    <?php if ($teams !== []): ?>
+                        <optgroup label="Teams">
+                            <?php foreach ($teams as $team): ?>
+                                <option value="team:<?= (int) $team['id'] ?>" <?= (string) $filters['assigned_to'] === 'team:' . (int) $team['id'] ? 'selected' : '' ?>>
+                                    <?= e($team['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    <?php endif; ?>
+
+                    <optgroup label="People">
+                        <?php foreach ($users as $user): ?>
+                            <option value="user:<?= (int) $user['id'] ?>" <?= (string) $filters['assigned_to'] === 'user:' . (int) $user['id'] ? 'selected' : '' ?>>
+                                <?= e($user['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </optgroup>
                 </select>
             </div>
 
@@ -226,7 +239,7 @@ $hasFilters = ($filters['q'] ?? '') !== '' || !empty($filters['status']) || !emp
                         <?php endif; ?>
                     </td>
                     <td class="nowrap"><?= e(MaintenanceSchedule::describeFrequency($schedule)) ?></td>
-                    <td><?= e($schedule['assigned_to_name'] ?? '—') ?></td>
+                    <td><?= partial('partials/assignee', ['schedule' => $schedule]) ?></td>
                     <td class="nowrap">
                         <?= e(format_date($schedule['last_completed_date'])) ?>
                         <?php if ((int) $schedule['completion_count'] > 0): ?>

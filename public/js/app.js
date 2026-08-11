@@ -605,6 +605,66 @@
         });
     });
 
+    // --- Open on hover -----------------------------------------------------
+    // Click still opens and closes them; this only adds the manner a desktop
+    // drop-down is expected to have. Two delays, both there to stop it feeling
+    // twitchy: a short one before opening, so dragging the pointer across the
+    // bar on the way somewhere else does not flash three menus open, and a
+    // longer one before closing, so the diagonal from the summary to the item
+    // you are aiming at does not shut the panel under your cursor.
+    //
+    // Gated on a real hovering pointer as well as the desktop width: a tap on a
+    // touchscreen synthesises mouseenter, which here would open the panel and
+    // then let the click close it again.
+    var hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)');
+    var openTimer = null;
+    var closeTimer = null;
+
+    function hoverEnabled() {
+        return desktop.matches && hoverCapable.matches;
+    }
+
+    function cancelTimers() {
+        if (openTimer) { window.clearTimeout(openTimer); openTimer = null; }
+        if (closeTimer) { window.clearTimeout(closeTimer); closeTimer = null; }
+    }
+
+    Array.prototype.forEach.call(groups, function (group) {
+        group.addEventListener('mouseenter', function () {
+            if (!hoverEnabled()) return;
+
+            cancelTimers();
+
+            if (group.open) return;
+
+            openTimer = window.setTimeout(function () {
+                // The server-set attribute means "you are in this section", not
+                // "show me"; reaching for the group is the moment that stops
+                // mattering, and leaving it on would hide the panel by CSS.
+                group.removeAttribute('data-nav-autoopen');
+                group.open = true;
+            }, 140);
+        });
+
+        group.addEventListener('mouseleave', function () {
+            if (!hoverEnabled()) return;
+
+            cancelTimers();
+
+            closeTimer = window.setTimeout(function () {
+                // Not while the keyboard is inside it: tabbing through a panel
+                // moves focus without moving the pointer, and closing it then
+                // would drop the focused element out of the page.
+                if (group.contains(document.activeElement)) return;
+
+                group.open = false;
+            }, 260);
+        });
+
+        // A click is a decision, so it wins over any pending hover timer.
+        group.addEventListener('click', cancelTimers);
+    });
+
     document.addEventListener('click', function (event) {
         if (!desktop.matches) return;
         if (event.target.closest('[data-nav-group]')) return;

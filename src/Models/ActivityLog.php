@@ -39,6 +39,39 @@ final class ActivityLog
     }
 
     /**
+     * The same entry, attributed to somebody who is not signed in.
+     *
+     * The invite and password-reset routes are reached with no session at all,
+     * so Auth::user() is null and record() would file everything under
+     * "System" — which is true of the request and useless in the trail. What
+     * matters there is *whose account* it was, and the name is a snapshot like
+     * every other one in this table.
+     *
+     * @param array<string,mixed>|null $changes
+     */
+    public static function recordAs(
+        ?int $userId,
+        string $userName,
+        string $action,
+        string $entityType,
+        ?int $entityId = null,
+        string $description = '',
+        ?array $changes = null
+    ): void {
+        Database::insert('activity_log', [
+            'user_id'     => $userId,
+            'user_name'   => mb_substr($userName, 0, 191),
+            'action'      => mb_substr($action, 0, 100),
+            'entity_type' => mb_substr($entityType, 0, 64),
+            'entity_id'   => $entityId,
+            'changes'     => self::encodeChanges($changes),
+            'description' => mb_substr($description, 0, 500),
+            'ip_address'  => Request::ip(),
+            'user_agent'  => Request::userAgent(),
+        ]);
+    }
+
+    /**
      * MariaDB implements JSON as LONGTEXT with a `json_valid()` CHECK
      * constraint, so anything that is not valid JSON is rejected outright.
      * json_encode() returns false on malformed UTF-8 — store NULL rather than

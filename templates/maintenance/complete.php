@@ -43,7 +43,13 @@ $defaultType = $isScheduled ? (string) $schedule['maintenance_type'] : 'repair';
     </div>
 <?php endif; ?>
 
-<form method="post" action="<?= e($action) ?>" enctype="multipart/form-data" class="form form-wide" novalidate>
+<?php /* data-photo-form and data-max-bytes are what the photo-input handler in
+         app.js looks for: previews, per-file size against the server's own
+         limit, and clearing whichever of the two photo inputs was not used.
+         The document input below is deliberately not one of them — picking a
+         service report must not wipe the photos. */ ?>
+<form method="post" action="<?= e($action) ?>" enctype="multipart/form-data" class="form form-wide" novalidate
+      data-photo-form data-max-bytes="<?= (int) config('uploads.max_photo_bytes') ?>">
     <?= csrf_field() ?>
 
     <div class="card">
@@ -230,9 +236,31 @@ $defaultType = $isScheduled ? (string) $schedule['maintenance_type'] : 'repair';
         <h2>Evidence <span class="optional">(optional)</span></h2>
 
         <div class="field">
-            <label class="label" for="photos">Photos</label>
-            <input class="input" type="file" id="photos" name="photos[]" accept="image/*" multiple>
-            <p class="field-hint">Before/after shots, or a photo of the fault. Up to <?= (int) (config('uploads.max_photo_bytes') / 1048576) ?> MB each.</p>
+            <span class="label">Photos</span>
+            <?= partial('partials/photo-inputs', ['name' => 'photos[]', 'primary' => false]) ?>
+            <p class="field-hint">
+                Before/after shots, or a photo of the fault. “Take photo” opens the camera on a
+                phone or tablet. Up to <?= (int) (config('uploads.max_photo_bytes') / 1048576) ?> MB each.
+            </p>
+            <div class="photo-preview" data-photo-preview hidden></div>
+        </div>
+
+        <div class="field">
+            <label class="label" for="documents">Documents</label>
+            <input class="input" type="file" id="documents" name="documents[]"
+                   accept="application/pdf,.pdf" multiple>
+            <p class="field-hint">
+                A service report from a contractor, a calibration certificate, an invoice.
+                PDF, up to <?= (int) (config('uploads.max_pdf_bytes') / 1048576) ?> MB each.
+            </p>
+        </div>
+
+        <div class="field">
+            <label class="label" for="document_title">Document title <span class="optional">(optional)</span></label>
+            <input class="input" type="text" id="document_title" name="document_title" maxlength="191"
+                   placeholder="e.g. Annual service report — Brookfield Engineering"
+                   value="<?= e(old($old, 'document_title')) ?>">
+            <p class="field-hint">Leave blank to use each file’s own name.</p>
         </div>
 
         <div class="field">

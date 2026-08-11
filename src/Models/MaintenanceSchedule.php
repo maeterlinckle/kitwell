@@ -58,7 +58,12 @@ final class MaintenanceSchedule
                        a.condition_rating AS asset_condition,
                        c.name AS category_name,
                        l.name AS location_name,
-                       u.name AS assigned_to_name,
+                       COALESCE(tm.name, u.name) AS assigned_to_name,
+                       CASE
+                           WHEN s.assigned_to_team_id IS NOT NULL THEN \'team\'
+                           WHEN s.assigned_to_user_id IS NOT NULL THEN \'user\'
+                       END AS assigned_to_kind,
+                       tm.is_active AS assigned_team_is_active,
                        cu.name AS created_by_name,
                        (SELECT COUNT(*) FROM maintenance_logs ml WHERE ml.schedule_id = s.id) AS completion_count
                   FROM maintenance_schedules s
@@ -66,6 +71,7 @@ final class MaintenanceSchedule
                   LEFT JOIN categories c ON c.id = a.category_id
                   LEFT JOIN locations l ON l.id = a.location_id
                   LEFT JOIN users u ON u.id = s.assigned_to_user_id
+                  LEFT JOIN teams tm ON tm.id = s.assigned_to_team_id
                   LEFT JOIN users cu ON cu.id = s.created_by';
     }
 
@@ -271,9 +277,18 @@ final class MaintenanceSchedule
             $params[] = (int) $filters['asset_id'];
         }
 
+        // "user:7" or "team:2". The prefix is what lets one control filter by
+        // either kind without two dropdowns that can contradict each other.
         if (!empty($filters['assigned_to'])) {
-            $where[]  = 's.assigned_to_user_id = ?';
-            $params[] = (int) $filters['assigned_to'];
+            [$kind, $id] = self::parseAssignee((string) $filters['assigned_to']);
+
+            if ($kind === 'team') {
+                $where[]  = 's.assigned_to_team_id = ?';
+                $params[] = $id;
+            } elseif ($kind === 'user') {
+                $where[]  = 's.assigned_to_user_id = ?';
+                $params[] = $id;
+            }
         }
 
         if (!empty($filters['category_id'])) {
@@ -402,10 +417,17 @@ final class MaintenanceSchedule
      * "check the belt again in three weeks" cannot quietly become a recurring
      * job nobody meant to create.
      *
-     * @param array<string,mixed> $data title, due_date, instructions, assigned_to_user_id
+     * @param array<string,mixed> $data title, due_date, instructions,
+     *                                  assigned_to_user_id, assigned_to_team_id
      */
     public static function createFollowUp(int $assetId, array $data): int
     {
+        // A team assignment wins over the person who happened to do the work:
+        // if the bench fitters own this job, the check on it is theirs too, and
+        // pinning it to whoever was on shift is how a group's work quietly
+        // becomes one person's.
+        $teamId = isset($data['assigned_to_team_id']) ? (int) $data['assigned_to_team_id'] : 0;
+
         return self::create([
             'asset_id'            => $assetId,
             'title'               => $data['title'],
@@ -413,7 +435,8 @@ final class MaintenanceSchedule
             'frequency_interval'  => null,
             'frequency_unit'      => null,
             'next_due_date'       => $data['due_date'],
-            'assigned_to_user_id' => $data['assigned_to_user_id'] ?? null,
+            'assigned_to_user_id' => $teamId > 0 ? null : ($data['assigned_to_user_id'] ?? null),
+            'assigned_to_team_id' => $teamId > 0 ? $teamId : null,
             'instructions'        => $data['instructions'] ?? null,
             'is_active'           => 1,
             'created_by'          => Auth::id(),
@@ -441,5 +464,75 @@ final class MaintenanceSchedule
         return Database::select(
             'SELECT id, name FROM users WHERE is_active = 1 ORDER BY name'
         );
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public static function assignableTeams(): array
+    {
+        return Team::assignable();
+    }
+
+    // -- Assignment ---------------------------------------------------------
+    //
+    // A schedule is assigned to one person, or to one team, or to nobody. The
+    // form carries that as a single value so the two cannot contradict each
+    // other, and these three helpers are the only places that know its shape.
+
+    /**
+     * Split "user:7" / "team:2" into its parts.
+     *
+     * Anything unrecognised comes back as [null, 0], which every caller treats
+     * as "unassigned" — a stale or hand-edited value must not become a filter
+     * on id 0 or, worse, a silently different assignment.
+     *
+     * @return array{0:?string,1:int}
+     */
+    public static function parseAssignee(string $value): array
+    {
+        if (preg_match('/^(user|team):(\d+)$/', trim($value), $m) !== 1) {
+            return [null, 0];
+        }
+
+        $id = (int) $m[2];
+
+        return $id > 0 ? [$m[1], $id] : [null, 0];
+    }
+
+    /** The form value for a schedule as it stands, for re-selecting the option. */
+    public static function assigneeValue(?array $schedule): string
+    {
+        if ($schedule === null) {
+            return '';
+        }
+
+        if (!empty($schedule['assigned_to_team_id'])) {
+            return 'team:' . (int) $schedule['assigned_to_team_id'];
+        }
+
+        if (!empty($schedule['assigned_to_user_id'])) {
+            return 'user:' . (int) $schedule['assigned_to_user_id'];
+        }
+
+        return '';
+    }
+
+    /**
+     * The assignment as one line of text.
+     *
+     * Says which kind it is, because "Bench fitters" and "Ben Fitter" are not
+     * distinguishable from the name alone — and being reminded of something a
+     * *group* owes is a different message from being reminded of your own.
+     * Screens with room render the badge instead; this is for the report
+     * columns, the calendar feed and the emails, which have only text.
+     */
+    public static function assigneeLabel(array $schedule, string $none = 'Nobody in particular'): string
+    {
+        $name = trim((string) ($schedule['assigned_to_name'] ?? ''));
+
+        if ($name === '') {
+            return $none;
+        }
+
+        return ($schedule['assigned_to_kind'] ?? '') === 'team' ? $name . ' (team)' : $name;
     }
 }

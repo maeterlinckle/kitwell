@@ -15,6 +15,7 @@ use App\Controllers\Admin\LocationController;
 use App\Controllers\Admin\RoleController;
 use App\Controllers\Admin\EmailController;
 use App\Controllers\Admin\SettingsController;
+use App\Controllers\Admin\TeamController;
 use App\Controllers\Admin\UserController;
 use App\Controllers\CalendarController;
 use App\Controllers\AssetController;
@@ -22,6 +23,7 @@ use App\Controllers\AssetCopyController;
 use App\Controllers\AssetExportController;
 use App\Controllers\ExportController;
 use App\Controllers\ImportController;
+use App\Controllers\AccountController;
 use App\Controllers\AuthController;
 use App\Controllers\BrandingController;
 use App\Controllers\HirerController;
@@ -46,6 +48,21 @@ $router->post('/login', [AuthController::class, 'login'],     ['guest', 'csrf'])
 $router->post('/logout', [AuthController::class, 'logout'],   ['auth', 'csrf'], 'logout');
 
 $router->get('/health', [DashboardController::class, 'health']);
+
+// Accepting an invitation, and resetting a forgotten password. Open by
+// necessity — the whole point is that the person cannot sign in yet — so the
+// 64-hex token in the path is the credential, exactly as it is for the calendar
+// feed. See App\Controllers\AccountController for the rules that follow from
+// that: one use, an expiry, no answer that reveals whether an address exists,
+// and the sign-in throttle shared rather than side-stepped.
+$router->get('/invite/{token:[a-f0-9]+}',  [AccountController::class, 'showInvite'],   ['guest']);
+$router->post('/invite/{token:[a-f0-9]+}', [AccountController::class, 'acceptInvite'], ['guest', 'csrf']);
+
+$router->get('/forgot-password',  [AccountController::class, 'showForgot'], ['guest'], 'forgot-password');
+$router->post('/forgot-password', [AccountController::class, 'sendReset'],  ['guest', 'csrf']);
+
+$router->get('/reset-password/{token:[a-f0-9]+}',  [AccountController::class, 'showReset'],     ['guest']);
+$router->post('/reset-password/{token:[a-f0-9]+}', [AccountController::class, 'resetPassword'], ['guest', 'csrf']);
 
 // The logo, outside 'auth' because the sign-in page shows it and nobody has a
 // session at that point. It takes no id, reads one of two settings and returns
@@ -147,8 +164,9 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/maintenance/logs/{logId:\d+}/edit', [MaintenanceController::class, 'editLog'],   ['can:maintenance.manage']);
     $router->post('/maintenance/logs/{logId:\d+}',     [MaintenanceController::class, 'updateLog'], ['can:maintenance.manage', 'csrf']);
 
-    // Photos attached to a completion.
+    // Evidence attached to a completion: photos, and the paperwork behind it.
     $router->get('/maintenance/logs/{logId:\d+}/photos/{photoId:\d+}', [MaintenanceController::class, 'photo'], ['can:maintenance.view']);
+    $router->get('/maintenance/logs/{logId:\d+}/documents/{documentId:\d+}', [MaintenanceController::class, 'document'], ['can:maintenance.view']);
 });
 
 // --- PAT testing ----------------------------------------------------------
@@ -241,6 +259,7 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/admin/users/{id:\d+}/edit',      [UserController::class, 'edit'],   ['can:users.manage']);
     $router->post('/admin/users/{id:\d+}',          [UserController::class, 'update'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/password', [UserController::class, 'resetPassword'], ['can:users.manage', 'csrf']);
+    $router->post('/admin/users/{id:\d+}/invite',   [UserController::class, 'invite'],        ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/status',   [UserController::class, 'toggleActive'],  ['can:users.manage', 'csrf']);
 
     // Roles and permissions
@@ -249,6 +268,16 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/admin/roles',               [RoleController::class, 'store'],  ['can:roles.manage', 'csrf']);
     $router->get('/admin/roles/{id:\d+}/edit',  [RoleController::class, 'edit'],   ['can:roles.manage']);
     $router->post('/admin/roles/{id:\d+}',      [RoleController::class, 'update'], ['can:roles.manage', 'csrf']);
+
+    // Teams: the groups maintenance can be assigned to.
+    $router->get('/admin/teams',                [TeamController::class, 'index'],  ['can:teams.manage'], 'admin.teams');
+    $router->get('/admin/teams/create',         [TeamController::class, 'create'], ['can:teams.manage']);
+    $router->post('/admin/teams',               [TeamController::class, 'store'],  ['can:teams.manage', 'csrf']);
+    $router->get('/admin/teams/{id:\d+}/edit',  [TeamController::class, 'edit'],   ['can:teams.manage']);
+    $router->post('/admin/teams/{id:\d+}',      [TeamController::class, 'update'], ['can:teams.manage', 'csrf']);
+    $router->post('/admin/teams/{id:\d+}/status', [TeamController::class, 'toggleActive'], ['can:teams.manage', 'csrf']);
+    $router->post('/admin/teams/{id:\d+}/members', [TeamController::class, 'addMember'], ['can:teams.manage', 'csrf']);
+    $router->post('/admin/teams/{id:\d+}/members/{userId:\d+}/remove', [TeamController::class, 'removeMember'], ['can:teams.manage', 'csrf']);
 
     // Reference data
     $router->get('/admin/categories',                 [CategoryController::class, 'index'],   ['can:categories.manage'], 'admin.categories');
