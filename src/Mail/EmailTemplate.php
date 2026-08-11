@@ -57,17 +57,15 @@ final class EmailTemplate
             'description' => 'Sent to the notify list when an asset’s PAT retest is coming up.',
             'group'       => 'Reminders',
             'subject'     => 'PAT due soon: {{count}} item(s) need testing',
-            'body'        => <<<'TEXT'
-Hello {{recipient_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
 
-The following equipment is due for PAT testing within the next {{days}} days.
+<p>The following equipment is due for PAT testing within the next {{days}} days.</p>
 
-{{items}}
+<div class="items">{{items}}</div>
 
-Record a test at {{app_url}}/pat
-
-— {{app_name}}
-TEXT,
+<p><a href="{{app_url}}/pat">Record a test</a></p>
+HTML,
             'fields' => [
                 'count' => 'How many items are listed',
                 'days'  => 'The “due soon” window, in days',
@@ -85,18 +83,16 @@ TEXT,
             'description' => 'Sent to the notify list for equipment whose retest date has passed, that failed its last test, or that has never been tested.',
             'group'       => 'Reminders',
             'subject'     => 'PAT needs attention: {{count}} item(s)',
-            'body'        => <<<'TEXT'
-Hello {{recipient_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
 
-The following equipment needs a PAT test. Until it is tested and passes, it
-should be taken out of service.
+<p>The following equipment needs a PAT test. <strong>Until it is tested and passes, it
+should be taken out of service.</strong></p>
 
-{{items}}
+<div class="items">{{items}}</div>
 
-Record a test at {{app_url}}/pat
-
-— {{app_name}}
-TEXT,
+<p><a href="{{app_url}}/pat">Record a test</a></p>
+HTML,
             'fields' => [
                 'count' => 'How many items are listed',
                 'items' => 'The list itself: asset tag, name, location, and why it needs attention — overdue, failed, or never tested',
@@ -113,17 +109,15 @@ TEXT,
             'description' => 'Sent when a maintenance schedule is approaching its next due date.',
             'group'       => 'Reminders',
             'subject'     => 'Maintenance due soon: {{count}} job(s)',
-            'body'        => <<<'TEXT'
-Hello {{recipient_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
 
-The following maintenance is due within the next {{days}} days.
+<p>The following maintenance is due within the next {{days}} days.</p>
 
-{{items}}
+<div class="items">{{items}}</div>
 
-See the full list at {{app_url}}/maintenance
-
-— {{app_name}}
-TEXT,
+<p><a href="{{app_url}}/maintenance">See the full list</a></p>
+HTML,
             'fields' => [
                 'count' => 'How many jobs are listed',
                 'days'  => 'The “due soon” window, in days',
@@ -141,17 +135,15 @@ TEXT,
             'description' => 'Sent when a maintenance schedule’s due date has passed.',
             'group'       => 'Reminders',
             'subject'     => 'Maintenance OVERDUE: {{count}} job(s)',
-            'body'        => <<<'TEXT'
-Hello {{recipient_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
 
-The following maintenance is now overdue.
+<p>The following maintenance is <strong>now overdue</strong>.</p>
 
-{{items}}
+<div class="items">{{items}}</div>
 
-See the full list at {{app_url}}/maintenance
-
-— {{app_name}}
-TEXT,
+<p><a href="{{app_url}}/maintenance">See the full list</a></p>
+HTML,
             'fields' => [
                 'count' => 'How many jobs are listed',
                 'items' => 'The list itself: job title, asset, and how overdue it is',
@@ -168,17 +160,15 @@ TEXT,
             'description' => 'Sent when hired equipment is approaching its due-back date.',
             'group'       => 'Reminders',
             'subject'     => 'Due back soon: {{count}} item(s) on hire',
-            'body'        => <<<'TEXT'
-Hello {{recipient_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
 
-The following equipment is due back within the next {{days}} days.
+<p>The following equipment is due back within the next {{days}} days.</p>
 
-{{items}}
+<div class="items">{{items}}</div>
 
-See all current hires at {{app_url}}/hires
-
-— {{app_name}}
-TEXT,
+<p><a href="{{app_url}}/hires">See all current hires</a></p>
+HTML,
             'fields' => [
                 'count' => 'How many hires are listed',
                 'days'  => 'The “due soon” window, in days',
@@ -196,17 +186,15 @@ TEXT,
             'description' => 'Sent when hired equipment has passed its due-back date.',
             'group'       => 'Reminders',
             'subject'     => 'OVERDUE: {{count}} item(s) not returned',
-            'body'        => <<<'TEXT'
-Hello {{recipient_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
 
-The following equipment is past its due-back date and has not been booked in.
+<p>The following equipment is <strong>past its due-back date</strong> and has not been booked in.</p>
 
-{{items}}
+<div class="items">{{items}}</div>
 
-See all current hires at {{app_url}}/hires
-
-— {{app_name}}
-TEXT,
+<p><a href="{{app_url}}/hires">See all current hires</a></p>
+HTML,
             'fields' => [
                 'count' => 'How many hires are listed',
                 'items' => 'The list itself: reference, asset, hirer and how overdue it is',
@@ -223,18 +211,18 @@ TEXT,
             'description' => 'The one-click “Email hire list” button on a hirer’s page. Everything they currently hold.',
             'group'       => 'Sent to hirers',
             'subject'     => 'Equipment currently on hire to you',
-            'body'        => <<<'TEXT'
-Hello {{hirer_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{hirer_name}},</p>
 
-Our records show the following equipment is currently on hire to you.
+<p>Our records show the following equipment is currently on hire to you.</p>
 
-{{items}}
+<div class="items">{{items}}</div>
 
-If anything here is wrong, or you have already returned an item, please let us
-know so we can correct our records.
+<p>If anything here is wrong, or you have already returned an item, please let us
+know so we can correct our records.</p>
 
-— {{organisation_name}}
-TEXT,
+<p>— {{organisation_name}}</p>
+HTML,
             'fields' => [
                 'hirer_name'    => 'Name of the hirer',
                 'hirer_company' => 'Company name, if the hirer has one',
@@ -256,21 +244,23 @@ TEXT,
             'description' => 'The “Email reminder” button on an individual hire, sent to the hirer.',
             'group'       => 'Sent to hirers',
             'subject'     => 'Please return: {{asset_name}} ({{asset_tag}})',
-            'body'        => <<<'TEXT'
-Hello {{hirer_name}},
+            'body'        => <<<'HTML'
+<p>Hello {{hirer_name}},</p>
 
-Our records show that the following item is still with you:
+<p>Our records show that the following item is still with you:</p>
 
-  {{asset_tag}}  {{asset_name}}
-  Hire reference: {{reference}}
-  Taken out:      {{checked_out_date}}
-  Due back:       {{due_date}}
-  {{status_line}}
+<div class="items">
+  <strong>{{asset_tag}} — {{asset_name}}</strong><br>
+  Hire reference: {{reference}}<br>
+  Taken out: {{checked_out_date}}<br>
+  Due back: {{due_date}}<br>
+  <strong>{{status_line}}</strong>
+</div>
 
-Please arrange to return it, or contact us if you need it for longer.
+<p>Please arrange to return it, or contact us if you need it for longer.</p>
 
-— {{organisation_name}}
-TEXT,
+<p>— {{organisation_name}}</p>
+HTML,
             'fields' => [
                 'hirer_name'       => 'Name of the hirer',
                 'asset_tag'        => 'The asset tag',
@@ -299,14 +289,16 @@ TEXT,
             'description' => 'Sent by the “Send test email” button so the configuration can be proved before anything relies on it.',
             'group'       => 'Diagnostics',
             'subject'     => '{{app_name}}: test email',
-            'body'        => <<<'TEXT'
-This is a test message from {{app_name}}.
+            'body'        => <<<'HTML'
+<p>This is a test message from {{app_name}}.</p>
 
-If you are reading it, outbound email is working: the message was accepted by
-{{mail_host}} and delivered to {{recipient}}.
+<p>If you are reading it, outbound email is working: the message was accepted by
+<strong>{{mail_host}}</strong> and delivered to <strong>{{recipient}}</strong>.</p>
 
-Sent {{sent_at}} by {{sent_by}}.
-TEXT,
+<p>If the logo appears at the top of this message, branding is reaching email too.</p>
+
+<p>Sent {{sent_at}} by {{sent_by}}.</p>
+HTML,
             'fields' => [
                 'mail_host' => 'The SMTP host the message went through',
                 'recipient' => 'The address it was sent to',
@@ -362,7 +354,12 @@ TEXT,
             'sample'          => $default['sample'],
             'subject'         => $override === null ? $default['subject'] : (string) $override['subject'],
             'body'            => $override === null ? $default['body'] : (string) $override['body'],
-            'is_html'         => $override !== null && (int) $override['is_html'] === 1,
+            // The shipped bodies are HTML. An override says for itself, because
+            // an administrator who rewrites one in plain text should get plain
+            // text sent.
+            'is_html'         => $override === null
+                ? ($default['is_html'] ?? true)
+                : (int) $override['is_html'] === 1,
             'is_active'       => $override === null || (int) $override['is_active'] === 1,
             'is_customised'   => $override !== null,
             'updated_at'      => $override['updated_at'] ?? null,

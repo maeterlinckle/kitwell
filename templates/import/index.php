@@ -12,7 +12,7 @@ use App\Imports\Importer;
         <p class="muted">Bring existing records in from a spreadsheet. Nothing is written until you have seen a preview.</p>
     </div>
     <?php if (can('assets.export')): ?>
-        <a class="btn btn-ghost" href="<?= e(url('/assets')) ?>">Export instead</a>
+        <a class="btn btn-ghost" href="<?= e(url('/export')) ?>">Export instead</a>
     <?php endif; ?>
 </div>
 

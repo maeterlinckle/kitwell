@@ -29,7 +29,7 @@ Where something is *not* verified, it says so.
 | Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
 | `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 170 PHP files (70 of them templates), 125 routes (67 GET, 58 POST), 18 migrations |
+| Counted at time of writing | 182 PHP files (78 of them templates), 135 routes (74 GET, 61 POST), 18 migrations |
 | Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
@@ -425,7 +425,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   └── js/   app.js, barcode.js, scanner.js, pat-wizard.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 125 routes, 272 lines
+│   └── web.php              the whole route table, 135 routes, 297 lines
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -460,7 +460,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            assets/{id}/manuals, maintenance/{logId},
 │                            hires/{hireId}, imports/
 │
-├── templates/               70 .php templates
+├── templates/               78 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, flash, photo-gallery, photo-upload,
 │   │                        pat-status, pat-record, maintenance-log-photos,
@@ -570,7 +570,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
   as a global function in `helpers.php` alongside `e()`, `can()`, `old()`,
   `format_date()`, `format_money()` and friends.
 - **Every variable reaching output goes through `e()`.** `tests/escape-audit.php`
-  parses all 1874 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
+  parses all 2028 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
 - Three layouts: `layouts/app` (signed in, with nav), `layouts/auth` (slim),
   `layouts/print` (label sheets and report printing).
 - `templates/partials/nav.php` carries a `'built' => true|false` flag per
@@ -583,6 +583,38 @@ Nothing here is accidental, but a reader coming from the brief should know:
   `ImportRegistry::IMPORTERS`. **Never add a bespoke report page.**
   Registered today: reports `all-assets`, `maintenance-due`, `pat-due`,
   `assets-on-hire`, `hires-due-back`; importers `assets`, `pat`.
+
+### 4.4b Branding, print documents and export
+
+- **`src/Services/Branding.php`** owns the uploaded logo and is the only thing
+  that knows where it lives. Two independently optional variants (`light`,
+  `dark`) stored as `logo_{variant}_path` / `_mime` settings, files under
+  `storage/uploads/branding/`. `resolve()` falls back to the other variant, so
+  a workshop that uploaded only a light logo still gets one in dark mode.
+  **Raster only** — an SVG is a document that can carry script, and fileinfo
+  identifies SVGs inconsistently, so the upload would fail for reasons nobody
+  could act on.
+- `GET /branding/logo/{variant}` is **public**, and deliberately: the sign-in
+  page carries the logo and nobody has a session there. Documented in
+  `tests/security-audit.php` alongside the calendar feed.
+- **Four consumers, one source.** The site header
+  (`templates/partials/brand.php`, rendering *both* variants and letting CSS
+  pick, because the theme can change without a page load), the sign-in page,
+  the print masthead (`partials/print-header.php`, always the light variant —
+  paper is white), and outbound email (embedded as a CID attachment, because
+  this application is usually not reachable from wherever the mail is read).
+  **When adding a fifth, go through `Branding`, never through the setting.**
+- **Print documents** are their own views on `layouts/print`, not `@media
+  print` over the working page: `/assets/{id}/print` and `/assets/print`. The
+  asset page is a screen full of tabs and buttons, and hiding all of it leaves
+  a document full of holes. Styles live in `public/css/print.css` under
+  `.print-doc`, separate from the millimetre-accurate label sheet above it.
+- **Export** has its own hub at `/export`, shaped like `/import` — the two are
+  the same job in opposite directions. `ExportController` only *presents*
+  exports; the files are still produced by `AssetExportController` and
+  `ReportController`, so each format has one definition. **The register page
+  offers no export at all**; choosing rows is its own screen at
+  `/export/assets/select`.
 
 ### 4.5 Barcodes
 
@@ -691,6 +723,17 @@ Nothing here is accidental, but a reader coming from the brief should know:
   is not a failure. Callers that report to a person must check
   `Mailer::isTemplateActive()` first, or they end up saying "see the log" about
   an entry that was never written.
+- **Messages are HTML in a fixed shell.** `src/Mail/Layout.php` wraps the merged
+  body: masthead with the light logo, content, product footer. Deliberately not
+  editable — what an administrator writes is a message's *content*; the layout
+  is the product's, and making it editable would be nine chances to break it
+  with no way to improve them all at once. Written the way email has to be
+  written: tables, inline styles on the containers, 600px, no media queries.
+- **A plain-text alternative always goes with it.** PHPMailer does not invent
+  one, so `AltBody` is set explicitly — and from the *content*, before the shell
+  is wrapped round it, or the text part would carry the masthead and footer
+  chrome. `Merge::htmlToText()` keeps link addresses (`label <url>`), because
+  the text part exists precisely for readers who cannot click.
 - **The SMTP password is encrypted at rest** (`src/Core/Crypto.php`,
   AES-256-GCM, key from `APP_KEY`). `Crypto::encrypt()` returns null rather than
   falling back to plaintext — **it fails closed**, and `Mailer::storePassword()`
@@ -830,9 +873,9 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 170 PHP files | 0 failures |
+| `php -l` on all 182 PHP files | 0 failures |
 | `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **1874 output expressions across 70 templates, 0 unescaped** |
+| `tests/escape-audit.php` | **2028 output expressions across 78 templates, 0 unescaped** |
 | All 18 migrations against an empty database | applied cleanly; schema as documented above |
 | Seed data counts | 4 roles / 32 permissions / 65 grants / 37 settings / 0 template overrides |
 | Migration 018 on the **populated** dev database | applied cleanly; existing rows untouched |
@@ -887,13 +930,30 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 | Cost per frame at 1280×720 | 11.3 ms worst case (no code present), 9.3 ms with a QR — against a 120 ms frame budget |
 | `/scan` and a scan-button page | both scripts served in order, `AssetBarcode` present, no console errors |
 
+**Branding, export and printing (2026-08-11), verified on this machine:**
+
+| Check | Result |
+|---|---|
+| Logo upload, both variants | stored, served with the right content type, cache-busted by a fingerprint of the stored path |
+| Logo reaches all four consumers | site header, sign-in page (signed out), both print mastheads, and the email as a CID attachment |
+| Aspect ratio | a 640×160 logo renders 136×34 in the header and 242×60 on paper — **error 0.0000**, constrained by height, never stretched |
+| Variant fallback | dark removed → light serves both themes; both removed → the **KW** box returns and `/branding/logo/light` 404s |
+| A fake PNG (text file renamed) | refused with a readable message, **and the existing logo survives** |
+| Email MIME structure | `multipart/alternative` → text/plain + `multipart/related` → text/html + PNG with `Content-ID: <branding-logo>` |
+| Plain-text alternative | generated from the content, not the wrapped message; link addresses preserved as `label <url>` (5 cases) |
+| PAT wizard step colours | grey → green when all pass → grey again when an answer is removed → red on any fail; readings count; the Result step, having no verdicts, is never coloured |
+| Permission matrix | **284 route/role checks**, the 8 new routes behaving as declared (2 pre-existing mismatches on POST /pat, which 404s because the harness posts no asset_id) |
+| Permission table alignment | 32 rows, **one distinct left edge per column**, every row 40–41px at 1280px |
+| Export CSVs | whole register 26 columns, with PAT+hire extras 35, hand-picked subset 2 rows |
+| `/assets` export entry points | none remain — no button, no bulk action, no column options |
+
 **Shipped in `tests/` but requiring something more than PHP:**
 
 | Check | What it proves |
 |---|---|
 | `tests/barcode-decode.html` | the decoder, in a browser: 32 checks over Code 128, Code 39 and QR. Needs no server or network — open the file |
 | `tests/report-figures.php` | each report's rendered row count matches the same figure taken straight from the database, and the CSV matches the screen (8 cross-checks) |
-| `tests/permission-matrix.php` | ~260 route/role combinations against declared expectations for all four roles. **This one writes — demo databases only** |
+| `tests/permission-matrix.php` | ~284 route/role combinations against declared expectations for all four roles. **This one writes — demo databases only** |
 
 **Run during the build, living in the session scratchpad rather than the repo**
 (these are *not* part of the deliverable and are not re-runnable from a fresh
@@ -1195,6 +1255,21 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   `[hidden] { display: none !important; }` in the reset. If you find yourself
   adding a per-component `[hidden]` rule, that is the bug — the global one
   already covers it.
+- **`Controller::view()` takes a layout — the data array does not.** Passing
+  `'layout' => 'print'` in the data does nothing at all except create an unused
+  template variable, and the page renders inside the full site chrome. The
+  third argument is the layout: `$this->view('assets/print', [...],
+  'layouts/print')`.
+- **`strip_tags()` runs after every other transform in `htmlToText()`.**
+  Emitting a bare `<http://…>` for a link address gets it deleted as a tag.
+  Emit `&lt;…&gt;`; the `html_entity_decode()` at the end turns it back.
+- **A controller that pulls `Upload::files()` must validate in the same file.**
+  `tests/security-audit.php` checks per file and is right to: a controller that
+  takes a file and leaves the checking to somebody else is exactly the shape
+  that hides a missing check. `Branding::acceptUpload()` therefore does both.
+- **`document.querySelector('form')` in a browser test is the nav's logout
+  form**, not the form on the page. Two verification runs produced wrong
+  answers this way before the cause was spotted. Select the form you mean.
 - **A switched-off email template writes no log row.** `Mailer::sendTemplate()`
   returns false without logging, because a deliberate silence is not a failure.
   Anything reporting the outcome to a person must call

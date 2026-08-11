@@ -13,9 +13,14 @@ use App\Core\View;
 abstract class Controller
 {
     /** @param array<string,mixed> $data */
-    protected function view(string $template, array $data = []): void
+    /**
+     * @param string $layout Pass 'layouts/print' for a document view: no
+     *                       navigation, no footer, nothing that should not come
+     *                       out of a printer.
+     */
+    protected function view(string $template, array $data = [], string $layout = 'layouts/app'): void
     {
-        View::render($template, $data);
+        View::render($template, $data, $layout);
     }
 
     /**

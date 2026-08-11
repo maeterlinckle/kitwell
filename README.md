@@ -516,8 +516,16 @@ Four roles ship with the system:
 
 Permissions are **data, not code**: `roles` → `role_permissions` → `permissions`.
 Adding a permission or a whole new role is an `INSERT`, never a schema change.
-Administrators can retune any non-superuser role at **Roles & permissions** in
-the admin area.
+
+**Add role** on the Roles & permissions page creates one: give it a name, a
+description and tick what it may do. Its machine name is derived from the name
+and then fixed, because that is what the code refers to. New roles can be
+renamed later; the four that ship keep their names, because the documentation
+refers to them — their permissions are still yours to change.
+
+A role created here can never be a superuser: that flag is what protects the
+built-in Administrator from being edited away, and nothing reachable from the
+web can set it.
 
 Checks are enforced server-side in three places, and the UI simply hides what a
 user cannot reach:
@@ -651,6 +659,19 @@ edited**. So a fresh install sends properly worded mail with an empty table, and
 go stale. A single template can also be switched off without disabling email or
 the reminder it belongs to.
 
+#### What a message looks like
+
+Messages go out as HTML in a fixed layout: your logo across the top, the
+content, and a footer. What you edit is the *content* — ordinary HTML, so
+`<p>`, `<strong>`, `<ul>` and links all work, and the shipped wording shows the
+shape. The surrounding layout is not editable on purpose: it is one design to
+keep right rather than nine, and improving it improves every message at once.
+
+**A plain-text version is always sent alongside**, generated from your content,
+so a client that shows no HTML still gets a readable message — links included,
+with their addresses. If you rewrite a template as plain text, untick *HTML* and
+it is sent exactly as typed.
+
 ### One-click sends
 
 | Where | Button | What it sends |
@@ -755,6 +776,40 @@ crisp at any printer resolution. Three sizes are available via `?size=`:
 
 Print at 100% scale — "fit to page" changes the bar widths. Long asset tags are
 scaled to fit the label and the print view warns when that happens.
+
+### Printing records
+
+Two documents, both written as paper rather than as a screen with the furniture
+hidden:
+
+- **Print** on an asset page gives that asset's full record — identification,
+  purchase and value, PAT status with recent tests, maintenance schedules and
+  recent work, current hire, sub-assets and notes — with its barcode at the top.
+  This is the sheet to put in a folder, hand to an engineer, or take to the
+  machine when the system is not in front of you.
+- **Print list** on the register gives the assets you are currently looking at,
+  six columns wide: tag, name, category, location, condition and status. It
+  honours your filters, or your ticked rows if you have ticked any, and it says
+  which at the top of the page. Long lists repeat the column headings on every
+  sheet.
+
+Both carry your logo, the organisation name, and who printed them and when.
+
+### Your logo
+
+**Settings → Logo** takes a PNG, JPEG or WebP up to 2 MB, with separate light
+and dark mode versions — upload either, or both, or neither. The active one
+replaces the **KW** box in the top-left corner; the wordmark beside it stays
+either way. Upload only one and it is used for both themes.
+
+The logo is scaled by height and never stretched, so any shape works; make it at
+least 72px tall so it stays crisp on a high-resolution screen. It appears in the
+site header, on the sign-in page, on both printed documents above, and in the
+header of outbound email — where it is embedded in the message rather than
+linked, so it still shows when the mail is read from outside your network.
+
+Printed pages and email always use the **light** version: paper is white, and so
+is a mail client's message pane.
 
 ### Sub-assets, accessories and related items
 
@@ -1264,10 +1319,19 @@ rejected, so importing the same sheet twice is safe.
 
 #### Exporting
 
-**Settings → Export assets** exports the whole register, or tick rows on the
-register and use **Export selected** to take just those. (The register itself
-no longer carries a general Export button: exporting is an occasional job, and
-it lives with the other occasional jobs.) The core columns are the same shape the importer accepts, so an
+Exporting starts from **Settings → Export data**, and only from there. The
+register page carries no export button at all: exporting is an occasional,
+deliberate job, not something to meet while browsing.
+
+The Export page lists everything that can leave the system as a file — the
+asset register, and each report — with the same "how it works" explanation the
+Import page has. For the register you choose which assets (by search, category,
+location, status) and which optional extra columns, then download. To take a
+hand-picked set instead, **Pick individual assets** opens its own searchable,
+tickable list: choosing rows and choosing columns are two different jobs and
+neither is clear when they share a screen.
+
+The core columns are the same shape the importer accepts, so an
 export can be edited in a spreadsheet and fed straight back in; the test suite
 verifies that round trip.
 

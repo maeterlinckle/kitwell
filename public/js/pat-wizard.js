@@ -58,11 +58,7 @@
             step.hidden = i !== current;
         });
 
-        Array.prototype.forEach.call(progress.children, function (li, i) {
-            li.className = 'wizard-progress-step'
-                + (i === current ? ' is-current' : '')
-                + (i < current ? ' is-done' : '');
-        });
+        paintProgress();
 
         backBtn.hidden = current === 0;
         nextBtn.hidden = current === steps.length - 1;
@@ -120,6 +116,61 @@
         if (reading && reading.value.trim() === '') return reading;
 
         return null;
+    }
+
+    /**
+     * What one step's own answers say: 'pass', 'fail', or null for undecided.
+     *
+     * Green has to mean something. A step is only green when every check in it
+     * is answered, every reading in it is filled, and nothing came back a fail;
+     * it is red the moment anything in it fails, because that is the thing the
+     * tester needs to see from the rail without opening the step again. A step
+     * carrying no checks at all — the Result step — is never coloured: there is
+     * no verdict in it to report.
+     */
+    function stepOutcome(step) {
+        var found = groups(step);
+        var names = Object.keys(found);
+
+        if (names.length === 0) return null;
+
+        var complete = true;
+        var failed   = false;
+
+        names.forEach(function (name) {
+            var inputs = found[name];
+
+            if (!answered(inputs)) {
+                complete = false;
+                return;
+            }
+
+            if (inputs.filter(function (i) { return i.checked; })[0].value === '0') {
+                failed = true;
+            }
+        });
+
+        if (failed) return 'fail';
+
+        // A verdict with no reading beside it is not a completed check.
+        Array.prototype.forEach.call(
+            step.querySelectorAll('.check-row-test input[type="number"]'),
+            function (input) { if (input.value.trim() === '') complete = false; }
+        );
+
+        return complete ? 'pass' : null;
+    }
+
+    /** Repaint the rail from each step's own outcome. */
+    function paintProgress() {
+        Array.prototype.forEach.call(progress.children, function (li, i) {
+            var outcome = stepOutcome(steps[i]);
+
+            li.className = 'wizard-progress-step'
+                + (i === current ? ' is-current' : '')
+                + (outcome === 'pass' ? ' is-pass' : '')
+                + (outcome === 'fail' ? ' is-fail' : '');
+        });
     }
 
     function flag(input) {
@@ -198,6 +249,10 @@
         saveBtn.textContent = !complete
             ? 'Answer every check to save'
             : (passing ? 'Record a Pass' : 'Record a Fail');
+
+        // The rail reflects answers, so it has to be repainted whenever one
+        // changes — not only when the step changes.
+        paintProgress();
     }
 
     form.addEventListener('change', review);

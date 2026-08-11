@@ -118,3 +118,97 @@
         padding: 1mm;
     }
 }
+
+/* ==========================================================================
+   Printed documents — a single asset, and the register as a list.
+
+   Separate from the label sheet above: labels are millimetre-accurate stock,
+   these are ordinary A4 paper where readability matters more than precision.
+   ========================================================================== */
+
+.print-doc {
+    max-width: 190mm;
+    margin: 0 auto;
+    padding: 8mm 6mm 12mm;
+    color: #000;
+    background: #fff;
+    font-size: 10.5pt;
+    line-height: 1.4;
+}
+
+.print-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8mm;
+    padding-bottom: 4mm;
+    margin-bottom: 6mm;
+    border-bottom: 2px solid #000;
+}
+
+.print-head-brand { display: flex; align-items: center; gap: 4mm; }
+
+/* Constrained by height so the logo keeps its proportions, exactly as in the
+   site header. max-width is generous enough that a normal wide wordmark (up to
+   about 5:1) is never capped; anything wider than that is letterboxed by
+   object-fit rather than squashed. */
+.print-logo { height: 16mm; width: auto; max-width: 85mm; object-fit: contain; }
+
+.print-org     { margin: 0; font-weight: 700; font-size: 12pt; }
+.print-product { margin: 0; font-size: 8.5pt; }
+
+.print-head-meta { text-align: right; }
+.print-head-meta h1 { margin: 0 0 1mm; font-size: 16pt; }
+.print-head-meta p  { margin: 0; font-size: 8.5pt; }
+
+.print-barcode { margin-bottom: 6mm; }
+
+.print-section { margin-bottom: 6mm; break-inside: avoid; }
+.print-section h2 {
+    margin: 0 0 2mm;
+    font-size: 11pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid #999;
+    padding-bottom: 1mm;
+}
+.print-section h3 { margin: 3mm 0 1.5mm; font-size: 10pt; }
+
+/* Two columns of label/value on paper; one on a narrow screen preview. */
+.print-dl { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8mm; margin: 0; }
+.print-dl > div {
+    display: grid;
+    grid-template-columns: 38mm 1fr;
+    gap: 2mm;
+    padding: 1mm 0;
+    border-bottom: 1px dotted #ccc;
+}
+.print-dl dt { font-weight: 600; color: #444; }
+.print-dl dd { margin: 0; }
+
+.print-table { width: 100%; border-collapse: collapse; margin-top: 2mm; font-size: 9.5pt; }
+.print-table th, .print-table td {
+    text-align: left;
+    padding: 1.5mm 2mm;
+    border-bottom: 1px solid #ccc;
+    vertical-align: top;
+}
+.print-table thead th { border-bottom: 1.5px solid #000; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.04em; }
+.print-table tbody tr { break-inside: avoid; }
+
+/* Long lists run over pages, so the headings repeat at the top of each. */
+.print-table-list thead { display: table-header-group; }
+
+.print-note { margin: 2mm 0 0; }
+.print-foot { margin-top: 8mm; padding-top: 2mm; border-top: 1px solid #ccc; font-size: 8pt; }
+
+@media print {
+    .print-doc { max-width: none; padding: 0; }
+    .print-dl > div { border-bottom: 1px dotted #bbb; }
+}
+
+@media (max-width: 700px) {
+    .print-dl { grid-template-columns: 1fr; }
+    .print-head { flex-direction: column; }
+    .print-head-meta { text-align: left; }
+}

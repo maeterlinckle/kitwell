@@ -52,6 +52,8 @@ $matrix = [
     '/assets/1/label'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/labels?ids=1'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/export'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/print'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1/print'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/1/photos'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/1/pat'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/1/maintenance/log'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
@@ -93,6 +95,12 @@ $matrix = [
 
     // Import
     '/import'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+
+    // Export lives in its own place now; the hub needs either export or
+    // reports, which is why a read-only user reaches it.
+    '/export'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/export/assets'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/export/assets/select'      => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/import/assets'             => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
     '/import/pat'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
     '/import/assets/template'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
@@ -102,6 +110,7 @@ $matrix = [
     '/admin/users/create'        => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/users/1/edit'        => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/roles'               => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/roles/create'        => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/settings'            => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/activity'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/categories'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],

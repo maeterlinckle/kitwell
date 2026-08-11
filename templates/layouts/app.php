@@ -45,14 +45,7 @@ $pageTitle = $pageTitle ?? '';
     <?= $content ?>
 </main>
 
-<footer class="site-footer">
-    <div class="container footer-inner">
-        <span><?= e($appName) ?></span>
-        <?php if (auth_user() !== null): ?>
-            <span class="muted">Signed in as <?= e(auth_user()['name']) ?> · <?= e(auth_user()['role_name']) ?></span>
-        <?php endif; ?>
-    </div>
-</footer>
+<?= partial('partials/footer') ?>
 
 <script src="<?= e(asset_url('js/app.js')) ?>" defer></script>
 </body>

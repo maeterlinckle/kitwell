@@ -20,8 +20,10 @@ use App\Controllers\CalendarController;
 use App\Controllers\AssetController;
 use App\Controllers\AssetCopyController;
 use App\Controllers\AssetExportController;
+use App\Controllers\ExportController;
 use App\Controllers\ImportController;
 use App\Controllers\AuthController;
+use App\Controllers\BrandingController;
 use App\Controllers\HirerController;
 use App\Controllers\DashboardController;
 use App\Controllers\LabelController;
@@ -44,6 +46,11 @@ $router->post('/login', [AuthController::class, 'login'],     ['guest', 'csrf'])
 $router->post('/logout', [AuthController::class, 'logout'],   ['auth', 'csrf'], 'logout');
 
 $router->get('/health', [DashboardController::class, 'health']);
+
+// The logo, outside 'auth' because the sign-in page shows it and nobody has a
+// session at that point. It takes no id, reads one of two settings and returns
+// an image an administrator chose to publish. See App\Controllers\BrandingController.
+$router->get('/branding/logo/{variant:light|dark}', [BrandingController::class, 'logo']);
 
 // Personal calendar subscription. Deliberately outside 'auth': a calendar
 // client cannot sign in, so the 64-character token in the path is the
@@ -75,6 +82,7 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/assets',       [AssetController::class, 'store'],  ['can:assets.create', 'csrf']);
 
     $router->get('/assets/labels', [LabelController::class, 'sheet'], ['can:assets.view']);
+    $router->get('/assets/print',  [AssetController::class, 'printList'], ['can:assets.view']);
     $router->get('/assets/export', [AssetExportController::class, 'export'], ['can:assets.export']);
 
     $router->get('/assets/{id:\d+}',            [AssetController::class, 'show'],    ['can:assets.view']);
@@ -84,8 +92,9 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/assets/{id:\d+}/restore',   [AssetController::class, 'restore'], ['can:assets.edit', 'csrf']);
     $router->post('/assets/{id:\d+}/delete',    [AssetController::class, 'destroy'], ['can:assets.delete', 'csrf']);
 
-    // Barcode label for a single asset.
+    // Barcode label for a single asset, and the full record as a document.
     $router->get('/assets/{id:\d+}/label', [LabelController::class, 'single'], ['can:assets.view']);
+    $router->get('/assets/{id:\d+}/print', [AssetController::class, 'printOne'], ['can:assets.view']);
 
     // Copy workflows.
     $router->get('/assets/{id:\d+}/copy',   [AssetCopyController::class, 'copyForm'],    ['can:assets.create']);
@@ -187,6 +196,15 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/scan',       [ScanController::class, 'go'],     ['can:assets.view', 'csrf']);
 });
 
+// --- CSV export -----------------------------------------------------------
+// The hub and the two register screens. The file itself is still produced by
+// AssetExportController and ReportController, so each format has one definition.
+$router->group(['auth'], static function (Router $router): void {
+    $router->get('/export', [ExportController::class, 'index'], ['canany:assets.export,reports.view'], 'export');
+    $router->get('/export/assets', [ExportController::class, 'assets'], ['can:assets.export']);
+    $router->get('/export/assets/select', [ExportController::class, 'assetsSelect'], ['can:assets.export']);
+});
+
 // --- CSV import -----------------------------------------------------------
 // Two generic routes plus a template download serve every importer.
 $router->group(['auth'], static function (Router $router): void {
@@ -227,6 +245,8 @@ $router->group(['auth'], static function (Router $router): void {
 
     // Roles and permissions
     $router->get('/admin/roles',                [RoleController::class, 'index'],  ['can:roles.manage'], 'admin.roles');
+    $router->get('/admin/roles/create',         [RoleController::class, 'create'], ['can:roles.manage']);
+    $router->post('/admin/roles',               [RoleController::class, 'store'],  ['can:roles.manage', 'csrf']);
     $router->get('/admin/roles/{id:\d+}/edit',  [RoleController::class, 'edit'],   ['can:roles.manage']);
     $router->post('/admin/roles/{id:\d+}',      [RoleController::class, 'update'], ['can:roles.manage', 'csrf']);
 
@@ -244,6 +264,11 @@ $router->group(['auth'], static function (Router $router): void {
     // Application settings
     $router->get('/admin/settings',  [SettingsController::class, 'edit'],   ['can:settings.manage'], 'admin.settings');
     $router->post('/admin/settings', [SettingsController::class, 'update'], ['can:settings.manage', 'csrf']);
+
+    // Branding. Separate from the settings form because an upload has nothing
+    // to do with the other fields and removal is its own action.
+    $router->post('/admin/settings/logo', [SettingsController::class, 'updateLogo'], ['can:settings.manage', 'csrf']);
+    $router->post('/admin/settings/logo/{variant:light|dark}/remove', [SettingsController::class, 'removeLogo'], ['can:settings.manage', 'csrf']);
 
     // Email: the SMTP connection, reminders, templates and the send log.
     // One nav entry, four pages — Settings is set up once and visited rarely,

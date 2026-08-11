@@ -56,8 +56,8 @@ $links = [
         ['label' => 'Locations',    'href' => '/admin/locations',  'permission' => 'locations.manage'],
         ['label' => 'Email',        'href' => '/admin/email',      'permission' => 'email.manage'],
         ['label' => 'Activity log', 'href' => '/admin/activity',   'permission' => 'audit.view'],
-        ['label' => 'Import CSV',   'href' => '/import',           'permission' => 'assets.create'],
-        ['label' => 'Export assets','href' => '/assets/export',    'permission' => 'assets.export'],
+        ['label' => 'Import data',  'href' => '/import',           'permission' => 'assets.create'],
+        ['label' => 'Export data',  'href' => '/export',           'permission' => 'assets.export'],
         ['label' => 'Application settings', 'href' => '/admin/settings', 'permission' => 'settings.manage'],
     ]],
 ];
@@ -109,8 +109,7 @@ $groupIsOpen = static function (array $link): bool {
 <header class="site-header">
     <div class="container header-inner">
         <a class="brand" href="<?= e(url('/')) ?>">
-            <span class="brand-mark" aria-hidden="true">AR</span>
-            <span class="brand-name"><?= e($appName ?? 'Asset Register') ?></span>
+            <?= partial('partials/brand', ['appName' => $appName ?? config('app.name', 'Asset Register')]) ?>
         </a>
 
         <nav id="primary-nav" class="primary-nav" data-nav aria-label="Main">

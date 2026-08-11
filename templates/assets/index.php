@@ -27,11 +27,9 @@ $hasFilters = ($filters['q'] ?? '') !== ''
         </p>
     </div>
     <div class="head-actions">
-        <?php /* No Export CSV here: the whole-register export lives under
-                 Settings, where the other occasional tools are. Exporting a
-                 selection is still on the bulk actions below, because that acts
-                 on what you have picked on this page and has nowhere else to
-                 live. */ ?>
+        <?php /* No export here at all — it is started from /export, which
+                 explains the formats and carries the column options. */ ?>
+        <a class="btn" href="<?= e(url('/assets/print' . ($queryString !== '' ? '?' . $queryString : ''))) ?>">Print list</a>
         <?php if (can('assets.create')): ?>
             <a class="btn btn-primary" href="<?= e(url('/assets/create')) ?>">Add asset</a>
         <?php endif; ?>
@@ -146,21 +144,6 @@ $hasFilters = ($filters['q'] ?? '') !== ''
                 </label>
             </div>
 
-            <?php if (can('assets.export')): ?>
-                <div class="field">
-                    <span class="label">Extra columns when exporting</span>
-                    <div class="check-row">
-                        <?php foreach (\App\Controllers\AssetExportController::extraGroups() as $extraKey => $extra): ?>
-                            <label class="checkbox checkbox-compact">
-                                <input type="checkbox" name="extras[]" value="<?= e($extraKey) ?>"
-                                    <?= in_array($extraKey, (array) ($filters['extras'] ?? []), true) ? 'checked' : '' ?>>
-                                <span><?= e($extra['label']) ?></span>
-                            </label>
-                        <?php endforeach; ?>
-                    </div>
-                    <p class="field-hint">Only affects the CSV export, not what is shown here.</p>
-                </div>
-            <?php endif; ?>
         </div>
 
         <div class="form-actions">
@@ -197,10 +180,8 @@ $hasFilters = ($filters['q'] ?? '') !== ''
 
         <div class="bulk-bar-right">
             <button type="submit" class="btn btn-sm" data-requires-selection disabled>Print labels</button>
-            <?php if (can('assets.export')): ?>
-                <button type="submit" class="btn btn-sm" data-requires-selection disabled
-                        formaction="<?= e(url('/assets/export')) ?>">Export selected</button>
-            <?php endif; ?>
+            <button type="submit" class="btn btn-sm" data-requires-selection disabled
+                    formaction="<?= e(url('/assets/print')) ?>">Print list</button>
         </div>
 
         <div class="table-wrap">

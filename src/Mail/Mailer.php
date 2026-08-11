@@ -238,9 +238,26 @@ final class Mailer
 
         $merged  = array_merge(self::commonFields($toName), $fields);
         $subject = Merge::render((string) $template['subject'], $merged);
-        $body    = Merge::render((string) $template['body'], $merged, (bool) $template['is_html']);
+        $isHtml  = (bool) $template['is_html'];
+        $content = Merge::render((string) $template['body'], $merged, $isHtml);
 
-        return self::send($toAddress, $toName, $subject, $body, (bool) $template['is_html'], $context);
+        if (!$isHtml) {
+            return self::send($toAddress, $toName, $subject, $content, false, $context);
+        }
+
+        // The plain-text alternative comes from the *content*, before the shell
+        // is wrapped round it: running htmlToText over the whole message would
+        // put the masthead and the footer chrome into the text part, which is
+        // the one people fall back to when their client shows no pictures.
+        return self::send(
+            $toAddress,
+            $toName,
+            $subject,
+            Layout::wrap($content, $subject),
+            true,
+            $context,
+            Merge::htmlToText($content)
+        );
     }
 
     /**
@@ -270,7 +287,8 @@ final class Mailer
         string $subject,
         string $body,
         bool $isHtml = false,
-        array $context = []
+        array $context = [],
+        ?string $altBody = null
     ): bool {
         $toAddress = trim($toAddress);
 
@@ -304,8 +322,21 @@ final class Mailer
 
             if ($isHtml) {
                 $mail->isHTML(true);
-                $mail->Body    = $body;
-                $mail->AltBody = Merge::htmlToText($body);
+                $mail->Body = $body;
+
+                // PHPMailer does not invent a text part, so without this the
+                // message goes out as HTML only and a text-only client shows
+                // nothing useful at all.
+                $mail->AltBody = $altBody ?? Merge::htmlToText($body);
+
+                // Embedded rather than linked: this application is usually on a
+                // private network, so an <img src="https://…"> in a message
+                // read from outside would be a broken image.
+                $logo = Layout::logoPath();
+
+                if ($logo !== null && str_contains($body, 'cid:' . Layout::LOGO_CID)) {
+                    $mail->addEmbeddedImage($logo, Layout::LOGO_CID, 'logo');
+                }
             } else {
                 $mail->isHTML(false);
                 $mail->Body = $body;

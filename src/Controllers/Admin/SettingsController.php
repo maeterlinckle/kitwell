@@ -11,6 +11,7 @@ use App\Core\Response;
 use App\Models\ActivityLog;
 use App\Models\Setting;
 use App\Services\AssetTagger;
+use App\Services\Branding;
 
 final class SettingsController extends Controller
 {
@@ -20,7 +21,69 @@ final class SettingsController extends Controller
             'pageTitle' => 'Settings',
             'settings'  => Setting::all(),
             'nextTag'   => AssetTagger::next(),
+            'logos'     => [
+                // Setting::path(), not resolve(): this page must show what is
+                // actually stored in each slot, not what stands in for it.
+                'light' => Branding::path('light') === null ? null : Branding::url('light'),
+                'dark'  => Branding::path('dark') === null ? null : Branding::url('dark'),
+            ],
         ]);
+    }
+
+    /** Upload one or both logo variants. */
+    public function updateLogo(): void
+    {
+        $saved  = [];
+        $failed = [];
+
+        foreach (Branding::VARIANTS as $variant) {
+            $result = Branding::acceptUpload($variant);
+
+            if (!$result['provided']) {
+                continue;
+            }
+
+            if ($result['error'] === null) {
+                $saved[] = $variant;
+            } else {
+                $failed[] = $result['error'];
+            }
+        }
+
+        foreach ($failed as $problem) {
+            Flash::error($problem);
+        }
+
+        if ($saved !== []) {
+            ActivityLog::record(
+                'branding_updated',
+                'setting',
+                null,
+                'Uploaded the ' . implode(' and ', $saved) . ' mode logo'
+            );
+
+            Flash::success(count($saved) === 2
+                ? 'Both logos updated.'
+                : 'The ' . $saved[0] . ' mode logo was updated.');
+        } elseif ($failed === []) {
+            Flash::info('No file was chosen, so nothing changed.');
+        }
+
+        Response::redirect('/admin/settings');
+    }
+
+    public function removeLogo(string $variant): void
+    {
+        if (!in_array($variant, Branding::VARIANTS, true)) {
+            $this->notFound();
+        }
+
+        Branding::remove($variant);
+
+        ActivityLog::record('branding_updated', 'setting', null, 'Removed the ' . $variant . ' mode logo');
+
+        Flash::success('The ' . $variant . ' mode logo was removed.');
+        Response::redirect('/admin/settings');
     }
 
     public function update(): void
@@ -74,7 +137,7 @@ final class SettingsController extends Controller
         Setting::put('pat_due_days', (string) (int) $data['pat_due_days']);
         Setting::put('pat_default_interval_months', (string) (int) $data['pat_default_interval_months']);
 
-        // Guideline pass ranges shown to the tester. Guidance only — nothing
+        // Guideline pass ranges shown to the tester. Guidance only ï¿½ nothing
         // compares a reading against these to decide a result.
         foreach (['pat_guide_insulation_mohm', 'pat_guide_earth_base_ohm', 'pat_guide_earth_lead_ohm',
                   'pat_guide_earth_lead_metres', 'pat_guide_leakage_class1_ma', 'pat_guide_leakage_class2_ma'] as $key) {

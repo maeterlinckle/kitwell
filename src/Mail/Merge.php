@@ -77,10 +77,36 @@ final class Merge
      */
     public static function htmlToText(string $html): string
     {
-        $text = preg_replace('#<br\s*/?>#i', "\n", $html) ?? $html;
-        $text = preg_replace('#</(p|div|tr|li|h[1-6])\s*>#i', "\n", $text) ?? $text;
+        // Links keep their address. Stripping the tag and leaving "Record a
+        // test" would give a text-only reader an instruction with no way to
+        // follow it — the one thing the text part exists to avoid.
+        $text = (string) preg_replace_callback(
+            '#<a\b[^>]*href=(["\'])(.*?)\1[^>]*>(.*?)</a>#is',
+            static function (array $m): string {
+                $href  = html_entity_decode($m[2], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $label = trim(strip_tags($m[3]));
+
+                if ($label === '' || $label === $href) {
+                    return $href;
+                }
+
+                // Entity-encoded angle brackets, because strip_tags() runs
+                // further down and would treat a bare <http://…> as a tag and
+                // delete the address this whole branch exists to keep. The
+                // html_entity_decode() at the end turns them back.
+                return $label . ' &lt;' . $href . '&gt;';
+            },
+            $html
+        );
+
+        // A <br> at the end of a source line would otherwise become two breaks.
+        $text = preg_replace('#<br\s*/?>\s*#i', "\n", $text) ?? $text;
+        $text = preg_replace('#</(p|div|tr|li|h[1-6])\s*>#i', "\n\n", $text) ?? $text;
         $text = strip_tags($text);
         $text = html_entity_decode($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        // Tidy the whitespace the tags left behind.
+        $text = preg_replace('/[ \t]+$/m', '', $text) ?? $text;
         $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
 
         return trim($text);

@@ -58,6 +58,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
         <?php if (can('assets.edit')): ?>
             <a class="btn" href="<?= e(url('/assets/' . $id . '/edit')) ?>">Edit</a>
         <?php endif; ?>
+        <a class="btn" href="<?= e(url('/assets/' . $id . '/print')) ?>">Print</a>
         <a class="btn" href="<?= e(url('/assets/' . $id . '/label')) ?>">Print label</a>
         <?php if (can('assets.create')): ?>
             <a class="btn" href="<?= e(url('/assets/' . $id . '/copy')) ?>">Copy</a>
@@ -488,7 +489,10 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
 
         <div class="card">
             <h2>Record</h2>
-            <dl class="detail-list detail-list-tight">
+            <?php /* Stacked, not side by side: "Added" and "Last updated" carry a
+                     date, a time and a person's name, which is far too much to
+                     squeeze into the right-hand half of a 320px rail. */ ?>
+            <dl class="detail-list detail-list-stacked">
                 <div><dt>Added</dt><dd><?= e(format_date($asset['created_at'])) ?><?= !empty($asset['created_by_name']) ? ' by ' . e($asset['created_by_name']) : '' ?></dd></div>
                 <div><dt>Last updated</dt><dd><?= e(format_datetime($asset['updated_at'])) ?><?= !empty($asset['updated_by_name']) ? ' by ' . e($asset['updated_by_name']) : '' ?></dd></div>
             </dl>

@@ -1,6 +1,7 @@
 <?php
 /**
  * @var array<string,string|null> $settings
+ * @var array<string,string|null> $logos  light/dark logo URLs, null when unset
  * @var string $nextTag
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
@@ -12,6 +13,56 @@ $setting = static fn (string $key, string $default = ''): string => (string) ($s
         <h1>Settings</h1>
         <p class="muted">Application-wide options. Database credentials and security settings live in <span class="mono">.env</span>, not here.</p>
     </div>
+</div>
+
+<?php /* Its own form, above the rest: an upload has nothing to do with the
+         other settings, and putting it inside their form would mean every logo
+         change re-validated and re-saved all of them. */ ?>
+<div class="card">
+    <h2>Logo</h2>
+    <p class="muted">
+        Shown in the top-left corner in place of the <span class="brand-mark brand-mark-inline"><?= e(config('app.mark', 'KW')) ?></span> box,
+        on printed paperwork, and in the header of outbound email. Optional — leave both empty to keep the box.
+    </p>
+
+    <form method="post" action="<?= e(url('/admin/settings/logo')) ?>" class="form" enctype="multipart/form-data">
+        <?= csrf_field() ?>
+
+        <div class="logo-grid">
+            <?php foreach (['light' => 'Light mode', 'dark' => 'Dark mode'] as $variant => $label): ?>
+                <div class="logo-slot">
+                    <div class="logo-preview logo-preview-<?= e($variant) ?>">
+                        <?php if ($logos[$variant] !== null): ?>
+                            <img src="<?= e($logos[$variant]) ?>" alt="<?= e($label) ?> logo">
+                        <?php else: ?>
+                            <span class="muted">None uploaded</span>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="field">
+                        <label class="label" for="logo_<?= e($variant) ?>"><?= e($label) ?></label>
+                        <input class="input" type="file" id="logo_<?= e($variant) ?>" name="logo_<?= e($variant) ?>"
+                               accept="image/png,image/jpeg,image/webp">
+                        <p class="field-hint">PNG, JPEG or WebP, up to 2&nbsp;MB. Scaled to fit by height, so make it at least 72px tall.</p>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save logo</button>
+        </div>
+    </form>
+
+    <?php foreach (['light' => 'Light mode', 'dark' => 'Dark mode'] as $variant => $label): ?>
+        <?php if ($logos[$variant] !== null): ?>
+            <form method="post" action="<?= e(url('/admin/settings/logo/' . $variant . '/remove')) ?>" class="inline-form">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-sm btn-ghost"
+                        data-confirm="Remove the <?= e(strtolower($label)) ?> logo?">Remove <?= e(strtolower($label)) ?> logo</button>
+            </form>
+        <?php endif; ?>
+    <?php endforeach; ?>
 </div>
 
 <form method="post" action="<?= e(url('/admin/settings')) ?>" class="form" novalidate>

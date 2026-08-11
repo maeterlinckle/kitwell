@@ -45,6 +45,56 @@ final class AssetController extends Controller
         ]);
     }
 
+    /**
+     * A single asset as a document.
+     *
+     * Its own view on the print layout rather than @media print rules over the
+     * normal page: the asset page is a working screen with tabs of photos,
+     * activity and buttons, and hiding all of that leaves a document full of
+     * holes. This is written as paper from the start.
+     */
+    public function printOne(string $id): void
+    {
+        $asset = Asset::find((int) $id);
+
+        if ($asset === null) {
+            $this->notFound();
+        }
+
+        $assetId = (int) $asset['id'];
+
+        $this->view('assets/print', [
+            'pageTitle' => $asset['asset_tag'] . ' · ' . $asset['name'],
+            'backUrl'   => '/assets/' . $assetId,
+            'asset'     => $asset,
+            'children'  => Asset::children($assetId),
+            'schedules' => Auth::can('maintenance.view') ? MaintenanceSchedule::forAsset($assetId) : [],
+            'maintenanceLogs' => Auth::can('maintenance.view') ? MaintenanceLog::forAsset($assetId, 5) : [],
+            'patStatus' => Auth::can('pat.view') ? PatRecord::statusForAsset($assetId) : null,
+            'patRecords'=> Auth::can('pat.view') ? PatRecord::forAsset($assetId, 3) : [],
+            'openHire'  => Hire::openForAsset($assetId),
+        ], 'layouts/print');
+    }
+
+    /** The current filtered list as a document. */
+    public function printList(): void
+    {
+        $filters = self::filtersFromRequest();
+        $ids     = array_values(array_filter(array_map('intval', (array) (Request::query('ids', []) ?: []))));
+
+        // Whatever the register was showing: the ticked rows if any were
+        // ticked, otherwise everything matching the filters.
+        $rows = $ids !== [] ? Asset::byIds($ids) : Asset::searchAll($filters);
+
+        $this->view('assets/print-list', [
+            'pageTitle' => 'Asset list',
+            'backUrl'   => '/assets' . (self::queryString($filters) !== '' ? '?' . self::queryString($filters) : ''),
+            'rows'      => $rows,
+            'filters'   => $filters,
+            'picked'    => $ids !== [],
+        ], 'layouts/print');
+    }
+
     public function show(string $id): void
     {
         $asset = Asset::find((int) $id);

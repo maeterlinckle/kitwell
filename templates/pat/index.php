@@ -183,15 +183,11 @@ $needsAttention = $summary['overdue'] + $summary['failed'] + $summary['never_tes
                             <span class="mono asset-tag"><?= e($row['asset_tag']) ?></span>
                             <span class="asset-name"><?= e(str_limit((string) $row['name'], 40)) ?></span>
                         </a>
-                        <div class="cell-sub">
-                            <?= e($row['location_name'] ?? '') ?>
-                            <?php if ($row['plug_fuse_rating_amps'] !== null): ?>
-                                · <?= e(\App\Models\PatRecord::measurement($row['plug_fuse_rating_amps'], 'A')) ?> fuse
-                            <?php endif; ?>
-                            <?php if ($row['cable_csa_mm2'] !== null): ?>
-                                · <?= e(\App\Models\PatRecord::measurement($row['cable_csa_mm2'], 'mm²')) ?>
-                            <?php endif; ?>
-                        </div>
+                        <?php /* Location only. The fuse rating and cable CSA are
+                                 properties of the appliance, not of its test
+                                 status, and they belong on the asset's own page
+                                 rather than repeated down a list you scan. */ ?>
+                        <div class="cell-sub"><?= e($row['location_name'] ?? '') ?></div>
                     </td>
                     <td class="nowrap">
                         <?= e(format_date($row['test_date'])) ?>

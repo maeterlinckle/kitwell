@@ -115,7 +115,18 @@ check('every POST/PUT/DELETE route verifies CSRF', $missingCsrf === [], implode(
 //    User::holdsPermission() for the token's owner, which is the same rule
 //    Auth::can() applies. So this is an alternative way of proving who you
 //    are, not an exemption from what you may see.
-$publicRoutes = ['/login', '/health', '/calendar/{token:[a-f0-9]+}.ics'];
+//    The logo is the fourth. The sign-in page carries it and nobody has a
+//    session at that point, so requiring one would mean no branding on the one
+//    page every user sees first. It is safe to expose because it exposes
+//    nothing: the route takes no id, reads one of two settings, and returns an
+//    image an administrator deliberately published. An organisation's logo is
+//    on the side of their van.
+$publicRoutes = [
+    '/login',
+    '/health',
+    '/calendar/{token:[a-f0-9]+}.ics',
+    '/branding/logo/{variant:light|dark}',
+];
 $unauthed     = [];
 
 foreach ($routes as $route) {
@@ -146,6 +157,10 @@ $permissionExempt = [
     // anybody else's — a feed URL is a credential, not an admin surface.
     '/profile/calendar', '/profile/calendar/revoke',
     '/calendar/{token:[a-f0-9]+}.ics',
+    // Public branding, per the reasoning above. There is no permission that
+    // would make sense here: the page that needs it most is the one shown to
+    // people who have not signed in.
+    '/branding/logo/{variant:light|dark}',
 ];
 
 $noPermission = [];

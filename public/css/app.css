@@ -1019,6 +1019,14 @@ textarea.textarea-tall { min-height: 22rem; font-family: var(--font-mono, monosp
 }
 
 .detail-list-tight > div { padding-bottom: var(--space-1); }
+
+/* Label above, value full width beneath. The two-column form above works for a
+   short value in a wide column; in the 320px sidebar a date, a time and a name
+   get squeezed into half of that and wrap into a ragged block. */
+.detail-list-stacked > div { padding-bottom: var(--space-1); }
+@media (min-width: 560px) {
+    .detail-list-stacked > div { grid-template-columns: 1fr; gap: 0; }
+}
 .prewrap { white-space: pre-wrap; }
 .external-hint { font-size: 0.85em; }
 
@@ -1902,7 +1910,15 @@ tr.preview-warning td { background: var(--warn-soft); }
     background: var(--accent-soft);
     font-weight: 600;
 }
-.wizard-progress-step.is-done { color: var(--ok); border-color: var(--ok); }
+/* Colour reports the step's own result, not how far through you are: green
+   only when everything in it passed, red as soon as anything in it failed,
+   and otherwise the default grey. */
+.wizard-progress-step.is-pass { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.wizard-progress-step.is-fail { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); font-weight: 700; }
+
+/* The current step keeps its accent ring on top of either. */
+.wizard-progress-step.is-pass.is-current,
+.wizard-progress-step.is-fail.is-current { border-color: var(--accent); }
 
 .wizard-nav {
     display: flex;
@@ -2068,3 +2084,103 @@ tr.preview-warning td { background: var(--warn-soft); }
    rather than merely quieter — at a glance you want to see what it *was*. */
 .audit-table { font-size: 0.92rem; }
 .audit-table .audit-was { text-decoration: line-through; color: var(--text-muted); }
+
+/* --- Branding -------------------------------------------------------------
+   The logo is constrained by height and never by width, so it keeps its
+   proportions whatever shape it is; max-width stops a very wide wordmark from
+   pushing the navigation off the bar. object-fit: contain letterboxes rather
+   than stretches, which is the whole point. */
+
+.brand-logo-wrap { display: inline-flex; align-items: center; }
+
+.brand-logo {
+    display: block;
+    height: 34px;
+    width: auto;
+    max-width: 190px;
+    object-fit: contain;
+}
+
+/* Both variants ship in the markup and CSS picks: the theme can change without
+   a page load, so the server cannot know which one to send. */
+[data-theme="light"] .brand-logo-dark,
+[data-theme="dark"]  .brand-logo-light { display: none; }
+
+/* Where only one variant was uploaded it is used for both themes — one logo is
+   better than none. It is the only .brand-logo present, so nothing hides it. */
+
+.brand-mark-inline {
+    display: inline-grid;
+    width: 22px; height: 22px;
+    font-size: 0.62rem;
+    border-radius: 6px;
+    vertical-align: text-bottom;
+}
+
+.footer-brand { display: grid; gap: 2px; }
+.footer-brand a { color: inherit; }
+
+.logo-grid {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: 1fr;
+}
+@media (min-width: 700px) {
+    .logo-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.logo-slot { display: grid; gap: var(--space-3); align-content: start; }
+
+/* Each preview sits on the background it will actually be seen against, so a
+   white-on-transparent logo is not judged against a white card. */
+.logo-preview {
+    display: grid;
+    place-items: center;
+    min-height: 96px;
+    padding: var(--space-3);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+}
+.logo-preview img { max-height: 64px; max-width: 100%; width: auto; object-fit: contain; }
+.logo-preview-light { background: #ffffff; }
+.logo-preview-dark  { background: #0f172a; }
+.logo-preview-dark .muted { color: #94a3b8; }
+
+/* --- Spacing between blocks that are not cards ----------------------------
+   `.card` carries only a bottom margin, so a card that *follows* something
+   else — a form, a grid of cards — gets no separation from it and sits flush.
+   That is what put the "Running the reminders" panel against the save button
+   and the "How importing works" panel against the importer tiles. */
+
+form + .card,
+form + .section-title,
+.card-grid + .card,
+.card-grid + .section-title { margin-top: var(--space-5); }
+
+/* --- Roles and permissions ------------------------------------------------ */
+
+.role-table td { vertical-align: middle; }
+.role-name { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.role-table .num { text-align: right; }
+.role-table thead .num { text-align: right; }
+
+/* A fixed layout is what makes the columns line up: without it the table sizes
+   each column to its own widest cell, and the slug column drifts wider or
+   narrower depending on which group you are looking at. */
+.permission-table { table-layout: fixed; }
+.permission-table td, .permission-table th { vertical-align: middle; overflow-wrap: anywhere; }
+.permission-col-slug { width: 15rem; }
+.permission-col-name { width: 13rem; }
+
+.permission-group-row th {
+    background: var(--bg-sunken);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+    .permission-col-slug { width: 9rem; }
+    .permission-col-name { width: 8rem; }
+}

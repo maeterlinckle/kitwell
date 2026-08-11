@@ -53,6 +53,63 @@ final class Role
         return array_map(static fn (array $r): int => (int) $r['permission_id'], $rows);
     }
 
+    /**
+     * Create a role. Never a superuser and never a system role: those two flags
+     * are what protect the built-in Administrator from being edited away, and
+     * nothing reachable from the web should be able to mint either.
+     */
+    public static function create(string $name, string $description): int
+    {
+        // On its own line, not inline in the array literal below: a
+        // Database::…() call ending inside `)]` is invisible to the SQL audit's
+        // statement scanner, which then reports the whole file.
+        $sortOrder = (int) Database::scalar('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM roles');
+
+        return Database::insert('roles', [
+            'slug'         => self::uniqueSlug($name),
+            'name'         => $name,
+            'description'  => $description === '' ? null : $description,
+            'is_superuser' => 0,
+            'is_system'    => 0,
+            // After everything that ships with the application, so a new role
+            // lands at the end of the list rather than in the middle of it.
+            'sort_order'   => $sortOrder,
+        ]);
+    }
+
+    public static function update(int $id, string $name, string $description): void
+    {
+        Database::update('roles', [
+            'name'        => $name,
+            'description' => $description === '' ? null : $description,
+        ], $id);
+    }
+
+    /**
+     * A stable machine name derived from the display name, with a numeric
+     * suffix if that is already taken. The slug is what code refers to, so it
+     * is generated once and never changes when the name is edited.
+     */
+    public static function uniqueSlug(string $name): string
+    {
+        $base = strtolower(trim((string) preg_replace('/[^a-z0-9]+/i', '-', $name), '-'));
+
+        if ($base === '') {
+            $base = 'role';
+        }
+
+        $base = substr($base, 0, 40);
+        $slug = $base;
+        $n    = 2;
+
+        while (self::findBySlug($slug) !== null) {
+            $slug = $base . '-' . $n;
+            $n++;
+        }
+
+        return $slug;
+    }
+
     /** @param array<int,int> $permissionIds */
     public static function syncPermissions(int $roleId, array $permissionIds): void
     {

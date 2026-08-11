@@ -38,9 +38,8 @@ $pageTitle = $pageTitle ?? '';
 
 <div class="auth-shell">
     <div class="auth-card">
-        <div class="auth-brand">
-            <span class="brand-mark" aria-hidden="true">AR</span>
-            <span class="brand-name"><?= e($appName) ?></span>
+        <div class="auth-brand brand">
+            <?= partial('partials/brand', ['appName' => $appName]) ?>
         </div>
 
         <?= partial('partials/flash') ?>
@@ -52,6 +51,8 @@ $pageTitle = $pageTitle ?? '';
         <span data-theme-label>Dark mode</span>
     </button>
 </div>
+
+<?= partial('partials/footer') ?>
 
 <script src="<?= e(asset_url('js/app.js')) ?>" defer></script>
 </body>

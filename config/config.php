@@ -19,6 +19,17 @@ if (!preg_match('#^([A-Za-z]:[\\\\/]|/)#', $storage)) {
 return [
     'app' => [
         'name'            => Env::get('APP_NAME', 'Asset Register'),
+
+        // Product branding, as distinct from `name` (what this instance calls
+        // itself) and the `organisation_name` setting (whose workshop it is).
+        // `mark` is the two-letter fallback shown in the header when no logo
+        // has been uploaded; it is a brand mark, not initials of `name`.
+        'product'         => Env::get('APP_PRODUCT', 'Kitwell'),
+        'product_tagline' => Env::get('APP_PRODUCT_TAGLINE', 'Asset Management'),
+        'mark'            => Env::get('APP_MARK', 'KW'),
+        'vendor'          => Env::get('APP_VENDOR', 'Junction Inc Ltd'),
+        'vendor_url'      => Env::get('APP_VENDOR_URL', 'https://www.junctioninc.co.uk/'),
+
         'env'             => Env::get('APP_ENV', 'production'),
         'debug'           => Env::bool('APP_DEBUG', false),
         'url'             => rtrim((string) Env::get('APP_URL', ''), '/'),
