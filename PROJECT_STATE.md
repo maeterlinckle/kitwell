@@ -1,12 +1,14 @@
 # Project state
 
-A ground-truth snapshot of the asset register as it stands on **2026-08-10**,
+A ground-truth snapshot of the asset register as it stands on **2026-08-11**,
 written for whoever (or whatever) picks the code up next.
 
 The original nine build prompts finished on 2026-08-06. Since then:
 deployment tooling on 2026-08-07 (§5.3), the PAT workflow overhaul on
-2026-08-08, the navigation and Hires/Hirers rename on 2026-08-09, and outbound
-email plus calendar feeds on 2026-08-10.
+2026-08-08, the navigation and Hires/Hirers rename on 2026-08-09, outbound
+email plus calendar feeds on 2026-08-10, and on 2026-08-11 three fixes found by
+deploying it — the database grant, Composer installation, and the navigation
+and maintenance corrections in §5.4.
 
 Everything below was checked against the files and the database at the time of
 writing, not recalled. The schema section was produced by creating an empty
@@ -27,7 +29,7 @@ Where something is *not* verified, it says so.
 | Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
 | `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 168 PHP files (68 of them templates), 122 routes (65 GET, 57 POST), 18 migrations |
+| Counted at time of writing | 169 PHP files (69 of them templates), 123 routes (66 GET, 57 POST), 18 migrations |
 | Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
@@ -285,13 +287,16 @@ purpose: an item crossing from "due soon" to "overdue" is a *different*
 reminder and goes out at once rather than waiting out the earlier one's repeat
 window.
 
-### 2.3 Foreign keys (37)
+### 2.3 Foreign keys (39)
 
 | Delete rule | Where it is used |
 |---|---|
 | **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id` |
 | **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id` |
-| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by` |
+| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id` |
+
+`email_reminders` has **no foreign keys at all** — it is a de-duplication
+ledger, and a row that outlives the record it refers to is harmless.
 
 The shape is deliberate: deleting an asset takes its own media and records with
 it, but you cannot delete an asset or a hirer that has hire history, and
@@ -420,7 +425,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   └── js/   app.js, scanner.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 105 routes, 225 lines
+│   └── web.php              the whole route table, 123 routes, 266 lines
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -455,7 +460,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            assets/{id}/manuals, maintenance/{logId},
 │                            hires/{hireId}, imports/
 │
-├── templates/               56 .php templates
+├── templates/               69 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, flash, photo-gallery, photo-upload,
 │   │                        pat-status, pat-record, maintenance-log-photos,
@@ -464,10 +469,10 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── assets/              index, show, form, copy, apply, photos, labels
 │   ├── auth/ dashboard/ errors/ scan/
 │   ├── profile/             edit, calendar
-│   ├── maintenance/         index, show, form, complete, history
-│   ├── pat/                 index, show, form, history
+│   ├── maintenance/         index, show, form, complete, history, choose-asset
+│   ├── pat/                 index, show, form, history, wizard, choose-asset
 │   ├── hires/               index, show, checkout, return
-│   ├── hirers/           index, show, form
+│   ├── hirers/              index, show, form
 │   ├── my-hires/            index, show, unlinked
 │   ├── import/              index, show, preview
 │   ├── reports/             index, show, print
@@ -565,7 +570,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
   as a global function in `helpers.php` alongside `e()`, `can()`, `old()`,
   `format_date()`, `format_money()` and friends.
 - **Every variable reaching output goes through `e()`.** `tests/escape-audit.php`
-  parses all 1508 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
+  parses all 1825 `<?= … ?>` expressions with PHP's own tokeniser and proves it.
 - Three layouts: `layouts/app` (signed in, with nav), `layouts/auth` (slim),
   `layouts/print` (label sheets and report printing).
 - `templates/partials/nav.php` carries a `'built' => true|false` flag per
@@ -797,9 +802,9 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 168 PHP files | 0 failures |
+| `php -l` on all 169 PHP files | 0 failures |
 | `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **1800 output expressions across 68 templates, 0 unescaped** |
+| `tests/escape-audit.php` | **1825 output expressions across 69 templates, 0 unescaped** |
 | All 18 migrations against an empty database | applied cleanly; schema as documented above |
 | Seed data counts | 4 roles / 32 permissions / 65 grants / 37 settings / 0 template overrides |
 | Migration 018 on the **populated** dev database | applied cleanly; existing rows untouched |
@@ -821,8 +826,21 @@ All twelve prompts are **complete**. Nothing is partial or unstarted.
 | 29 pages as admin over real HTTP | all 200 |
 | Permission matrix, 8 new routes × 4 roles | 32/32 as declared |
 | POST actions (test send, template edit/reset/disable, both manual sends, reminder preview, token lifecycle) | 17/17 |
-| `vendor/` removed | app still serves; mail reports "run composer install"; `send-reminders.php` exits 2 without sending |
+| `vendor/` removed | app still serves; mail reports how to install it; `send-reminders.php` exits 2 without sending |
 | `bash -n install.sh` / `manage.sh` | clean |
+
+**The 2026-08-11 fixes (§5.4), verified on this machine:**
+
+| Check | Result |
+|---|---|
+| The reported grant failure, reproduced | a database migrated to 016 owned by a user with the old grant: same `ERROR 1142`, table untouched, nothing half-applied |
+| `manage.sh db-grant` then `migrate` | 017 and 018 both applied; `hires`/`hirers`/`hire_photos` present, no leftover `loans`, status enum carries `'On Hire'` |
+| `console.php doctor` before and after | `FAIL missing DROP` → `ok enough to run migrations` |
+| Composer fallback, distribution package simulated absent | downloads the official installer and the signature check **passes**; a missing or corrupted file is refused and nothing is run |
+| Settings → Email with and without `vendor/` | both render 200, and the command shown is one that exists |
+| Nav on a Settings sub-page at 1280px | no panel visible (`checkVisibility()` false on all four groups), content flush under the 61px header, summary still highlighted, **first click opens** |
+| Rendered markup on `/`, a Settings sub-page and `/profile` | `open data-nav-autoopen` on exactly the group containing the current page, and nowhere else |
+| Unplanned maintenance, end to end over HTTP | 21 checks: three entry points, the picker, `?asset=` passthrough, a follow-up with the right due date and instructions, closing on completion, none created when unticked, and an interval-less tick refused with nothing written |
 
 **Shipped in `tests/` but requiring a running site — not re-run for this document:**
 
@@ -945,15 +963,38 @@ Verified on this Windows development box:
 | `install.sh --help`, unknown option, `--dry-run` | correct; the plan is printed and nothing is changed |
 | Full question flow, interactive and `--answers … --non-interactive` | run against a simulated Ubuntu 24.04 (`/etc/os-release` and the root check stubbed) |
 | Generated Apache vhost | rendered and read; `<Directory>` precedence and the php-fpm `SetHandler` are right |
-| `tests/security-audit.php`, `tests/escape-audit.php` | 35/0 and 1508/0 after the new files |
+| `tests/security-audit.php`, `tests/escape-audit.php` | 35/0 and 0 unescaped after the new files |
 
-**Not verified — no Linux box was available:** no package was actually
+**Partly overtaken by events.** The installer has since been run on a real
+server, which is where the grant and Composer bugs in §5.4 came from. What
+follows was true when it was written and is still true of *this* machine —
+**no Linux box was available:** no package was actually
 installed, no vhost was loaded by a real Apache or nginx, no database was
 created by the script, no backup or restore was round-tripped, and SELinux and
 firewalld handling has never run. The installer is written defensively —
 it validates the web-server config with `apachectl -t` / `nginx -t` before
 reloading, and stops on the first failure — but **it has not been run
 end to end on a real server.**
+
+---
+
+### 5.4 What deploying it found (2026-08-11)
+
+Four bugs, all reported from a real server rather than by any test here. They
+are worth recording as a group because three of them share a shape: something
+verified in isolation, on a machine that already had what it needed.
+
+| Fixed in | What was wrong |
+|---|---|
+| `0c5d466` | The installer's database grant withheld `DROP`, so **migration 017 could not run on any install the installer had ever built**. `RENAME TABLE` needs `ALTER` *and* `DROP` on the source table. The grant had been reasoned about from what the running application issues, never from what the migrations issue. |
+| `4d513b7` | `install.sh` only *checked* for Composer and warned — so re-running it never fixed a machine without one, and the advice printed (`composer install`) was itself the command that failed. It now installs Composer, distribution package first, then the signature-checked official installer. |
+| `bb780ae` | The nav group containing the current page renders `open`; above 900px that panel is `position: absolute`, so it sat on top of every page navigated to. |
+| `bb780ae` | Unplanned maintenance was reachable only by opening an asset and scrolling to its Maintenance card, so a first-class kind of maintenance read as missing. |
+
+The lesson common to the first three is in §6 under the traps: **verify a
+dependency against the thing that will actually need it, on a machine that does
+not already have it.** A migration is not the application; a server is not this
+laptop; and advice is only useful if the reader can run it.
 
 ---
 
@@ -1118,7 +1159,13 @@ php tests/security-audit.php && php tests/escape-audit.php
 4. `database/migrations/` is append-only.
 5. Email is **off** on a fresh install and stays off until someone configures it
    in Settings → Email. That is deliberate (§4.8). If mail "does not work", the
-   first two things to check are `manage.sh mail-status` and whether
-   `composer install` has been run.
+   first thing to run is `manage.sh mail-status`, and the fix is almost always
+   `manage.sh composer-install`.
 6. The one runtime package is PHPMailer. Everything else is still first-party,
    and the app still runs from a plain file copy — it just cannot send.
+7. **Upgrading an install made before 2026-08-11?** Run
+   `sudo ./manage.sh db-grant` first. Those installs have a database grant
+   without `DROP`, and migration 017 cannot run without it (§5.4).
+8. The four kinds of maintenance are set out in §5.1 item 4. If a change makes
+   *unplanned work* harder to reach, it is a regression — that is the one that
+   has already been reported as missing once.
