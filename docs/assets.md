@@ -32,8 +32,8 @@ previous-system barcode. Scanning either value finds the asset.
 A sub-asset is a normal asset with a parent, so a battery, charger or carry case
 keeps its own tag, detail page, PAT history and search entry while still being
 listed under the tool it belongs to. Add one from the parent's page, or set
-**Parent asset** on any asset form. Nesting is one level deep on purpose:
-an asset that already has children cannot itself become a sub-asset.
+**Parent asset** on any asset form. Nesting is one level deep: an asset that
+already has children cannot itself become a sub-asset.
 
 Archiving a parent archives its attached items with it.
 
@@ -45,18 +45,14 @@ words are ANDed — "makita drill" finds rows matching both. Filters cover
 category, location, status, condition, PAT requirement and item type, and
 retired assets are hidden unless you ask for them.
 
-This is a multi-term `LIKE` search rather than MariaDB FULLTEXT, chosen
-deliberately: FULLTEXT tokenises asset tags and serials badly (`AST-0001`,
-`MK-884213-A`) and ignores short words, which is exactly what people search for
-here. At a few thousand assets on modest hosting the difference in speed is not
-noticeable.
+Search matches on substrings, so a partial tag or serial (`884213`) finds its
+asset, and short words are not ignored.
 
 ## Condition photos
 
 Photos can be added to any asset — including sub-assets — at any point in its
-life, building a dated visual record. That is the point: a photo taken when an
-item goes out on hire and another when it comes back settles an argument in
-seconds.
+life, building a dated visual record. A photo taken when an item goes out on
+hire and another when it comes back is the usual reason to reach for it.
 
 The gallery on the asset page shows the 12 most recent, newest first, each with
 its date, caption and who uploaded it. **Full history** opens
@@ -69,12 +65,10 @@ main photo is deleted the next most recent takes over.
 
 On upload, each image is:
 
-1. **Straightened** using its EXIF orientation tag. Phones record rotation as
-   metadata rather than rotating pixels, so without this step photos routinely
-   appear sideways.
-2. **Scaled down** to a 2400px longest edge, and a 480px thumbnail is generated.
-   A phone camera produces 4–12 MB files; galleries would be unusable over a
-   workshop 4G connection otherwise.
+1. **Straightened** using its EXIF orientation tag, so a photo taken on a phone
+   is not shown sideways.
+2. **Scaled down** to a 2400px longest edge, and a 480px thumbnail is generated,
+   which keeps galleries quick to load over a workshop 4G connection.
 3. **Dated** from the camera's EXIF capture time, unless you set the date
    yourself. Implausible dates (a camera with a flat battery reporting 1970) are
    ignored.
@@ -140,9 +134,8 @@ never finishes drawing.
 
 ## The asset page
 
-Four buttons across the top: **Check out** or **Book in** (whichever applies),
-**Edit**, and **Print**. Those are what somebody arriving at the page has
-usually come to do.
+Across the top: **Check out** or **Book in** (whichever applies), **Edit** and
+**Print** — the errands somebody usually arrives at the page with.
 
 Everything else that acts on the record is in the right-hand column:
 
@@ -153,10 +146,8 @@ Everything else that acts on the record is in the right-hand column:
 | **Record** | When it was added and last updated, and by whom |
 | **Manage** | **Mark as faulty**, **Copy**, **Copy details to…**, then a ruled line, then **Archive asset** and **Delete permanently** |
 
-The rule behind the split: the top row is for the things done in passing, and
-the rail is for deliberate acts on the record. The line inside **Manage**
-separates what can be undone from what cannot — which is why the card as a whole
-is not styled as a danger zone, and why only *Delete permanently* is red.
+The line inside **Manage** separates what can be undone from what cannot. Only
+*Delete permanently* is red.
 
 When the asset is faulty, the current fault report sits across the top of the
 page above everything else, with its photographs. See [Faults](faults.md).
@@ -165,12 +156,10 @@ page above everything else, with its photographs. See [Faults](faults.md).
 
 Archiving sets an asset to *Retired*, keeps every record, and is reversible.
 Permanent deletion is available to `assets.delete` holders but is refused
-whenever the asset has hire, PAT or maintenance history, or attached items — the
-audit trail wins over tidiness.
+whenever the asset has hire, PAT or maintenance history, or attached items.
 
-A fault report on its own does **not** block a delete: it cascades with the
-asset. That is right for an item registered and reported broken in the same
-week, but it is a deliberate choice rather than an oversight.
+A fault report on its own does **not** block a delete: fault reports and their
+photographs are removed with the asset.
 
 ---
 

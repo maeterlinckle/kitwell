@@ -14,7 +14,7 @@ final class Session
 
         $lifetimeMinutes = (int) Config::get('session.lifetime', 480);
 
-        session_name((string) Config::get('session.name', 'asset_register_session'));
+        session_name((string) Config::get('session.name', 'kitwell_session'));
         session_set_cookie_params([
             'lifetime' => 0,                       // session cookie; idle timeout enforced below
             'path'     => '/',

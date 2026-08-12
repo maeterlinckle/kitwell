@@ -21,8 +21,8 @@ $organisation = (string) (Setting::get('organisation_name') ?? '');
             <img class="print-logo" src="<?= e($logo) ?>" alt="">
         <?php endif; ?>
         <div>
-            <p class="print-org"><?= e($organisation !== '' ? $organisation : config('app.name', 'Asset Register')) ?></p>
-            <p class="print-product muted"><?= e(config('app.product', 'Kitwell')) ?> — <?= e(config('app.product_tagline', 'Asset Management')) ?></p>
+            <p class="print-org"><?= e($organisation !== '' ? $organisation : config('app.name', 'Kitwell')) ?></p>
+            <p class="print-product muted"><?= e(config('app.full_name', 'Kitwell by Junction')) ?> — <?= e(config('app.product_tagline', 'Asset Management')) ?></p>
         </div>
     </div>
 

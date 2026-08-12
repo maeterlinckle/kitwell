@@ -216,13 +216,13 @@ final class CalendarFeed
      */
     private static function document(array $events, string $userName): string
     {
-        $appName = (string) Config::get('app.name', 'Asset Register');
+        $appName = (string) Config::get('app.name', 'Kitwell');
         $stamp   = gmdate('Ymd\THis\Z');
 
         $lines = [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
-            'PRODID:-//Asset Register//Calendar Feed//EN',
+            'PRODID:-//Kitwell//Calendar Feed//EN',
             'CALSCALE:GREGORIAN',
             'METHOD:PUBLISH',
             'X-WR-CALNAME:' . self::escape($appName . ' — ' . $userName),
@@ -348,7 +348,7 @@ final class CalendarFeed
         $base = (string) Config::get('app.url', '');
         $host = $base === '' ? '' : (string) (parse_url($base, PHP_URL_HOST) ?? '');
 
-        return $host === '' ? 'asset-register.local' : $host;
+        return $host === '' ? 'kitwell.local' : $host;
     }
 
     private static function inWindow(string $date): bool

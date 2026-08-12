@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Asset Register — base stylesheet
+   Kitwell — base stylesheet
 
    Design priorities, in order:
      1. Legible on a phone in a workshop: large type, high contrast, big targets.
@@ -304,23 +304,17 @@ a:hover { color: var(--accent-hover); }
 .nav-logout { margin: 0; }
 
 /* Desktop navigation */
-/* The horizontal bar appears at 1150px, not 900px.
+/* The horizontal bar appears at 1150px.
    ---------------------------------------------------------------------------
-   Measured on the seeded register as an administrator, who sees every item:
-   five menu items need 460px, the account block 235px, Scan 86px and the brand
-   238px with a logo. With the three gaps that is 1059px of content, so the bar
-   needs about 1091px of viewport — and at 900px it could never fit, which is
-   why it used to wrap onto a second row and double the header's height.
+   An administrator sees every item, which is the widest the bar ever gets: six
+   menu items, the account block, Scan and the brand come to about 1059px of
+   content, so the bar needs roughly 1091px of viewport before it fits on one
+   row. The margin above that covers an APP_NAME longer than "Kitwell"; the
+   wordmark is capped in case it is much longer.
 
-   Dropping the Dashboard item paid for the wider brand: the wordmark moved back
-   alongside the logo rather than under it, which costs ~134px, and the item it
-   replaced was worth ~90px plus a gap. The margin left over covers a longer
-   APP_NAME than "Asset Register", and the wordmark is capped in case it is much
-   longer.
-
-   Below 1150px the drawer is used instead. A drawer is a vertical list, so it
-   cannot wrap, and it is the same control phones already use. Widening the
-   window brings the bar back. */
+   Below 1150px the drawer is used instead: a vertical list cannot wrap, and it
+   is the same control phones already use. Widening the window brings the bar
+   back. */
 @media (min-width: 1150px) {
     .nav-toggle { display: none; }
 
@@ -648,19 +642,14 @@ main.container { padding-block: var(--space-5) var(--space-6); }
 
 /* The actions column: one or more buttons in the last cell of a row.
  *
- * This used to be `display: flex`, which quietly broke every table it appeared
- * in. A `<td>` set to flex stops being a table-cell, so it drops out of the row
- * layout: it no longer stretches to the row's height, and since the row's
- * separator is `border-bottom` on the cell, the line under the last column was
- * drawn ten pixels above the line under all the others. Measured on /assets: a
- * 73px row with a 63px actions cell, on every row of every table using it —
- * /assets, /pat, /admin/users, /hires, /hirers, /maintenance and the trusted
- * devices list all at once, which is why it looked like a per-page bug.
+ * The cell stays a table-cell and the buttons lay out inline. Anything that
+ * takes the `<td>` out of table layout — `display: flex` in particular — stops
+ * it stretching to the row height, and since the row separator is a
+ * `border-bottom` on the cell, its line is then drawn short of the others.
  *
- * So the cell stays a cell and the buttons lay out inline. `align-items` and
- * `gap` have no meaning without flex, hence `vertical-align` and a margin;
- * `nowrap` keeps a pair of buttons on one line, and the table already scrolls
- * horizontally inside `.table-wrap` when it needs to.
+ * Inline layout means `align-items` and `gap` do not apply, hence
+ * `vertical-align` and a margin. `nowrap` keeps a pair of buttons on one line;
+ * the table already scrolls horizontally inside `.table-wrap` when it needs to.
  */
 td.actions {
     white-space: nowrap;
@@ -669,9 +658,8 @@ td.actions {
 
 td.actions > * { vertical-align: middle; }
 
-/* Half a gap, because inline layout contributes the other half itself: the
-   newline between two buttons in the template collapses to one word space.
-   Measured rather than assumed — see the note in PROJECT_STATE. */
+/* Half a gap: inline layout contributes the other half itself, because the
+   newline between two buttons in the template collapses to one word space. */
 td.actions > * + * { margin-left: var(--space-1); }
 
 .inline-form { display: inline; margin: 0; }
@@ -1323,9 +1311,8 @@ input[type="file"].input { padding: var(--space-2); line-height: 1.6; }
 .delete-form { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
 
 /* The Manage card in the asset rail: ordinary actions at the top, then a ruled
-   line, then the ones you cannot take back. The rule is the whole point — it is
-   what stops "Copy" and "Delete permanently" reading as one undifferentiated
-   stack of buttons in a 320px column. */
+   line, then the ones you cannot take back. The rule keeps "Copy" and "Delete
+   permanently" from reading as one undifferentiated stack in a 320px column. */
 .manage-actions { display: grid; gap: var(--space-2); }
 .manage-divider {
     margin-top: var(--space-3);
@@ -2152,7 +2139,7 @@ tr.preview-warning td { background: var(--warn-soft); }
 }
 
 /* ==========================================================================
-   Guided PAT test, scan buttons and pass/fail toggles (prompt 10)
+   Guided PAT test, scan buttons and pass/fail toggles
    ========================================================================== */
 
 /* --- A scan button welded to the end of a barcode field ------------------ */
@@ -2370,7 +2357,7 @@ tr.preview-warning td { background: var(--warn-soft); }
 .link-list a:hover { background: var(--bg-hover); }
 
 /* ==========================================================================
-   Navigation: grouped menu and the scan quick-action (prompt 11)
+   Navigation: grouped menu and the scan quick-action
 
    One set of markup drives both layouts. A group is a <details>; below 900px
    it is an accordion inside the slide-out menu, above it the same element
@@ -2658,3 +2645,88 @@ form + .section-title,
     .permission-col-slug { width: 9rem; }
     .permission-col-name { width: 8rem; }
 }
+
+/* --- Help (the documentation, rendered in the application) ----------------- */
+
+.help-layout {
+    display: grid;
+    gap: var(--space-5);
+    grid-template-columns: 1fr;
+    align-items: start;
+}
+
+@media (min-width: 900px) {
+    .help-layout { grid-template-columns: 260px minmax(0, 1fr); }
+    .help-contents { position: sticky; top: var(--space-4); }
+}
+
+.help-contents h2 { font-size: 1rem; margin-bottom: var(--space-2); }
+.help-contents ul { list-style: none; margin: 0; padding: 0; }
+.help-contents li { margin: 0; }
+
+.help-contents a {
+    display: flex;
+    align-items: center;
+    /* Tap targets stay at 44px even though the list is dense. */
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.help-contents a:hover { background: var(--bg-hover); }
+
+.help-contents li.current a {
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+    font-weight: 600;
+}
+
+/* Long-form text, as opposed to the forms and tables everywhere else. */
+.prose { max-width: 78ch; }
+.prose > :first-child { margin-top: 0; }
+.prose > :last-child { margin-bottom: 0; }
+
+.prose h1 { font-size: 1.6rem; margin: var(--space-6) 0 var(--space-3); }
+.prose h2 { font-size: 1.3rem; margin: var(--space-6) 0 var(--space-3); }
+.prose h3 { font-size: 1.1rem; margin: var(--space-5) 0 var(--space-2); }
+.prose h1:first-child, .prose h2:first-child { margin-top: 0; }
+
+.prose p, .prose ul, .prose ol { margin: 0 0 var(--space-4); }
+.prose li { margin: 0 0 var(--space-2); }
+.prose li > ul, .prose li > ol { margin: var(--space-2) 0 0; }
+
+.prose hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: var(--space-5) 0;
+}
+
+.prose code {
+    padding: 0.1em 0.35em;
+    background: var(--bg-sunken);
+    border-radius: var(--radius-sm);
+    font-size: 0.92em;
+    word-break: break-word;
+}
+
+.prose pre {
+    margin: 0 0 var(--space-4);
+    padding: var(--space-3);
+    background: var(--bg-sunken);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+}
+
+.prose pre code { padding: 0; background: none; }
+
+.prose blockquote {
+    margin: 0 0 var(--space-4);
+    padding: var(--space-2) var(--space-4);
+    border-left: 3px solid var(--border-strong);
+    color: var(--text-muted);
+}
+
+.prose .table-wrap { margin: 0 0 var(--space-4); }
+.prose table { width: 100%; }

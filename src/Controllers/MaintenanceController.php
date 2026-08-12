@@ -246,11 +246,9 @@ final class MaintenanceController extends Controller
     /**
      * The front door for unplanned work.
      *
-     * Recording a repair that was never on a schedule used to be reachable only
-     * by opening the asset and scrolling to its Maintenance card, which made
-     * a first-class kind of maintenance look like it did not exist. This is the
-     * same lookup-first shape the PAT flow uses: scan or search, then straight
-     * into the form.
+     * Lookup first, the same shape the PAT flow uses: scan or search for the
+     * asset, then straight into the form. Work that was never on a schedule is
+     * recorded here rather than only from the asset's Maintenance card.
      */
     public function logChooser(): void
     {

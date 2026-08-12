@@ -6,6 +6,7 @@ use App\Core\Auth;
 use App\Core\Config;
 use App\Core\Csrf;
 use App\Core\Request;
+use App\Services\Markdown;
 
 if (!function_exists('e')) {
     /** Escape for HTML output. Use on every dynamic value in a template. */
@@ -220,5 +221,18 @@ if (!function_exists('str_limit')) {
         $value = (string) $value;
 
         return mb_strlen($value) <= $length ? $value : mb_substr($value, 0, $length - 1) . '…';
+    }
+}
+
+if (!function_exists('markdown')) {
+    /**
+     * Render Markdown to HTML. Every piece of source text is escaped before any
+     * markup is added, so the result is safe to print.
+     *
+     * @param callable(string):string|null $linkRewriter Applied to every link href.
+     */
+    function markdown(string $source, ?callable $linkRewriter = null): string
+    {
+        return Markdown::render($source, $linkRewriter);
     }
 }

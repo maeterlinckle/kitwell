@@ -5,26 +5,22 @@ use App\Services\Branding;
 /**
  * The logo (or the fallback mark) plus the wordmark.
  *
- * Both variants are rendered when both exist and CSS picks by theme, rather
- * than the server choosing one: the theme lives in a `data-theme` attribute the
- * user can flip without a page load, so a server-side choice would show the
- * wrong logo until the next navigation.
+ * Both variants are rendered when both exist and CSS picks by theme: the theme
+ * lives in a `data-theme` attribute the user can flip without a page load, so a
+ * server-side choice would show the wrong logo until the next navigation.
  *
- * The wordmark stays whatever happens — a logo replaces the icon box, not the
- * name of the thing you are looking at.
+ * A logo replaces the icon box; the wordmark stays either way.
  *
- * `$homeHref` makes the *logo* the link home. The wordmark deliberately stays
- * outside it: it reads as a heading rather than a control, and it is sized to
- * sit on the same line as the menu items, which a link would fight with. One
- * link, one accessible name — the image inside it is marked decorative so a
- * screen reader is not told "Kitwell" twice in a row.
+ * `$homeHref` makes the *logo* the link home. The wordmark sits outside it, so
+ * there is one link with one accessible name — the image inside it is marked
+ * decorative rather than repeating the name to a screen reader.
  *
  * @var string      $appName
  * @var string|null $homeHref
  */
 $light    = Branding::url('light');
 $dark     = Branding::url('dark');
-$name     = (string) ($appName ?? config('app.name', 'Asset Register'));
+$name     = (string) ($appName ?? config('app.name', 'Kitwell'));
 $homeHref = isset($homeHref) ? (string) $homeHref : null;
 $hasLogo  = $light !== null || $dark !== null;
 ?>

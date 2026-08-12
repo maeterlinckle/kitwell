@@ -742,13 +742,11 @@ function cmdActivityPrune(array $argv): int
 }
 
 /**
- * Assets the 014 backfill could not complete.
+ * Assets that require PAT but are missing the electrical details a test needs.
  *
- * Migration 014 moved appliance class, load and fuse details onto the asset and
- * filled them in from each asset's most recent PAT record. Anything never
- * tested had nothing to copy from, so it needs a human. The guided PAT flow
- * refuses to start without an appliance class, because it cannot tell which
- * electrical tests apply.
+ * Appliance class, load rating and fuse details live on the asset. The guided
+ * PAT flow refuses to start without an appliance class, because it cannot tell
+ * which electrical tests apply.
  *
  * @param array<int,string> $argv
  */
@@ -783,8 +781,7 @@ function cmdPatMissingDetails(array $argv): int
     table(['Tag', 'Name', 'Missing'], $table);
 
     line();
-    line('  These were never PAT tested, so migration 014 had nothing to copy from.');
-    line('  Set them on each asset\'s edit page — the guided PAT flow needs the');
+    line('  Set these on each asset\'s edit page — the guided PAT flow needs the');
     line('  appliance class to know which electrical tests to ask for.');
 
     return $rows === [] ? 0 : 1;
@@ -1127,7 +1124,7 @@ $commands = [
 $command = $argv[1] ?? '';
 
 if ($command === '' || $command === '--help' || $command === '-h' || $command === 'help') {
-    line('Asset Register — administrative console');
+    line('Kitwell — administrative console');
     line();
     line('  php bin/console.php <command> [options]');
     line();

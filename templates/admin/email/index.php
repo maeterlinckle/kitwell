@@ -174,7 +174,7 @@ $authUser = auth_user();
             <div class="field">
                 <label class="label" for="mail_from_name">“From” name</label>
                 <input class="input" type="text" id="mail_from_name" name="mail_from_name" maxlength="120"
-                       value="<?= e(old($old, 'mail_from_name', $setting('mail_from_name', (string) config('app.name', 'Asset Register')))) ?>">
+                       value="<?= e(old($old, 'mail_from_name', $setting('mail_from_name', (string) config('app.name', 'Kitwell')))) ?>">
             </div>
 
             <div class="field">

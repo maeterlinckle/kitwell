@@ -60,6 +60,11 @@ $links = [
         ['label' => 'Import data',  'href' => '/import',           'permission' => 'assets.create'],
         ['label' => 'Export data',  'href' => '/export',           'permission' => 'assets.export'],
         ['label' => 'Application settings', 'href' => '/admin/settings', 'permission' => 'settings.manage'],
+
+        // Last, and open to everyone: the group carries no permission of its
+        // own, so a user with no administrative rights still gets a Settings
+        // menu containing only this.
+        ['label' => 'Help', 'href' => '/help', 'permission' => null],
     ]],
 ];
 
@@ -115,7 +120,7 @@ $activeChild = static function (array $link): ?string {
                  target, which is why the name had to look like a control. */ ?>
         <div class="brand">
             <?= partial('partials/brand', [
-                'appName'  => $appName ?? config('app.name', 'Asset Register'),
+                'appName'  => $appName ?? config('app.name', 'Kitwell'),
                 'homeHref' => '/',
             ]) ?>
         </div>

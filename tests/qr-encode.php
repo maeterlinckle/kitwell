@@ -198,7 +198,7 @@ check(
 // --- 3. Write the round-trip page ----------------------------------------
 $cases = [
     'otpauth (realistic)' => $uri,
-    'otpauth (long issuer)' => Totp::uri(Totp::generateSecret(), 'a.very.long.address@workshop.example.com', 'Kitwell Workshop Asset Register'),
+    'otpauth (long issuer)' => Totp::uri(Totp::generateSecret(), 'a.very.long.address@workshop.example.com', 'Kitwell Workshop and Test Bay'),
     'short text' => 'KITWELL',
     'url' => 'https://register.example.com/assets/1234',
     'utf-8' => 'Café — Ångström — 日本語',

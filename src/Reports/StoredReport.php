@@ -9,21 +9,18 @@ use App\Models\CustomReport;
 /**
  * A saved definition, wearing the same coat as a built-in report.
  *
- * This is the whole of the "custom reports are not a parallel system" claim: a
- * StoredReport is a `Report`, so `ReportController` opens it, the generic table
- * renders it, the print view prints it and the CSV export exports it, none of
- * them knowing or caring that its columns came out of a database row. The
- * registry hands it back from `find()` like any other.
+ * A StoredReport is a `Report`, so `ReportController` opens it, the generic
+ * table renders it, the print view prints it and the CSV export exports it,
+ * none of them knowing or caring that its columns came out of a database row.
+ * The registry hands it back from `find()` like any other.
  *
- * Two differences from a built-in, both deliberate:
+ * Two differences from a built-in:
  *
  * 1. **Its filters are fixed at save time, not offered on the page.** A saved
- *    report is somebody's considered question — "the Fluke testers in bay 2
- *    that are overdue" — and re-offering every filter would turn it back into
- *    the list page it was made to replace. The stored criteria are shown as
- *    text under the title so a reader can see what they are looking at, and
- *    `filterDefinitions()` stays empty so the generic filter bar renders
- *    nothing.
+ *    report answers one question — "the Fluke testers in bay 2 that are
+ *    overdue". The stored criteria are shown as text under the title so a
+ *    reader can see what they are looking at, and `filterDefinitions()` stays
+ *    empty so the generic filter bar renders nothing.
  *
  * 2. **Its sort is applied in PHP, after the rows come back.** The models sort
  *    by their own named orderings; letting a definition name an arbitrary

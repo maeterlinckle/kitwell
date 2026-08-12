@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  * Meant for cron. Install it with `sudo ./manage.sh cron-install`, or by hand:
  *
- *     0 8 * * *  cd /var/www/asset-register && php bin/send-reminders.php >/dev/null
+ *     0 8 * * *  cd /var/www/kitwell && php bin/send-reminders.php >/dev/null
  *
  * Once a day in the morning is the right cadence for a workshop. Running it
  * more often does not send more mail — App\Mail\EmailReminder suppresses an
@@ -62,7 +62,7 @@ $say = static function (string $line) use ($quiet): void {
     }
 };
 
-$say('Asset Register — reminders' . ($dryRun ? ' (dry run)' : ''));
+$say('Kitwell — reminders' . ($dryRun ? ' (dry run)' : ''));
 $say(date('Y-m-d H:i:s'));
 $say('');
 

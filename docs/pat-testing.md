@@ -4,11 +4,13 @@ Portable appliance testing: what is fixed about the appliance, what belongs to a
 
 **On this page**
 
-- [PAT testing](#pat-testing)
+- [Fixed values live on the asset, not the test](#fixed-values-live-on-the-asset-not-the-test)
+- [Recording a test is a guided flow](#recording-a-test-is-a-guided-flow)
+- [Guideline pass ranges](#guideline-pass-ranges)
+- [Assets that need details filling in](#assets-that-need-details-filling-in)
+- [Status at a glance](#status-at-a-glance)
 
 ---
-
-## PAT testing
 
 Tick **Requires PAT** on an asset (on the asset form, or one-click from the PAT
 banner) and it joins the PAT register. Recording a test against an unflagged
@@ -21,13 +23,11 @@ reference, test equipment, appliance class, visual inspection, earth continuity,
 insulation resistance, leakage, load, polarity, functional check, overall
 result, PAT label serial, fuse fitted, remedial action and notes.
 
-### Fixed values live on the asset, not the test
+## Fixed values live on the asset, not the test
 
 Appliance class, load rating, whether the plug is fused and the fuse rating are
-properties of the *appliance*, so they are recorded once on the asset under
-**Electrical & PAT** and never asked for again. Re-entering them at every test
-invited drift — the same item logged Class I one year and Class II the next —
-and made the tester answer questions the register already knew.
+properties of the *appliance*. They are set once on the asset under **Electrical
+& PAT** and shown automatically each time a PAT test is recorded.
 
 The plug fuse rating is a four-way choice (3 A, 5 A, 10 A, 13 A) rather than
 free numeric entry. An existing non-standard value is kept and shown flagged for
@@ -36,7 +36,7 @@ correction rather than silently discarded.
 Each test still stores a **snapshot** of the appliance class it was performed
 under, so correcting an asset later never rewrites its history.
 
-### Recording a test is a guided flow
+## Recording a test is a guided flow
 
 **Record a test** walks through the job in the order it is actually done, one
 step per screen — designed for a phone in a workshop:
@@ -69,7 +69,7 @@ nobody gave.
 Editing an existing record stays a flat form — correcting a typo in a tester's
 name should not mean walking six steps.
 
-### Guideline pass ranges
+## Guideline pass ranges
 
 Each electrical reading shows typical guidance beside it:
 
@@ -88,7 +88,7 @@ decide anything — your pass/fail choice is what records the result. All six
 values are editable under **Admin → Settings → PAT guideline pass ranges**, so
 they can be tuned to your own policy without a code change.
 
-### Assets that need details filling in
+## Assets that need details filling in
 
 The migration backfills appliance class, load and fuse details from each asset's
 most recent test. Anything never tested has nothing to copy from, and the guided
@@ -123,7 +123,7 @@ Two rules are enforced rather than left to the operator:
   it to *In Maintenance* and optionally marking the condition *Out of Service*.
   Both are tick-boxes, on by default for the first.
 
-### Status at a glance
+## Status at a glance
 
 The asset page carries a colour-coded banner answering "is this thing in date?":
 
@@ -136,8 +136,8 @@ The asset page carries a colour-coded banner answering "is this thing in date?":
 | `Never tested` | Flagged as requiring PAT with no record |
 | `No retest date` | Tested, but no retest date was set |
 
-`Failed` deliberately outranks the date: an item that failed last week is not
-"in date" just because its retest is not due until next year.
+`Failed` outranks the date: an item that failed last week is not "in date"
+because its retest is not due until next year.
 
 Retest dates are suggested from the asset's own `pat_interval_months` where set,
 otherwise from **Settings → PAT testing → Default retest interval** (12 months

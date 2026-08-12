@@ -4,16 +4,17 @@ An authenticator app or a code by email, per user or required for everyone, with
 
 **On this page**
 
-- [Two-factor authentication](#two-factor-authentication)
+- [Turning it on for yourself](#turning-it-on-for-yourself)
+- [Requiring it for everyone](#requiring-it-for-everyone)
+- [Trusted devices](#trusted-devices)
+- [If somebody loses their phone](#if-somebody-loses-their-phone)
+- [What is stored](#what-is-stored)
 
 ---
 
-## Two-factor authentication
-
-
 A second check at sign-in, so a stolen password is not enough on its own.
 
-### Turning it on for yourself
+## Turning it on for yourself
 
 **My account → Security**. Two ways in:
 
@@ -28,7 +29,7 @@ Either way you get **ten backup codes**, shown once. Each works once, in place
 of a code from your app. Print them, or put them somewhere that is not your
 phone — because the day you need one is the day you cannot get in to make more.
 
-### Requiring it for everyone
+## Requiring it for everyone
 
 **Settings → Application settings → Two-factor authentication**. When it is on,
 anybody without a second factor is walked through setting one up at their next
@@ -38,7 +39,7 @@ The control is **disabled until email is configured**, and says so. With no SMTP
 and no authenticator app enrolled, a user would have no way to receive a code
 and no way to sign in — including the administrator who switched it on.
 
-### Trusted devices
+## Trusted devices
 
 After a successful check you can tick **"Don't ask again on this computer"**.
 That lasts for `trusted_device_days` (30 by default), and stops sooner if any of
@@ -52,7 +53,7 @@ these happen:
 
 Never tick it on a shared or public machine.
 
-### If somebody loses their phone
+## If somebody loses their phone
 
 An administrator opens their user page and uses **Remove two-factor
 authentication**. That clears the secret, the backup codes and the trusted
@@ -62,15 +63,13 @@ There is no way to *read* somebody's second factor — the secret only exists on
 their device — so this is a removal, not a reset. It is also the step that turns
 a stolen password into an account, so check who you are talking to first.
 
-### What is stored
+## What is stored
 
 The TOTP secret is **encrypted at rest** with `APP_KEY`. Backup codes are stored
 with `password_hash()`, never in the clear. A trusted device is 32 random bytes
 in a cookie, of which the database holds only a SHA-256. Wrong codes are counted
 against the same lockout as wrong passwords, so a six-digit code cannot be
 guessed at leisure.
-
----
 
 ---
 

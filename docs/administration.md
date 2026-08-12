@@ -18,20 +18,20 @@ does from the server. The installer links it onto `PATH`, so this works from
 anywhere:
 
 ```bash
-sudo asset-register help
+sudo kitwell help
 ```
 
 > **Run the installed copy, not the one in your checkout.** `manage.sh` travels
 > with the source, so `~/kitwell/manage.sh` exists too — but it manages nothing,
 > because a checkout has no `.env`, and the web server user usually cannot even
 > read a directory under `/root`. Run it from the install directory (or use the
-> `asset-register` link above). It will tell you, and point at the real install,
+> `kitwell` link above). It will tell you, and point at the real install,
 > if you get this wrong.
 
 The full path always works too:
 
 ```bash
-sudo /var/www/asset-register/manage.sh help
+sudo /var/www/kitwell/manage.sh help
 ```
 
 | Task | Command |
@@ -65,7 +65,7 @@ off and are never accepted as a command-line argument.
 `bin/console.php` can be used on its own and does not need root:
 
 ```bash
-cd /var/www/asset-register && sudo -u www-data php bin/console.php doctor
+cd /var/www/kitwell && sudo -u www-data php bin/console.php doctor
 ```
 
 `doctor` is worth knowing: it checks the PHP version and extensions, whether
@@ -142,8 +142,6 @@ usual suspects in one pass (PHP extensions, `.env` permissions, upload limits,
 storage, database, pending migrations). `storage/logs/app.log` holds uncaught
 errors — `sudo ./manage.sh logs -n 100`. **Admin → Activity log** holds who did
 what.
-
----
 
 ---
 

@@ -49,7 +49,7 @@ final class CalendarController extends Controller
         $body = CalendarFeed::build($user);
 
         header('Content-Type: text/calendar; charset=utf-8');
-        header('Content-Disposition: inline; filename="asset-register.ics"');
+        header('Content-Disposition: inline; filename="kitwell.ics"');
         header('Content-Length: ' . strlen($body));
         // Private, and short-lived: a client that polls more often than this
         // gets a cached copy, and a revoked token stops working within minutes

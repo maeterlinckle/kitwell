@@ -1,15 +1,16 @@
 # Security
 
-What the application does to protect itself, and the decisions behind the parts that look unusual.
+What the application does to protect itself, and how to check it.
 
 **On this page**
 
-- [Security notes](#security-notes)
+- [What is protected](#what-is-protected)
+- [How this is checked](#how-this-is-checked)
+- [If you lock yourself out](#if-you-lock-yourself-out)
 
 ---
 
-## Security notes
-
+## What is protected
 
 - **Passwords** — `password_hash()` with `PASSWORD_DEFAULT`, verified with
   `password_verify()`, transparently re-hashed on sign-in when PHP's default
@@ -56,7 +57,7 @@ What the application does to protect itself, and the decisions behind the parts 
 - **CSV exports** — cells beginning `=`, `+`, `-` or `@` are prefixed with an
   apostrophe so a spreadsheet cannot execute asset data as a formula.
 
-### How this is checked
+## How this is checked
 
 The properties above are verified by tooling rather than by inspection, and
 that tooling ships in **[`tests/`](../tests/README.md)** so it can be re-run after
@@ -78,7 +79,7 @@ further checks need the site running; see `tests/README.md`.
 | Permission matrix | Drives ~260 route/role combinations as all four roles against a declared expectation |
 | Report figures | Every report's row count matches the database, and the CSV matches the screen |
 
-### If you lock yourself out
+## If you lock yourself out
 
 If email is configured, **Forgotten your password?** on the sign-in page is the
 quickest way back in and needs nobody's help — see
@@ -108,8 +109,6 @@ Answer `y` when it offers to reset the password.
 The application refuses to leave itself with no way in: the last active
 administrator cannot be deactivated or demoted, and nobody can deactivate their
 own account.
-
----
 
 ---
 

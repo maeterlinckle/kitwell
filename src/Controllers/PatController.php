@@ -215,18 +215,6 @@ final class PatController extends Controller
         Response::redirect('/assets/' . $assetId . '/pat');
     }
 
-    /*
-     * There was a toggleRequirement() here: a one-click flip of `requires_pat`
-     * posted from the PAT warning banner. It has gone, along with its route.
-     *
-     * The banner only appears when a test is overdue, failed or has never
-     * happened, and a button that made the warning disappear was the wrong
-     * answer offered at the moment somebody most wants an easy one. Whether an
-     * asset needs testing is a fact about the asset, so it is edited where its
-     * other facts are — the tick box on the asset form, behind the same
-     * `assets.edit` permission, writing the same activity-log entry.
-     */
-
     /**
      * A failed test should not leave the item quietly available for use.
      *

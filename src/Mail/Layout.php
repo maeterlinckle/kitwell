@@ -62,8 +62,8 @@ final class Layout
         $escape = static fn (string $value): string
             => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-        $organisation = $escape((string) (Setting::get('organisation_name', '') ?: Config::get('app.name', 'Asset Register')));
-        $product      = $escape((string) Config::get('app.product', 'Kitwell'));
+        $organisation = $escape((string) (Setting::get('organisation_name', '') ?: Config::get('app.name', 'Kitwell')));
+        $product      = $escape((string) Config::get('app.full_name', 'Kitwell by Junction'));
         $tagline      = $escape((string) Config::get('app.product_tagline', 'Asset Management'));
         $vendor       = $escape((string) Config::get('app.vendor', 'Junction Inc Ltd'));
         $vendorUrl    = $escape((string) Config::get('app.vendor_url', 'https://www.junctioninc.co.uk/'));
@@ -121,8 +121,8 @@ final class Layout
         </tr>
         <tr>
           <td style="padding:16px 24px;border-top:1px solid {$rule};font-family:{$font};font-size:12px;line-height:1.5;color:{$muted};">
-            {$product} &mdash; {$tagline}<br>
-            by <a href="{$vendorUrl}" style="color:{$muted};">{$vendor}</a>{$appLink}
+            {$product}<br>
+            {$tagline} &middot; <a href="{$vendorUrl}" style="color:{$muted};">{$vendor}</a>{$appLink}
           </td>
         </tr>
       </table>

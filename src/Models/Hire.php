@@ -439,10 +439,10 @@ final class Hire
         ], $hireId);
     }
 
-    /** Human-friendly hire reference, e.g. LN-2026-0001. */
+    /** Human-friendly hire reference, e.g. HR-2026-0001. */
     public static function nextReference(): string
     {
-        $prefix = (string) Setting::get('hire_reference_prefix', 'LN-');
+        $prefix = (string) Setting::get('hire_reference_prefix', 'HR-');
         $year   = date('Y');
         $stem   = $prefix . $year . '-';
 

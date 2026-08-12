@@ -64,7 +64,6 @@ $subtitle = $picked
     <?php endif; ?>
 
     <footer class="print-foot muted">
-        <?= e(config('app.product', 'Kitwell')) ?> — <?= e(config('app.product_tagline', 'Asset Management')) ?>
-        · by <?= e(config('app.vendor', 'Junction Inc Ltd')) ?>
+        <?= e(config('app.full_name', 'Kitwell by Junction')) ?> — <?= e(config('app.product_tagline', 'Asset Management')) ?>
     </footer>
 </article>

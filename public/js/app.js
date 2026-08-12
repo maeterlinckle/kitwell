@@ -1,4 +1,4 @@
-/* Asset Register — small vanilla-JS behaviours. No build step, no framework. */
+/* Kitwell — small vanilla-JS behaviours. No build step, no framework. */
 (function () {
     'use strict';
 
@@ -668,16 +668,12 @@
 
     // How long after a hover-open a click on the *summary* is ignored.
     //
-    // The bug this fixes: a <details> toggles natively when its <summary> is
-    // clicked. Hover opens the panel, the hand keeps moving, and the click that
-    // was aimed at an item inside lands on the summary on the way past — which
-    // the browser reads as "close this", so the menu shuts a frame before the
-    // pointer arrives. The user sees a menu that refuses to be clicked.
-    //
-    // Two seconds, because that is the width of a natural hover-then-click
-    // motion including a moment's reading. It only ever suppresses a click on
-    // the summary itself; every link inside the panel is untouched and works the
-    // instant the panel appears, which is the whole point of opening it.
+    // A <details> toggles natively when its <summary> is clicked. Hover opens
+    // the panel, the hand keeps moving, and a click aimed at an item inside can
+    // land on the summary on the way past — which the browser reads as "close
+    // this". Two seconds covers a natural hover-then-click motion including a
+    // moment's reading. Only a click on the summary itself is suppressed; every
+    // link inside the panel works the instant the panel appears.
     var HOVER_CLICK_GRACE_MS = 2000;
 
     function hoverEnabled() {

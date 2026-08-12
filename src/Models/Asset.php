@@ -12,10 +12,9 @@ final class Asset
 
     /**
      * Listed in the order a person reads them, which is not the order the ENUM
-     * declares. 'Faulty' was appended to the column in migration 023 because
-     * adding an ENUM member at the end is instant and re-maps nothing, whereas
-     * inserting one in the middle rewrites the table. Presentation order is a
-     * presentation problem, so it is solved here and in SORTS['status'].
+     * declares — a new member is appended to the column, because appending is
+     * instant while inserting in the middle rewrites the table. Presentation
+     * order is a presentation problem, solved here and in SORTS['status'].
      */
     public const STATUSES   = ['In Stock', 'On Hire', 'In Maintenance', 'Faulty', 'Retired'];
     public const RELATIONSHIPS = ['sub-asset', 'accessory', 'related'];

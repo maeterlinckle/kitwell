@@ -21,7 +21,7 @@ use App\Core\Migrator;
 
 $migrator = new Migrator();
 
-echo "Asset Register — migrations\n";
+echo "Kitwell — migrations\n";
 echo "Database: " . Config::get('database.database') . ' on ' . Config::get('database.host') . "\n\n";
 
 if (in_array('--status', $argv, true)) {

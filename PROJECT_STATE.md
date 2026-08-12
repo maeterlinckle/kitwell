@@ -1,6 +1,6 @@
 # Project state
 
-A ground-truth snapshot of the asset register as it stands on **2026-08-12**,
+A ground-truth snapshot of Kitwell as it stands on **2026-08-12**,
 written for whoever (or whatever) picks the code up next.
 
 The original nine build prompts finished on 2026-08-06. Since then:
@@ -23,8 +23,8 @@ never lined up with the rest of its row.
 
 Everything below was checked against the files and the database at the time of
 writing, not recalled. The schema section was produced by creating an empty
-database, applying all twenty-five migrations in order and then reading
-`information_schema`, so it describes exactly what a fresh install produces.
+database, applying the migrations in order and then reading `information_schema`,
+so it describes exactly what a fresh install produces.
 Where something is *not* verified, it says so.
 
 ---
@@ -52,8 +52,7 @@ Where something is *not* verified, it says so.
 
 ## 2. Database schema as implemented
 
-Built by applying `database/migrations/001` … `025` to an empty database. All
-twenty-five applied cleanly with no errors.
+Built by applying everything in `database/migrations/` to an empty database.
 
 **Totals:** 32 domain tables, 377 columns, 60 foreign keys, 147 indexes.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
@@ -66,36 +65,17 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-| File | Creates / changes |
-|---|---|
-| `001_create_auth_tables.sql` | `roles`, `permissions`, `role_permissions`, `users`, `login_attempts` |
-| `002_create_reference_tables.sql` | `categories`, `locations` (both self-nesting) |
-| `003_create_assets.sql` | `assets`, `asset_photos`, `asset_manuals` |
-| `004_create_maintenance.sql` | `maintenance_schedules`, `maintenance_logs`, `maintenance_log_photos` |
-| `005_create_pat_records.sql` | `pat_records` |
-| `006_create_borrowers_and_loans.sql` | the tables now called `hirers` and `hires` (renamed by 017) |
-| `007_create_activity_log.sql` | `activity_log` |
-| `008_seed_roles_and_permissions.sql` | seeds 4 roles, all 30 permissions, role grants (re-runnable; leaves hand-edited grants alone) |
-| `009_seed_settings.sql` | `settings` table + asset-tag/label defaults |
-| `010_add_photo_thumbnails.sql` | `asset_photos.thumbnail_path` |
-| `011_maintenance_settings.sql` | `maintenance_due_days` setting |
-| `012_pat_settings.sql` | `pat_due_days`, `pat_default_interval_months` settings |
-| `013_loans_and_borrower_role.sql` | `hire_photos`; `hires` gains `idx_hires_open(asset_id, returned_at)`; seeds the three `hire_*` settings; **revokes every grant from the Hirer role except `hires.view_own`** (the permission itself is seeded in 008) |
-| `014_asset_electrical_details.sql` | `assets` gains `appliance_class`, `load_rating_va`, `has_fuse`; backfills them from each asset's most recent PAT record |
-| `015_pat_step_results.sql` | `pat_records` gains the per-step verdicts and `extension_lead_metres` |
-| `016_pat_guideline_settings.sql` | the six `pat_guide_*` guideline settings |
-| `017_rename_loans_to_hires.sql` | **`loans`→`hires`, `borrowers`→`hirers`, `loan_photos`→`hire_photos`**, plus the columns, permissions, role, settings and `assets.status` value that carried the old words |
-| `018_email_and_calendar.sql` | `email_templates`, `email_log`, `email_reminders`; `users.calendar_token` + `calendar_token_created_at`; the `mail_*` and `reminder_*` settings; the `email.manage` and `email.send` permissions |
-| `019_maintenance_log_documents.sql` | `maintenance_log_documents` — the paperwork attached to a completion (a contractor's report, a certificate), shaped after `asset_manuals` but hanging off the log |
-| `020_teams.sql` | `teams`, `team_members`; `maintenance_schedules.assigned_to_team_id`; the `teams.manage` permission, granted to `admin` only |
-| `021_user_tokens.sql` | `user_tokens` — single-use invitation and password-reset links, stored as SHA-256; the `invite_expiry_hours` and `password_reset_expiry_hours` settings |
-| `022_two_factor.sql` | `users` gains `two_factor_enabled`, `totp_secret` (encrypted) and `totp_confirmed_at`; `user_backup_codes`, `trusted_devices`; the five two-factor settings |
-| `023_faults_and_responsibility.sql` | `assets` gains `responsible_user_id` + `responsible_team_id` (mutually exclusive, both real foreign keys) and **`'Faulty'` appended to `assets.status`**; `fault_reports`, `fault_report_photos`; the `faults.report` permission granted to `admin` and `manager`; the `reminder_faulty_*` and `fault_notify_immediately` settings |
-| `024_custom_reports.sql` | `custom_reports` — a saved report definition: a data source, a set of values for that source's **existing** filters, chosen columns and a sort. Three JSON columns, no SQL anywhere in the table. The `reports.manage` permission, granted to `admin` and `manager` |
-| `025_api_keys.sql` | `api_keys` — a credential tied to one user, stored as a SHA-256 with a clear prefix for display, plus scope, expiry, revocation and a rate-limit counter on the row. The `api.manage` permission (admin only) and the four `api_*` settings |
+Three files, applied in filename order and recorded in `migrations`. Each is
+written to be safe to re-run.
 
-Migrations are applied in filename order and recorded. **Never edit an applied
-file** — add a new numbered one.
+| File | Contents |
+|---|---|
+| `001_schema.sql` | All 32 tables, in dependency order. `CREATE TABLE IF NOT EXISTS` throughout |
+| `002_roles_and_permissions.sql` | The 4 built-in roles, 36 permissions and 71 grants. Role and permission definitions are refreshed on re-run; grants are only inserted where missing, so a site's own edits to a built-in role survive |
+| `003_default_settings.sql` | The 51 setting keys a fresh install starts with, grouped by area. `INSERT IGNORE`, so an existing value is kept |
+
+To change the schema, add a new numbered file — `004_…` and upward. Do not edit
+one that has been applied anywhere.
 
 ### 2.2 Tables
 
@@ -231,14 +211,14 @@ Indexes `(asset_id, created_at)`, `(asset_id, is_primary)`, `(asset_id, taken_at
 schedule when the job is logged), `notes`, `created_by`, timestamps.
 Indexes `(asset_id, performed_on)`, `performed_on`, `created_at`, `schedule_id`.
 
-`maintenance_schedules` also carries **`assigned_to_team_id`** (migration 020),
-mutually exclusive with `assigned_to_user_id` — see §2.5 item 10.
+`maintenance_schedules` also carries **`assigned_to_team_id`**, mutually
+exclusive with `assigned_to_user_id` — see §2.5 item 10.
 
 #### `maintenance_log_photos`
 `id`, `maintenance_log_id` NN, `file_path` NN, `original_filename`, `mime_type` NN,
 `file_size_bytes` NN 0, `caption`, `uploaded_by`, `created_at`.
 
-#### `maintenance_log_documents` (migration 019)
+#### `maintenance_log_documents`
 `id` bigint, `maintenance_log_id` NN, `title` varchar(191) NN, `file_path` NN,
 `original_filename`, `mime_type` NN default `application/pdf`,
 `file_size_bytes` NN 0, `notes`, `uploaded_by`, `created_at`.
@@ -249,7 +229,7 @@ The paperwork a visit produces. Attached to the **log**, not the asset: a
 service report belongs to the visit it describes, and filing it against the
 machine would lose which visit produced it.
 
-#### `teams` / `team_members` (migration 020)
+#### `teams` / `team_members`
 `teams`: `id`, `name` varchar(120) NN **unique**, `description` varchar(255),
 `is_active` NN 1 (archive, never delete), `created_by`, timestamps.
 Index `idx_teams_active(is_active)`.
@@ -259,7 +239,7 @@ Index `idx_teams_active(is_active)`.
 membership row is meaningless without both, and the audit trail is what records
 who was added and when.
 
-#### `fault_reports` (migration 023)
+#### `fault_reports`
 `id` bigint, `asset_id` NN, `description` text NN, `faulty_on` date NN,
 `urgency` enum('Low','Medium','High','Critical') NN 'Medium',
 `condition_rating` enum(the five asset conditions) NN, `reported_by` int
@@ -286,7 +266,7 @@ keep in step with the status, and the two would drift. Everything that asks
 "what is faulty?" — the dashboard tile, the report, the digest — reads
 `assets.status`.
 
-#### `fault_report_photos` (migration 023)
+#### `fault_report_photos`
 A straight copy of `maintenance_log_photos`, hanging off a report:
 `id`, `fault_report_id` NN, `file_path` NN, `original_filename`, `mime_type` NN,
 `file_size_bytes` NN 0, `caption`, `uploaded_by`, `created_at`.
@@ -298,7 +278,7 @@ is part of the asset's ongoing record and can become the thumbnail the register
 shows; a fault photo belongs to the report that explains it, and filing it
 against the asset would lose which fault it was evidence of.
 
-#### `custom_reports` (migration 024)
+#### `custom_reports`
 `id`, `report_key` varchar(80) NN **unique** (always prefixed `custom-`),
 `name` NN, `description`, `data_source` varchar(40) NN, `filters` JSON NN,
 `columns` JSON NN, `sort_column`, `sort_direction` enum('asc','desc') NN,
@@ -319,7 +299,7 @@ shadow `all-assets`, nor be shadowed by a future built-in.
 Three JSON columns rather than child tables: they are read as one blob, written
 as one blob, never joined and never filtered on.
 
-#### `api_keys` (migration 025)
+#### `api_keys`
 `id`, `name` NN, `user_id` NN, `token_prefix` char(12) NN (clear, for display),
 `token_hash` char(64) NN **unique**, `scope` enum('read','full') NN,
 `expires_at`, `revoked_at`, `last_used_at`, `last_used_ip`, `request_count`,
@@ -335,7 +315,7 @@ SHA-256 rather than `password_hash()` because this is a 48-character random
 value, not a human-chosen password: there is nothing to brute-force, and a
 lookup has to be one indexed query rather than a verify against every row.
 
-#### `user_tokens` (migration 021)
+#### `user_tokens`
 `id` bigint, `user_id` NN, `purpose` enum('invite','password_reset') NN,
 `token_hash` char(64) NN **unique**, `expires_at` datetime NN, `used_at`
 datetime, `created_by`, `created_ip`, `created_at`.
@@ -347,7 +327,7 @@ that was sent**, so a database dump is not a set of working account-takeover
 links. `used_at` rather than a delete, so "already used" is a state the page can
 explain instead of an indistinguishable "not found".
 
-#### `user_backup_codes` (migration 022)
+#### `user_backup_codes`
 `id`, `user_id` NN (CASCADE), `code_hash` varchar(255) NN, `used_at` datetime,
 `created_at`. Index `(user_id, used_at)`.
 
@@ -357,7 +337,7 @@ short enough to be worth brute-forcing out of a stolen dump, and a slow hash is
 the whole defence. The alphabet omits O/0 and I/1/L because these get written on
 paper and typed back months later.
 
-#### `trusted_devices` (migration 022)
+#### `trusted_devices`
 `id` bigint, `user_id` NN (CASCADE), `token_hash` char(64) NN **unique**,
 `label`, `ip_address`, `user_agent_hash` char(64), `last_seen_at` datetime NN,
 `expires_at` datetime NN, `created_at`.
@@ -418,7 +398,7 @@ Indexes `created_at`, `(entity_type, entity_id, created_at)`, `(user_id, created
 #### `settings`
 `setting_key` varchar(100) **PK**, `setting_value` text, `updated_by`, `updated_at`.
 
-#### `email_templates` (migration 018)
+#### `email_templates`
 `id`, `template_key` varchar(60) NN **unique**, `subject` varchar(255) NN,
 `body` text NN, `is_html` tinyint NN 0, `is_active` tinyint NN 1,
 `updated_by` (SET NULL), timestamps.
@@ -429,7 +409,7 @@ administrator has edited it. The shipped wording lives in
 a fresh install sends properly worded mail with this table empty, and
 "reset to default" is a `DELETE` rather than a re-seed.
 
-#### `email_log` (migration 018)
+#### `email_log`
 `id` bigint, `recipient` varchar(190) NN, `recipient_name`, `subject` NN,
 `template_key` varchar(60) (NULL for one-offs), `entity_type` varchar(64),
 `entity_id` bigint, `status` enum('sent','failed') NN, `error` varchar(500),
@@ -439,7 +419,7 @@ Indexes `created_at`, `(status, created_at)`, `(template_key, created_at)`,
 `(entity_type, entity_id)`.
 **No FK on `entity_id`** — same reasoning as `activity_log`.
 
-#### `email_reminders` (migration 018)
+#### `email_reminders`
 `id` bigint, `reminder_key` varchar(40) NN, `entity_type` varchar(64) NN,
 `entity_id` bigint NN, `recipient` varchar(190) NN, `last_sent_at` datetime NN,
 `send_count` int NN 1.
@@ -487,9 +467,9 @@ deleting a user never destroys the records they touched.
     `maintenance.view`, `pat.view`, `reports.view`
   - hirer: **`hires.view_own` and nothing else**
   - manager gained `email.send` (not `email.manage`) in 018
-  - `teams.manage` (020) is **admin only**: membership decides who is reminded
+  - `teams.manage` is **admin only**: membership decides who is reminded
     about a job and who it is expected of, which makes it administrative
-  - `reports.manage` (024) and `api.manage` (025): defining a report is admin and
+  - `reports.manage` and `api.manage`: defining a report is admin and
     manager, issuing an API key is admin only. Neither grants anything new to
     *see* — a saved report is refused unless the reader holds its data source's
     own permission, and a key inherits exactly its owner's role
@@ -555,17 +535,16 @@ Nothing here is accidental, but a reader coming from the brief should know:
    a top-level asset has — its own tag, photos, PAT record and hire history.
 2. **`condition` is `condition_rating`.** `condition` is a reserved word in
    MariaDB; the column and every enum reference use `condition_rating`.
-3. **`hire_photos` and `asset_photos.thumbnail_path` arrived later**
-   (migrations 013 and 010) rather than in the original asset/hire migrations.
+3. **`hire_photos` and `asset_photos.thumbnail_path` are beyond the brief.**
 4. **Columns beyond the brief**, added where the workshop use case needed them:
    `assets.barcode` (a second, manufacturer barcode distinct from the printed tag),
    `current_value`, `supplier`, `warranty_expires_on`, `pat_interval_months`,
    `is_hireable`, `retired_on`, `manufacturer_url`, `plug_fuse_rating_amps`,
    `cable_csa_mm2`.
-5. **The Hirer role was narrowed after the fact.** It originally held
-   `assets.view`, which exposes the whole register. Migration 013 revoked it and
-   gave hirers a separate portal instead. **`hirer` must never regain
-   `assets.view`.**
+5. **The Hirer role is narrower than the brief describes.** It holds only
+   `hires.view_own` and reaches its equipment through a separate portal.
+   `assets.view` would expose the whole register, so **`hirer` must never hold
+   it.**
 6. **Keyword search is multi-term `LIKE`, not FULLTEXT.** FULLTEXT tokenises
    asset tags and serial numbers badly and ignores short words. This is a
    decision, not an omission — don't "upgrade" it without being asked.
@@ -1141,9 +1120,9 @@ appears twice in the schema — `maintenance_schedules.assigned_to_*` and
 delegate. **Do not write a third parser** — the failure mode of a near-copy here
 is silent, and it sends the notification to the wrong half of the workshop.
 
-Two nullable columns rather than a polymorphic `(type, id)`, exactly as
-migration 020 argued: both sides are then real foreign keys, so deleting a team
-cannot leave an asset pointing at a group that no longer exists.
+Two nullable columns rather than a polymorphic `(type, id)`: both sides are then
+real foreign keys, so deleting a team cannot leave an asset pointing at a group
+that no longer exists.
 
 **Nobody named means nobody emailed.** Not an error, not a fallback to an
 administrator or the notify list. Mail addressed to "whoever is around" is mail
@@ -1273,7 +1252,7 @@ subdirectory.
 
 All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
-> **Terminology:** the application says **Hires** and **Hirers**, never loans or borrowers. Migration 017 renamed the schema to match, so code and interface use the same words — there is no compatibility shim and nothing left calling it a loan. Only the filenames of migrations 006 and 013 still carry the old words, because an applied migration is never edited.
+> **Terminology:** the application says **Hires** and **Hirers**. The schema, the code and the interface all use the same words, with no compatibility shim.
 
 > **Since the nine prompts:** an installer (`install.sh`), an administration
 > wrapper (`manage.sh`), an admin console (`bin/console.php`) and `INSTALL.md`
@@ -1357,8 +1336,8 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 11. **Navigation and terminology** — six top-level destinations (five since
     stage 15) with the rest
     nested under them, one markup for desktop drop-downs and mobile accordions,
-    scan promoted to a persistent quick action, and loans/borrowers renamed to
-    hires/hirers everywhere including the schema (migration 017).
+    scan promoted to a persistent quick action, and hires/hirers named
+    consistently in the schema, the code and the interface.
 12. **Email and calendar** — SMTP configured and tested from Settings with the
     password encrypted at rest; editable templates whose defaults live in code;
     PAT, maintenance and hire reminders on a cron schedule with per-recipient
@@ -1838,9 +1817,9 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   and the register prints a child's parent tag, so substring matches lie.
 - **Append to an ENUM; never insert into the middle of one.** Appending is
   instant and re-maps nothing. Inserting a member in its natural reading
-  position forces a table copy and renumbers everything after it. Migration 023
-  put `'Faulty'` at the end of `assets.status` and solved the reading order in
-  PHP instead — `Asset::STATUSES` for the dropdowns, an explicit `FIELD()` in
+  position forces a table copy and renumbers everything after it. `'Faulty'`
+  therefore sits at the end of `assets.status`, and the reading order is solved
+  in PHP — `Asset::STATUSES` for the dropdowns, an explicit `FIELD()` in
   `Asset::SORTS['status']` for the sort. Do not "tidy" it.
 - **A flash message is consumed by the first request that renders it.** A test
   that does other `GET`s before checking the confirmation is testing the order
@@ -1913,9 +1892,8 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   distributions. Install optional packages separately and tolerantly.
 - **A migration can need a privilege the application never uses.** `RENAME
   TABLE` requires `ALTER` **and `DROP`** on the source table; so does
-  `ALTER TABLE … RENAME TO`. Reasoning about the grant from "what does the
-  running code issue?" is how migration 017 shipped un-runnable on every
-  existing install. **Check the grant against the migrations, not the models.**
+  `ALTER TABLE … RENAME TO`. **Check the grant against the migrations, not the
+  models.**
 - **Never name a view variable `$template`.** `View::renderFile(string $template,
   array $data)` takes the template path in a parameter of that name, and its
   `extract($data, EXTR_SKIP)` therefore *silently drops* your variable — the
@@ -2098,9 +2076,9 @@ php tests/security-audit.php && php tests/escape-audit.php
    `manage.sh composer-install`.
 6. The one runtime package is PHPMailer. Everything else is still first-party,
    and the app still runs from a plain file copy — it just cannot send.
-7. **Upgrading an install made before 2026-08-11?** Run
-   `sudo ./manage.sh db-grant` first. Those installs have a database grant
-   without `DROP`, and migration 017 cannot run without it (§5.4).
+7. **If a migration stops with `ERROR 1142: … command denied`,** the database
+   grant is incomplete. `sudo ./manage.sh db-grant` re-applies it, and
+   `manage.sh doctor` checks for it.
 8. The four kinds of maintenance are set out in §5.1 item 4. If a change makes
    *unplanned work* harder to reach, it is a regression — that is the one that
    has already been reported as missing once.

@@ -17,7 +17,7 @@ Reminders, Templates and Log. All of it needs `email.manage`, which only the
 Administrator role holds by default.
 
 **Nothing is sent until you switch it on.** A fresh install has email disabled,
-no host configured and every reminder type off. That is deliberate: an install
+no host configured and every reminder type off. An install
 that starts trying to send on day one, to a server that does not exist, just
 fills the log with failures nobody asked for.
 
@@ -32,7 +32,7 @@ fills the log with failures nobody asked for.
 older install, or a machine that had no Composer at the time:
 
 ```bash
-sudo /var/www/asset-register/manage.sh composer-install
+sudo /var/www/kitwell/manage.sh composer-install
 ```
 
 That installs Composer first if the machine has none, then fetches PHPMailer
@@ -75,7 +75,7 @@ it goes to each asset's responsible party rather than to the notify list. See
 
 - **One digest per person, not one email per item.** Forty overdue PAT items
   produce one message listing forty items. Volume is what makes people filter
-  reminders into a folder, and a filtered reminder is worse than none because it
+  reminders into a folder, and a filtered reminder is no reminder at all —
   still looks like it is working.
 - **An item already mentioned is skipped** until *Remind again after* has
   passed (7 days by default). Crossing from "due soon" to "overdue" sends
@@ -93,13 +93,13 @@ it goes to each asset's responsible party rather than to the notify list. See
 They are sent by cron, not by anyone having the site open:
 
 ```bash
-sudo /var/www/asset-register/manage.sh cron-install
+sudo /var/www/kitwell/manage.sh cron-install
 ```
 
 That installs a daily 08:00 run. To try it first:
 
 ```bash
-sudo /var/www/asset-register/manage.sh send-reminders --dry-run
+sudo /var/www/kitwell/manage.sh send-reminders --dry-run
 ```
 
 ### Templates
@@ -123,7 +123,7 @@ the reminder it belongs to.
 Messages go out as HTML in a fixed layout: your logo across the top, the
 content, and a footer. What you edit is the *content* — ordinary HTML, so
 `<p>`, `<strong>`, `<ul>` and links all work, and the shipped wording shows the
-shape. The surrounding layout is not editable on purpose: it is one design to
+shape. The surrounding layout is not editable: it is one design to
 keep right rather than nine, and improving it improves every message at once.
 
 **A plain-text version is always sent alongside**, generated from your content,
@@ -156,7 +156,7 @@ ago" is exactly the sort of thing nobody notices until it matters.
 Trim it with `manage.sh` when it gets long:
 
 ```bash
-sudo /var/www/asset-register/manage.sh mail-status
+sudo /var/www/kitwell/manage.sh mail-status
 ```
 
 ---
@@ -205,8 +205,6 @@ without signing in.
 Set `APP_URL` in `.env`. The address a user pastes into their phone has to work
 from outside, and the host header on the request they happen to be looking at
 may be an internal name.
-
----
 
 ---
 

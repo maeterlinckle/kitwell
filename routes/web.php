@@ -26,6 +26,7 @@ use App\Controllers\AssetCopyController;
 use App\Controllers\AssetExportController;
 use App\Controllers\ExportController;
 use App\Controllers\FaultController;
+use App\Controllers\HelpController;
 use App\Controllers\ImportController;
 use App\Controllers\AccountController;
 use App\Controllers\AuthController;
@@ -116,6 +117,12 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/profile/calendar',         [CalendarController::class, 'show'], [], 'profile.calendar');
     $router->post('/profile/calendar',        [CalendarController::class, 'regenerate'], ['csrf']);
     $router->post('/profile/calendar/revoke', [CalendarController::class, 'revoke'], ['csrf']);
+
+    // Documentation. No permission of its own: every signed-in user reaches it
+    // from Help in the menu, and it describes the application rather than
+    // exposing anything from the register.
+    $router->get('/help', [HelpController::class, 'index'], [], 'help');
+    $router->get('/help/{page:[A-Za-z0-9][A-Za-z0-9-]*}', [HelpController::class, 'show']);
 });
 
 // --- Assets ---------------------------------------------------------------

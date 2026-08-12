@@ -1,4 +1,4 @@
-# Asset Register
+# Kitwell
 
 Self-hosted asset register for a workshop or office: assets and sub-assets,
 condition photos, PDF manuals, maintenance scheduling, PAT (Portable Appliance
@@ -9,6 +9,9 @@ PHP 8.1+ and MariaDB 10.4+, no framework. Server-rendered templates and vanilla
 JavaScript: no build step, nothing to compile, deployable by copying files.
 
 **📖 [Full documentation](docs/README.md)** · [Getting started](docs/getting-started.md) · [API](docs/api.md)
+
+Signed in, **Settings → Help** opens the same documentation inside the
+application.
 
 ---
 
@@ -52,15 +55,15 @@ JavaScript: no build step, nothing to compile, deployable by copying files.
 On a fresh Debian or Ubuntu server, as root:
 
 ```bash
-git clone https://github.com/maeterlinckle/kitwell.git /opt/asset-register
-cd /opt/asset-register
+git clone https://github.com/maeterlinckle/kitwell.git /opt/kitwell
+cd /opt/kitwell
 sudo ./install.sh
 ```
 
 The installer creates the database, writes `.env`, runs the migrations, sets up
 the web server and TLS, and prompts for the first administrator. See
 [INSTALL.md](INSTALL.md) for unattended runs and failure modes, or
-[Getting started](docs/getting-started.md) to do it by hand.
+[Getting started](docs/getting-started.md) to install by hand.
 
 To try it locally with PHP's built-in server:
 
@@ -76,12 +79,12 @@ php bin/migrate.php && php bin/seed.php && php -S 127.0.0.1:8000 -t public
 |---|---|
 | [`docs/`](docs/README.md) | How to install, configure and use it — one page per topic |
 | [`INSTALL.md`](INSTALL.md) | The scripted installer in detail |
-| `PROJECT_STATE.md` | The implemented schema, the established patterns, and the reasoning behind them — written for whoever picks the code up next |
+| `PROJECT_STATE.md` | The implemented schema and the patterns the code follows — written for whoever picks the code up next |
 | `tests/` | Shipped verification tooling: security and escaping audits, a permission matrix, and end-to-end checks. See [Development](docs/development.md) |
 
 ## Licence and status
 
-Built for one workshop and kept deliberately small: one runtime dependency
-(PHPMailer), no build tooling, no JavaScript framework. The barcode and QR
-encoders, the CSV handling and the reporting are all first-party, which is why
-the whole application can be deployed by copying a directory.
+Kitwell is built by [Junction](https://www.junctioninc.co.uk/) and kept small:
+one runtime dependency (PHPMailer), no build tooling, no JavaScript framework.
+The barcode and QR encoders, the CSV handling and the reporting are all
+first-party, so the whole application deploys by copying a directory.

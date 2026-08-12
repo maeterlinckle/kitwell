@@ -4,15 +4,12 @@
  * The API, readable and runnable.
  *
  * The page is a shell; everything in it is drawn from the generated OpenAPI
- * document by public/js/api-docs.js. That is deliberate — the spec and the
- * endpoints are built from the same declarations, so a page rendered from the
- * spec cannot describe an API that is not there.
+ * document by public/js/api-docs.js. The spec and the endpoints are built from
+ * the same declarations, so a page rendered from the spec cannot describe an
+ * API that is not there.
  *
- * Swagger UI and Redoc were the obvious answers and both were rejected: the
- * Content-Security-Policy here is `default-src 'self'` with no off-origin
- * scripts, so a CDN build simply would not load, and vendoring a megabyte of
- * somebody else's JavaScript into a repository that hand-writes its own barcode
- * and QR encoders would be out of character. This is about two hundred lines.
+ * The viewer is first-party: the Content-Security-Policy here is
+ * `default-src 'self'` with no off-origin scripts, so nothing loads from a CDN.
  *
  * @var string $specUrl
  * @var string $baseUrl

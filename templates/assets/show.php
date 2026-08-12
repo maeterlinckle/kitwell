@@ -50,13 +50,11 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
     </div>
 
     <div class="head-actions">
-        <?php /* Four buttons, not eight. What is left here is what somebody
-                 arriving at this page actually came to do: move the item on or
-                 off hire, correct the record, or take a copy away with them.
-                 Marking it faulty, duplicating it and pushing its details onto
-                 other assets are all deliberate acts on the record rather than
-                 things you reach for in passing, so they live in Manage in the
-                 rail; printing the label lives with the barcode it prints. */ ?>
+        <?php /* The errands somebody arrives at this page with: move the item
+                 on or off hire, correct the record, or take a copy away. Acts
+                 on the record itself — marking it faulty, duplicating it,
+                 copying its details onto other assets — live in Manage in the
+                 rail, and printing the label lives with the barcode. */ ?>
         <?php if ($openHire !== null && can('hires.return')): ?>
             <a class="btn btn-primary" href="<?= e(url('/hires/' . $openHire['id'] . '/return')) ?>">Book in</a>
         <?php elseif ($openHire === null && can('hires.create') && $hireBlocked === null): ?>

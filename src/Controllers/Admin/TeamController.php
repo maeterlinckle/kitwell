@@ -159,8 +159,8 @@ final class TeamController extends Controller
             ($activate ? 'Brought back the team ' : 'Archived the team ') . $team['name']
         );
 
-        // Said plainly, because "archived" could reasonably be read as "the work
-        // assigned to it has gone somewhere else". It has not.
+        // Spelled out, because "archived" could be read as "the work assigned to
+        // it has moved somewhere else".
         Flash::success($activate
             ? '“' . $team['name'] . '” is available again.'
             : '“' . $team['name'] . '” has been archived. It keeps the '

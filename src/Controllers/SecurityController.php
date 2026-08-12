@@ -71,7 +71,7 @@ final class SecurityController extends Controller
 
         Session::put(self::PENDING_SECRET, $secret);
 
-        $issuer = (string) (Setting::get('organisation_name', '') ?: Config::get('app.name', 'Asset Register'));
+        $issuer = (string) (Setting::get('organisation_name', '') ?: Config::get('app.name', 'Kitwell'));
         $uri    = Totp::uri($secret, (string) $user['email'], $issuer);
 
         $this->view('profile/two-factor-setup', [

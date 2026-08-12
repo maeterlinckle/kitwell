@@ -7,8 +7,8 @@ Two scripts sit at the top of the project:
 | `install.sh` | one command that turns a bare Linux server into a working site |
 | `manage.sh`  | everything after that: passwords, lockouts, backups, updates, checks |
 
-`README.md` still describes every step by hand. This file covers doing it with
-the scripts instead.
+[Getting started](docs/getting-started.md) describes every step by hand. This
+file covers doing it with the scripts instead.
 
 ---
 
@@ -17,8 +17,8 @@ the scripts instead.
 On the server, as root:
 
 ```bash
-git clone https://github.com/maeterlinckle/kitwell.git /opt/asset-register-src
-cd /opt/asset-register-src
+git clone https://github.com/maeterlinckle/kitwell.git /opt/kitwell-src
+cd /opt/kitwell-src
 sudo ./install.sh
 ```
 
@@ -26,8 +26,8 @@ Or, if the server has no outbound git access, copy an archive over and unpack it
 instead:
 
 ```bash
-tar -xzf asset-register.tar.gz -C /opt/asset-register-src
-cd /opt/asset-register-src
+tar -xzf kitwell.tar.gz -C /opt/kitwell-src
+cd /opt/kitwell-src
 sudo ./install.sh
 ```
 
@@ -58,20 +58,20 @@ git clone https://github.com/maeterlinckle/kitwell.git
 database, so the archive holds nothing secret):
 
 ```bash
-sudo /var/www/asset-register/manage.sh package /tmp/asset-register.tar.gz
+sudo /var/www/kitwell/manage.sh package /tmp/kitwell.tar.gz
 ```
 
 **From a source checkout on Linux or macOS:**
 
 ```bash
-tar -czf asset-register.tar.gz --exclude=.git --exclude=.env \
+tar -czf kitwell.tar.gz --exclude=.git --exclude=.env \
     --exclude=vendor --exclude='storage/uploads/*' --exclude='storage/logs/*' .
 ```
 
 **From Windows PowerShell:**
 
 ```powershell
-Compress-Archive -Path * -DestinationPath asset-register.zip -Force
+Compress-Archive -Path * -DestinationPath kitwell.zip -Force
 ```
 
 Delete `.env` from the zip afterwards if the source machine has one — it holds
@@ -151,10 +151,10 @@ With **proxy**, the proxy must forward `Host`, `X-Forwarded-For` and
 request arrived over plain HTTP and redirects it to HTTPS for ever.
 
 The generated Apache vhost sets `AllowOverride None` and carries the rewrite
-rules and security headers itself, so `public/.htaccess` is not consulted.
-That is deliberate: the `.htaccess` contains a fixed HTTPS redirect that would
-cause exactly that loop on a `plain-http` install. `.htaccess` is left in place
-for shared hosting, where you cannot edit a vhost.
+rules and security headers itself, so `public/.htaccess` is not consulted. The
+`.htaccess` contains a fixed HTTPS redirect, which would cause exactly that loop
+on a `plain-http` install. It is left in place for shared hosting, where you
+cannot edit a vhost.
 
 ---
 
@@ -163,25 +163,25 @@ for shared hosting, where you cannot edit a vhost.
 Put the answers in a file and skip every prompt:
 
 ```bash
-sudo install -m 600 /dev/null /root/asset-register.answers
-sudo tee /root/asset-register.answers >/dev/null <<'EOF'
-INSTALL_DIR=/var/www/asset-register
-APP_NAME="Junction Asset Register"
+sudo install -m 600 /dev/null /root/kitwell.answers
+sudo tee /root/kitwell.answers >/dev/null <<'EOF'
+INSTALL_DIR=/var/www/kitwell
+APP_NAME="Kitwell"
 APP_URL=https://assets.example.com
 APP_TIMEZONE=Europe/London
 ORGANISATION_NAME="Junction Workshop"
 SERVER_NAME=assets.example.com
 TLS_MODE=proxy
-DB_NAME=asset_register
-DB_USER=asset_register
+DB_NAME=kitwell
+DB_USER=kitwell
 # DB_PASSWORD is generated if you leave it out.
 ADMIN_NAME="Jo Bloggs"
 ADMIN_EMAIL=jo@example.com
 ADMIN_PASSWORD='a-long-one-you-chose'
 EOF
 
-sudo ./install.sh --answers=/root/asset-register.answers --non-interactive
-sudo shred -u /root/asset-register.answers
+sudo ./install.sh --answers=/root/kitwell.answers --non-interactive
+sudo shred -u /root/kitwell.answers
 ```
 
 The file holds two passwords. Create it with mode 600 and delete it when the
@@ -203,8 +203,8 @@ For an ordinary update from a new tarball, `manage.sh update` is the narrower
 tool:
 
 ```bash
-sudo /var/www/asset-register/manage.sh backup
-sudo /var/www/asset-register/manage.sh update /opt/new-version
+sudo /var/www/kitwell/manage.sh backup
+sudo /var/www/kitwell/manage.sh update /opt/new-version
 ```
 
 ---
@@ -212,7 +212,7 @@ sudo /var/www/asset-register/manage.sh update /opt/new-version
 ## After the install: manage.sh
 
 ```bash
-sudo /var/www/asset-register/manage.sh help
+sudo /var/www/kitwell/manage.sh help
 ```
 
 The tasks the README describes, as one command each:
@@ -256,7 +256,7 @@ accepted as a command-line argument.
 root:
 
 ```bash
-cd /var/www/asset-register && sudo -u www-data php bin/console.php doctor
+cd /var/www/kitwell && sudo -u www-data php bin/console.php doctor
 ```
 
 ---
@@ -269,7 +269,7 @@ Nothing is destroyed, and it is safe to fix the problem and run it again.
 |---------|---------------|
 | Package installation failed | the package manager's own output above the failure |
 | `Could not connect to MariaDB as root` | `systemctl status mariadb`; supply `DB_ROOT_PASSWORD` if root has a password |
-| Apache rejected the configuration | the `apachectl -t` output printed just before it stopped; the vhost is at `/etc/apache2/sites-available/asset-register.conf` or `/etc/httpd/conf.d/asset-register.conf` |
+| Apache rejected the configuration | the `apachectl -t` output printed just before it stopped; the vhost is at `/etc/apache2/sites-available/kitwell.conf` or `/etc/httpd/conf.d/kitwell.conf` |
 | The migrations failed | credentials in `.env`, then `sudo -u www-data php bin/migrate.php --status` |
 | `/health` did not answer | `manage.sh status`, then the web server log in `/var/log/apache2` or `/var/log/httpd` |
 | The site loads but redirects for ever | the HTTPS question above — the proxy is not sending `X-Forwarded-Proto: https` |

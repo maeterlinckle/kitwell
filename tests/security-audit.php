@@ -268,6 +268,12 @@ $permissionExempt = [
     '/two-factor/resend',
     '/two-factor/cancel',
     '/two-factor/setup',
+    // The documentation. Any signed-in user may read it, and it renders files
+    // that ship with the source rather than anything from the register — the
+    // slug is matched against a fixed pattern and resolved inside /docs, so no
+    // path outside that directory is reachable.
+    '/help',
+    '/help/{page:[A-Za-z0-9][A-Za-z0-9-]*}',
 ];
 
 $noPermission = [];

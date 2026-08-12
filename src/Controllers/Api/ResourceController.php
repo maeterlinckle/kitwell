@@ -122,11 +122,8 @@ final class ResourceController extends ApiController
                 //
                 // "Starting value" is not always null. A field that declares a
                 // `default` maps to a NOT NULL column — an asset's status, a
-                // hirer's type — and emptying it is a database error rather than
-                // a replacement. Sending them back to the default is what a
-                // replacement actually means, and it is the difference between
-                // a 200 and a 500: this exact case failed on assets and hirers
-                // the first time the contract test ran.
+                // hirer's type — so it resets to that default rather than to
+                // null, which the column would refuse.
                 //
                 // Required fields must still be present, so a PUT cannot quietly
                 // blank a name.
@@ -295,11 +292,9 @@ final class ResourceController extends ApiController
                 $values = is_array($value) ? array_map('strval', $value) : [(string) $value];
                 $values = array_values(array_filter($values, static fn (string $v): bool => trim($v) !== ''));
 
-                // Rejected, not quietly dropped. Intersecting against the enum
-                // and moving on turns `?status[]=Nonsens` into "no status
-                // filter at all", so the caller gets every row back and a 200
-                // that looks like agreement — the same trap the single-value
-                // branch below avoids, and it was in here for one build.
+                // Rejected, not quietly dropped: silently discarding an unknown
+                // value would turn `?status[]=Nonsens` into "no status filter at
+                // all" and hand the caller every row back under a 200.
                 if (isset($spec['enum'])) {
                     $unknown = array_values(array_diff($values, (array) $spec['enum']));
 

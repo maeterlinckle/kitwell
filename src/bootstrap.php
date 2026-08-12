@@ -118,5 +118,5 @@ if (PHP_SAPI !== 'cli') {
     Response::securityHeaders();
     Session::start();
 
-    View::share('appName', Config::get('app.name', 'Asset Register'));
+    View::share('appName', Config::get('app.name', 'Kitwell'));
 }

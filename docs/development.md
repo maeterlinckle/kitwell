@@ -5,27 +5,22 @@ Running it locally, the shape of the front end, and the verification tooling tha
 **On this page**
 
 - [Front end](#front-end)
-- [Development](#development)
+- [Running it locally](#running-it-locally)
 - [Verification tooling](#verification-tooling)
 
 ---
 
 ## Front end
 
-
 Mobile-first CSS with light and dark themes driven by `data-theme` on `<html>`.
 The choice is stored in `localStorage` *and* a cookie, and applied by an inline
 script before first paint so there is no flash of the wrong theme; with no stored
 choice it follows the device setting.
 
-Workshop-specific choices: 17px base text, a 44px minimum tap target everywhere,
-16px form inputs (below that iOS zooms on focus), high-contrast palettes in both
-themes, and status conveyed by text and shape as well as colour.
-
-All text meets the WCAG AA 4.5:1 contrast ratio against its own background in
-both themes — verified by measuring every rendered text node across the main
-pages at phone, tablet and desktop widths, which is how two badge colours that
-sat at 4.42:1 were found and corrected.
+Sized for a workshop: 17px base text, a 44px minimum tap target everywhere, 16px
+form inputs (below that iOS zooms on focus), high-contrast palettes in both
+themes, and status conveyed by text and shape as well as colour. All text meets
+the WCAG AA 4.5:1 contrast ratio against its own background in both themes.
 
 No JavaScript framework and no build step. The only scripts are
 `public/js/app.js` (navigation, theme, lightbox, form helpers) and
@@ -34,8 +29,7 @@ except the camera scanner, which falls back to typing or a USB scanner.
 
 ---
 
-## Development
-
+## Running it locally
 
 ```bash
 php -S localhost:8000 -t public
@@ -47,7 +41,7 @@ otherwise the app will redirect you to `https://localhost:8000`.
 To rebuild a development database from scratch:
 
 ```bash
-mariadb -u root -p -e "DROP DATABASE IF EXISTS asset_register; CREATE DATABASE asset_register CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mariadb -u root -p -e "DROP DATABASE IF EXISTS kitwell; CREATE DATABASE kitwell CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 php bin/migrate.php && php bin/seed.php
 ```
 
@@ -62,7 +56,9 @@ php bin/migrate.php && php bin/seed.php
 - The schema uses no MySQL-8-only syntax, so it applies cleanly to MariaDB
   10.4 through 12.x.
 
-### Verification tooling
+---
+
+## Verification tooling
 
 Everything in `tests/` is a plain PHP script — no framework, nothing to install.
 `tests/README.md` explains each one and which are safe to run against a live

@@ -15,11 +15,8 @@ use App\Core\Database;
  * are identical — one form control carrying "user:7" or "team:2", unpacked into
  * two mutually exclusive foreign keys.
  *
- * Written once rather than twice because the failure mode of a near-copy is
- * quiet: two parsers that disagree about a malformed value send a notification
- * to the wrong half of the workshop, and nothing anywhere reports an error.
- * Migration 020 makes the same argument about the columns; this is the argument
- * about the code.
+ * One parser serves both, so a malformed value cannot be read two different
+ * ways and quietly send a notification to the wrong half of the workshop.
  *
  * @see MaintenanceSchedule::parseAssignee()  the maintenance wording
  * @see Asset::parseResponsible()             the asset wording

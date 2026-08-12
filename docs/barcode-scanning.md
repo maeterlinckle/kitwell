@@ -36,8 +36,8 @@ single line and no JavaScript:
 ```
 
 The button is hidden until its script loads: without JavaScript there is no
-camera, and a dead button is worse than no button. Typing the tag and USB
-scanners work regardless. The quick-scan page deliberately has no such button —
+camera. Typing the tag and USB scanners work regardless. The quick-scan page
+has no such button —
 it already *is* a camera scanner, and two would fight over the camera.
 
 Three ways in, all landing at the same lookup:

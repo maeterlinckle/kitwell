@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Asset Register — administration.
+# Kitwell — administration.
 #
 #   sudo ./manage.sh help
 #
@@ -16,7 +16,7 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$APP_DIR/.env"
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/asset-register}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/kitwell}"
 BACKUP_KEEP="${BACKUP_KEEP:-14}"
 
 QUIET=no
@@ -39,7 +39,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 usage() {
     cat <<'USAGE'
-Asset Register — administration
+Kitwell — administration
 
   sudo ./manage.sh <command> [arguments]
 
@@ -65,8 +65,8 @@ Application
   set-setting KEY VALUE       change one
   config KEY [VALUE]          read or change a value in .env
   migrate [--status]          apply pending database migrations
-  db-grant                    re-apply the database grant (fixes "DROP command
-                              denied" from a pre-2026-08-11 install)
+  db-grant                    re-apply the database grant (fixes a migration
+                              that stops with "command denied")
   seed                        load the demo data (never on a live system)
   refresh-overdue             recompute the stored overdue flag on hires
   prune-activity [DAYS]       delete audit rows older than DAYS (default 365)
@@ -196,7 +196,7 @@ assert_web_can_read() {
     say "      sudo $APP_DIR/manage.sh permissions" >&2
     say "" >&2
     say "  If the application really does live under /root, move it somewhere" >&2
-    say "  the web server can reach, such as /var/www/asset-register." >&2
+    say "  the web server can reach, such as /var/www/kitwell." >&2
     say "" >&2
 
     exit 1
@@ -252,7 +252,7 @@ db_service() {
 # Commands
 # ---------------------------------------------------------------------------
 cmd_status() {
-    step "Asset Register at $APP_DIR"
+    step "Kitwell at $APP_DIR"
 
     say "  PHP            $("$PHP_BIN" -r 'echo PHP_VERSION;')"
     say "  Application    $(env_get APP_NAME) — $(env_get APP_URL)"
@@ -473,11 +473,9 @@ cmd_composer_install() {
 #
 # Re-issue the database grant.
 #
-# Installs made before this fix gave the application user everything except
-# DROP, on the reasoning that the application never issues one. Its *migrations*
-# do: RENAME TABLE needs ALTER and DROP on the source table, so migration 017
-# stopped dead with "ERROR 1142: DROP command denied". This repairs an existing
-# install without touching the data or the password.
+# Restores the application user to the privileges install.sh gives it, without
+# touching the data or the password. Use it when a migration stops with
+# "ERROR 1142: ... command denied".
 #
 cmd_db_grant() {
     require_root db-grant
@@ -698,7 +696,7 @@ cmd_update() {
     local source="${1:-}"
 
     [ -n "$source" ] || die "Usage: $0 update /path/to/new/version"
-    [ -f "$source/public/index.php" ] || die "$source does not look like the Asset Register source tree."
+    [ -f "$source/public/index.php" ] || die "$source does not look like the Kitwell source tree."
 
     warn "Back up first if you have not already:  $0 backup"
     confirm "Copy $source over $APP_DIR and run the migrations?" || die "Nothing was changed."
@@ -755,7 +753,7 @@ cmd_permissions() {
 }
 
 cmd_package() {
-    local out="${1:-$PWD/asset-register-$(date +%Y%m%d).tar.gz}"
+    local out="${1:-$PWD/kitwell-$(date +%Y%m%d).tar.gz}"
 
     step "Building $out"
     tar -czf "$out" -C "$APP_DIR" \
@@ -768,8 +766,8 @@ cmd_package() {
     ok "$out  ($(du -h "$out" | cut -f1))"
     say ""
     say "  Copy it to the new server and:"
-    say "    mkdir -p asset-register && tar -xzf $(basename "$out") -C asset-register"
-    say "    cd asset-register && sudo ./install.sh"
+    say "    mkdir -p kitwell && tar -xzf $(basename "$out") -C kitwell"
+    say "    cd kitwell && sudo ./install.sh"
     say ""
     say "  It contains no .env, no uploads and no database — nothing secret."
 }
@@ -777,9 +775,9 @@ cmd_package() {
 cmd_cron_install() {
     require_root cron-install
 
-    local file=/etc/cron.d/asset-register
+    local file=/etc/cron.d/kitwell
     cat > "$file" <<CRON
-# Asset Register — installed by manage.sh.
+# Kitwell — installed by manage.sh.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
@@ -807,8 +805,8 @@ CRON
 
 cmd_cron_remove() {
     require_root cron-remove
-    rm -f /etc/cron.d/asset-register
-    ok "Removed /etc/cron.d/asset-register"
+    rm -f /etc/cron.d/kitwell
+    ok "Removed /etc/cron.d/kitwell"
 }
 
 cmd_restart() {
@@ -846,10 +844,9 @@ shift || true
 
 # A copy of this script travels with the source, so it is easy to run it from a
 # checkout (~/kitwell) rather than from the installation it manages
-# (/var/www/asset-register). That directory has no .env, and on top of that the
-# web user usually cannot even read a checkout under /root — which used to
-# surface as a wall of "Failed opening required src/bootstrap.php" instead of
-# the actual problem. Stop here, and point at the real install.
+# (/var/www/kitwell). A checkout has no .env, and the web user usually cannot
+# read one under /root either. Stop here and point at the real install rather
+# than failing further in with a confusing error.
 case "$COMMAND" in
     # These are the only commands meaningful from a source tree.
     help|--help|-h|""|package) : ;;
@@ -863,7 +860,7 @@ case "$COMMAND" in
             say ""
 
             found=""
-            for candidate in /var/www/asset-register /var/www/kitwell /var/www/html/asset-register /srv/asset-register /opt/asset-register; do
+            for candidate in /var/www/kitwell /var/www/html/kitwell /srv/kitwell /opt/kitwell; do
                 if [ -f "$candidate/.env" ] && [ -x "$candidate/manage.sh" ]; then
                     found="$candidate"
                     break

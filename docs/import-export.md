@@ -4,13 +4,15 @@ Loading an existing register or a contractor's PAT results from CSV, and getting
 
 **On this page**
 
-- [CSV import and export](#csv-import-and-export)
+- [Importing](#importing)
+- [Exporting](#exporting)
+- [Column reference — assets](#column-reference--assets)
+- [Column reference — PAT records](#column-reference--pat-records)
+- [Column reference — asset export](#column-reference--asset-export)
 
 ---
 
-## CSV import and export
-
-### Importing
+## Importing
 
 Two importers ship — **Assets** and **PAT records** — reachable from
 **Import** in the admin menu, or from the register.
@@ -45,14 +47,14 @@ the on-screen form enforces applies here: a failed visual inspection cannot
 carry an overall Pass. A test already recorded for that asset on that date is
 rejected, so importing the same sheet twice is safe.
 
-### Exporting
+## Exporting
 
 Exporting starts from **Settings → Export data**, and only from there. The
 register page carries no export button at all: exporting is an occasional,
-deliberate job, not something to meet while browsing.
+job of its own, rather than something to meet while browsing.
 
 The Export page lists everything that can leave the system as a file — the
-asset register, and each report — with the same "how it works" explanation the
+register, and each report — with the same "how it works" explanation the
 Import page has. For the register you choose which assets (by search, category,
 location, status) and which optional extra columns, then download. To take a
 hand-picked set instead, **Pick individual assets** opens its own searchable,
@@ -70,7 +72,7 @@ fields, so they are ignored on re-import.
 Every import and export is recorded in the activity log with who, which file,
 how many rows, and how many were skipped.
 
-### Column reference — assets
+## Column reference — assets
 
 The template at `/import/assets/template` is always authoritative; this is the
 same list for reference. Headings are matched loosely, so the "also accepted"
@@ -109,7 +111,7 @@ record" against it, which is honest: nobody filled the form in.* Three further c
 `Relationship`, `Added`) appear in exports and are recognised but ignored on
 import, so an exported file re-imports without complaint.
 
-### Column reference — PAT records
+## Column reference — PAT records
 
 | Column | Required | Notes | Also accepted |
 |--------|----------|-------|---------------|
@@ -137,7 +139,7 @@ test date is missing or in the future, the overall result is neither Pass nor
 Fail, a visual failure claims an overall Pass, or that asset already has a test
 on that date.
 
-### Column reference — asset export
+## Column reference — asset export
 
 The export's core columns are exactly the asset import format above, so a file
 can be exported, edited in a spreadsheet and imported back. Ticking **Extra

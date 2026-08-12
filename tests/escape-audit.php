@@ -22,6 +22,9 @@ const SAFE_FUNCTIONS = [
     'round', 'sprintf', 'rawurlencode', 'urlencode', 'htmlspecialchars', 'strtolower',
     'str_replace', 'substr_count', 'array_sum', 'json_encode', 'svg', 'measurement',
     'describeFrequency', 'label', 'dueInWords',
+    // App\Services\Markdown escapes the whole source before adding any markup,
+    // so only the tags it writes itself reach the output as HTML.
+    'markdown',
 ];
 
 /**

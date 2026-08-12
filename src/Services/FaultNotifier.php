@@ -28,14 +28,13 @@ use App\Models\User;
  *    mail everybody learns to ignore, and once they have, the messages that
  *    were properly addressed go unread too.
  *
- * 2. **A team means every member of it.** The point of naming a team is that
- *    the news does not stop because one person is on holiday — the same
- *    argument migration 020 makes about maintenance.
+ * 2. **A team means every member of it,** so the news does not stop because one
+ *    person is on holiday.
  *
  * 3. **Recipients are re-checked against their permissions at send time.**
  *    Being named as responsible is not itself a grant: a fault report contains
- *    the asset's tag, location and condition, so somebody whose role no longer
- *    lets them see the register stops receiving it. Identical to the rule
+ *    the asset's tag, location and condition, so somebody whose role does not
+ *    let them see the register does not receive it. This is the same rule
  *    App\Mail\Reminders applies to the notify list.
  */
 final class FaultNotifier

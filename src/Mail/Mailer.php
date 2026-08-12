@@ -54,7 +54,7 @@ final class Mailer
             'username'     => trim((string) Setting::get('mail_username', '')),
             'password'     => self::password(),
             'from_address' => trim((string) Setting::get('mail_from_address', '')),
-            'from_name'    => trim((string) Setting::get('mail_from_name', (string) Config::get('app.name', 'Asset Register'))),
+            'from_name'    => trim((string) Setting::get('mail_from_name', (string) Config::get('app.name', 'Kitwell'))),
             'reply_to'     => trim((string) Setting::get('mail_reply_to', '')),
             'timeout'      => max(5, min(120, Setting::int('mail_timeout', 15))),
         ];
@@ -268,8 +268,8 @@ final class Mailer
     public static function commonFields(?string $recipientName = null): array
     {
         return [
-            'app_name'          => (string) Config::get('app.name', 'Asset Register'),
-            'organisation_name' => (string) (Setting::get('organisation_name', '') ?: Config::get('app.name', 'Asset Register')),
+            'app_name'          => (string) Config::get('app.name', 'Kitwell'),
+            'organisation_name' => (string) (Setting::get('organisation_name', '') ?: Config::get('app.name', 'Kitwell')),
             'app_url'           => rtrim((string) Config::get('app.url', ''), '/'),
             'recipient_name'    => $recipientName ?? 'there',
             'today'             => date('j M Y'),

@@ -1,5 +1,5 @@
 {
-    "name": "workshop/asset-register",
+    "name": "junction/kitwell",
     "description": "Self-hosted asset register for workshop/office environments: assets, sub-assets, photos, manuals, maintenance, PAT testing and hires.",
     "type": "project",
     "license": "proprietary",

@@ -5,7 +5,8 @@ administrator turns it on.
 
 The full endpoint reference is **generated from the running application** and
 lives at **`/api/docs`**, with a working "try it out" for every operation. This
-page covers what that page cannot: the ideas behind it, and how to get a key.
+page covers turning the API on, getting a key, and the conventions every
+endpoint follows.
 
 **On this page**
 
@@ -26,8 +27,7 @@ page covers what that page cannot: the ideas behind it, and how to get a key.
 **Settings → API keys**, tick *Answer API requests*, save.
 
 While it is off, every endpoint answers **503** with a message saying where to
-turn it on — not 404. Somebody testing an integration needs to be able to tell
-"not enabled" from "not there".
+turn it on, so a client can tell "not enabled" from "not there".
 
 ## Issuing a key
 
@@ -41,8 +41,7 @@ An optional expiry date is worth setting for anything temporary.
 
 **The key is shown once**, on the page immediately after it is created. Only a
 SHA-256 of it is stored, so there is nothing to show again and no "reveal"
-button to look for. If it is lost, issue another and revoke the old one — which
-is the right shape for a credential.
+button to look for. If it is lost, issue another and revoke the old one.
 
 ```bash
 curl -H "Authorization: Bearer ark_your_key_here" \
@@ -56,8 +55,7 @@ curl -H "Authorization: Bearer ark_your_key_here" \
 
 **Nothing its owner could not.** An API request adopts the key's user and then
 runs the same `Auth::can()` the web interface runs, against the same roles and
-grants. There is no separate list of what an API may reach, because a second
-list is a thing that falls out of step with the first.
+grants. There is no separate list of what an API may reach.
 
 That has consequences worth relying on:
 
@@ -94,14 +92,14 @@ because one generic controller serves all of them.
 | **Filtering** | each resource's own filters, listed on its endpoint in `/api/docs` |
 | **Updating** | `PATCH` changes the fields you send; `PUT` replaces, resetting writable fields you omit |
 
-Two refusals that look strict and are deliberate:
+Two refusals worth knowing about:
 
-- **An unknown filter is a 400, not a no-op.** `?statuz=Retired` silently
-  returning the whole register is how somebody publishes a list containing rows
-  they meant to exclude. The error names the filters that do exist.
+- **An unknown filter is a 400, not a no-op.** `?statuz=Retired` is refused
+  rather than returning the whole register. The error names the filters that do
+  exist.
 - **An unknown field in a body is a 400, not a silent drop.** Sending
-  `assetTag` when the field is `asset_tag` fails loudly rather than returning
-  200 and changing nothing.
+  `assetTag` when the field is `asset_tag` fails rather than returning 200 and
+  changing nothing.
 
 `PUT` resets an omitted writable field to its default, not to null, where the
 column has one — an asset's status goes back to *In Stock*, not to nothing. The
@@ -118,17 +116,14 @@ defaults are in the specification.
 | `teams` | GET, POST, PATCH, PUT |
 | `maintenance-logs`, `pat-records`, `hires`, `faults`, `users` | GET |
 
-The read-only ones are read-only on purpose, and each says why in its own
-description. Checking a hire out moves the asset's status, allocates a reference
-and refuses a double booking; recording maintenance rolls the schedule forward,
-carries the condition onto the asset and may create a follow-up job. A `POST`
-that inserted a row would produce a record the rest of the application does not
-believe in. **Offering half a workflow over HTTP is worse than not offering
-it** — so those resources read, and the interface writes.
+The read-only resources carry a workflow that a plain insert would not run, and
+each says so in its own description. Checking a hire out moves the asset's
+status, allocates a reference and refuses a double booking; recording
+maintenance rolls the schedule forward, carries the condition onto the asset and
+may create a follow-up job. Create those through the interface.
 
-`users` is read-only for a different reason: an account is created by
-invitation so the person chooses their own password, which cannot happen over an
-API. No password material is ever returned.
+`users` is read-only because an account is created by invitation, so the person
+chooses their own password. No password material is ever returned.
 
 ## Errors
 
@@ -165,10 +160,9 @@ Per key, per minute, configurable under Settings (120 by default). Every
 response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
 `X-RateLimit-Reset`, so a client can slow down before it is refused.
 
-It is a **fixed** window rather than a sliding one: one counter on the key's own
-row, one UPDATE per request, and nothing that grows. The trade is that a burst
-straddling a window boundary can briefly reach twice the limit — accepted, and
-written down here rather than discovered later.
+The window is **fixed** rather than sliding: one counter on the key's own row,
+reset each minute. A burst straddling a window boundary can therefore briefly
+reach twice the limit.
 
 ## The specification
 
@@ -177,15 +171,11 @@ the endpoints are served from. A field that appears in the document appears in
 the response, and a filter it documents is one the router accepts, because they
 are the same array.
 
-`/api/docs` renders it with a runnable request builder for every operation. That
-viewer is a small script of the application's own rather than Swagger UI or
-Redoc: the Content-Security-Policy here is `default-src 'self'` and permits no
-off-origin scripts, so a CDN build would simply not load — and weakening the
-policy, or vendoring a megabyte of third-party JavaScript into a repository that
-hand-writes its own barcode and QR encoders, would be the wrong trade.
+`/api/docs` renders it with a runnable request builder for every operation. The
+viewer is first-party: the Content-Security-Policy here is `default-src 'self'`
+and permits no off-origin scripts, so nothing loads from a CDN.
 
-The spec is behind the same authentication as everything else. It is a map of
-the system: not secret, but not for handing to an unauthenticated caller either.
+The spec is behind the same authentication as everything else.
 
 ## Adding a resource
 
@@ -198,11 +188,8 @@ One entry in `src/Api/ResourceRegistry.php`, declaring:
 
 Routes, pagination, sorting, the permission check, the writable allow-list, the
 error handling and the OpenAPI document all follow. No new controller, no new
-route, no new template.
-
-That is not tidiness for its own sake: six hand-written controllers would be six
-chances to forget a permission check and six pagination conventions. This way the
-check is written once and every resource gets it.
+route, no new template — and the permission check is written once, so every
+resource gets the same one.
 
 `tests/api-contract.php` proves the arrangement holds — it fetches the spec from
 a running server and calls every operation it advertises, including checking that

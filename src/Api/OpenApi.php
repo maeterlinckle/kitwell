@@ -10,13 +10,9 @@ use App\Models\Setting;
 /**
  * The OpenAPI 3.1 document, generated from the resource declarations.
  *
- * Generated rather than written, and that is the entire point. A hand-kept spec
- * is a second description of the system that starts accurate and ends wrong:
- * somebody adds a field, ships it, and the document quietly describes an API
- * that no longer exists. This one is built from the same `Resource` objects the
- * endpoints are served from, so a field that appears here appears in the
- * response, and a filter documented here is a filter the router will accept —
- * because they are the same array.
+ * Built from the same `Resource` objects the endpoints are served from, so a
+ * field that appears here appears in the response and a filter documented here
+ * is a filter the router accepts — they are the same array.
  */
 final class OpenApi
 {
@@ -41,7 +37,7 @@ final class OpenApi
         return [
             'openapi' => '3.1.0',
             'info'    => [
-                'title'   => (string) Config::get('app.name', 'Asset Register') . ' API',
+                'title'   => (string) Config::get('app.name', 'Kitwell') . ' API',
                 'version' => self::VERSION,
                 'summary' => 'Read and write the asset register over HTTP.',
                 'description' => self::overview(),

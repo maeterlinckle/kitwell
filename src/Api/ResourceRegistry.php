@@ -24,19 +24,16 @@ use App\Models\User;
  * Two rules run through the whole file.
  *
  * **Reuse, never re-implement.** Every list closure calls the same model method
- * the corresponding screen calls, with the same filter keys. The API cannot
- * therefore return a row the interface would have hidden, or accept a filter
- * the interface does not understand, because there is only one implementation
- * of either.
+ * the corresponding screen calls, with the same filter keys, so the API cannot
+ * return a row the interface would have hidden or accept a filter the interface
+ * does not understand.
  *
- * **Read-only where writing has consequences the model does not carry.** Some
- * of these resources are GET-only, and each says why in its own description. A
- * hire is not a row: checking one out moves the asset's status, allocates a
- * reference and refuses a double booking, and a `POST /hires` that inserted a
- * row would produce a hire the rest of the application does not believe in.
- * Offering half a workflow over HTTP is worse than not offering it, so those
- * resources read and the interface writes. That is a deliberate limit, not an
- * unfinished one.
+ * **Read-only where writing carries a workflow the model does not.** Some
+ * resources are GET-only, and each says so in its own description. Checking a
+ * hire out moves the asset's status, allocates a reference and refuses a double
+ * booking; a `POST /hires` that inserted a row would produce a hire the rest of
+ * the application does not believe in. Those resources read, and the interface
+ * writes.
  */
 final class ResourceRegistry
 {

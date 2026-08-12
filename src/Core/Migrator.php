@@ -114,19 +114,16 @@ final class Migrator
      * instructions, rather than leaving an operator holding a raw SQLSTATE
      * halfway through an upgrade.
      *
-     * Only failures with a single, unambiguous fix belong here. Guessing at
-     * anything else would be worse than saying nothing.
+     * Only failures with a single, unambiguous fix belong here.
      */
     private static function advice(\PDOException $e): string
     {
         $message = $e->getMessage();
 
-        // 1142: the grant is missing a verb the migration needs. Installs made
-        // before 2026-08-11 withheld DROP, which RENAME TABLE requires.
-        if (str_contains($message, '1142') && str_contains($message, 'DROP command denied')) {
-            return "\n\nThe database user does not hold DROP, which RENAME TABLE requires."
-                . "\nInstalls made before 2026-08-11 withheld it. Nothing has been changed —"
-                . "\nfix the grant and run this again:"
+        // 1142: the database user is missing a privilege the migration needs.
+        if (str_contains($message, '1142') && str_contains($message, 'command denied')) {
+            return "\n\nThe database user is missing a privilege this migration needs."
+                . "\nNothing has been changed — fix the grant and run this again:"
                 . "\n\n    sudo ./manage.sh db-grant"
                 . "\n    sudo ./manage.sh migrate"
                 . "\n\nOr by hand, as a database administrator:"

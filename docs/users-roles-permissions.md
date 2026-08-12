@@ -26,15 +26,15 @@ Adding a permission or a whole new role is an `INSERT`, never a schema change.
 
 **Add role** on the Roles & permissions page creates one: give it a name, a
 description and tick what it may do. Its machine name is derived from the name
-and then fixed, because that is what the code refers to. New roles can be
-renamed later; the four that ship keep their names, because the documentation
-refers to them — their permissions are still yours to change.
+and then fixed, because that is what the code refers to. A role you create can
+be renamed later; the four that ship keep their names, though their permissions
+are yours to change.
 
-A role created here can never be a superuser: that flag is what protects the
-built-in Administrator from being edited away, and nothing reachable from the
-web can set it.
+A role created here can never be a superuser. That flag protects the built-in
+Administrator from being edited away, and nothing reachable from the web can set
+it.
 
-Checks are enforced server-side in three places, and the UI simply hides what a
+Checks are enforced server-side in three places, and the interface hides what a
 user cannot reach:
 
 ```php
@@ -63,12 +63,10 @@ Faults have their own:
 |---|---|---|
 | `faults.report` | Administrator, Manager / Staff | The "Mark as faulty" button and the report form |
 
-It is separate from `assets.edit` on purpose. Saying "this is broken" is
-something the person holding the broken thing does, and need not come with the
-right to rewrite purchase costs — so an installation can grant it to a role that
-otherwise only looks. It is still a change to the register, since it moves the
-asset's status, so Read-only does not have it. Reading the fault history needs
-only `assets.view`.
+It is separate from `assets.edit`, so a role can be allowed to report faults
+without being allowed to rewrite purchase costs. It is still a change to the
+register, since it moves the asset's status, so Read-only does not hold it.
+Reading the fault history needs only `assets.view`.
 
 Reports and the API have one each:
 
@@ -93,16 +91,14 @@ already hold.
 ## Accounts: invitations and password recovery
 
 
-Both of these need working email (see below). Without it the application falls
-back to what it did before and says so on the page — it never offers a flow that
-cannot finish.
+Both of these need working email. Without it the pages say so and offer the
+manual alternative rather than a flow that cannot finish.
 
 ### Inviting a new user
 
-With email configured, **Add user** asks for no password. The new user is emailed
-a link that shows them their name, sign-in address and role, and lets them choose
-their own password. Nobody has to invent a password, write it in a message and
-hope it gets changed later.
+With email configured, **Add user** asks for no password. The new user is
+emailed a link that shows them their name, sign-in address and role, and lets
+them choose their own password.
 
 - The invitation is good for **one use** and expires after a window set in
   Settings → Email (72 hours by default).
@@ -126,7 +122,7 @@ reset link. The link is single-use and expires after a separate, shorter window
 is asked for a moment before it arrives, and the shorter it lives the smaller the
 window in which a forwarded message is worth anything.
 
-Deliberate behaviours worth knowing about:
+Behaviours worth knowing about:
 
 - **The answer never says whether an address is registered.** "If that address
   has an account here, a link is on its way" is what you get either way,
@@ -149,12 +145,10 @@ rather than showing a form.
 
 Only a **SHA-256 of the token**. The link itself exists in exactly one place —
 the email that was sent — so a stolen database backup is not a set of working
-account-takeover links. It also means a lost link cannot be looked up and
-re-sent; a fresh one has to be issued, which is the right answer anyway.
+account-takeover links. A lost link cannot be looked up and re-sent; issue a
+fresh one instead.
 
 The two link expiry windows are on **Settings → Email**, under "Account links".
-
----
 
 ---
 

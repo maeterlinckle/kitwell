@@ -475,7 +475,7 @@ try {
 
     // --- Hires -------------------------------------------------------------
     Database::insert('hires', [
-        'reference'              => 'LN-2026-0001',
+        'reference'              => 'HR-2026-0001',
         'asset_id'               => $assetIds['mft'],
         'hirer_id'            => $hirerPerson,
         'checked_out_at'         => $today->modify('-6 days')->format('Y-m-d 08:15:00'),
@@ -487,7 +487,7 @@ try {
     ]);
 
     Database::insert('hires', [
-        'reference'              => 'LN-2026-0002',
+        'reference'              => 'HR-2026-0002',
         'asset_id'               => $assetIds['sds'],
         'hirer_id'            => $hirerCompany,
         'checked_out_at'         => $today->modify('-24 days')->format('Y-m-d 14:40:00'),
@@ -500,7 +500,7 @@ try {
     ]);
 
     Database::insert('hires', [
-        'reference'              => 'LN-2025-0148',
+        'reference'              => 'HR-2025-0148',
         'asset_id'               => $assetIds['drill'],
         'hirer_id'            => $hirerPerson,
         'checked_out_at'         => $today->modify('-70 days')->format('Y-m-d 09:00:00'),

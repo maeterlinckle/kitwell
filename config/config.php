@@ -18,13 +18,16 @@ if (!preg_match('#^([A-Za-z]:[\\\\/]|/)#', $storage)) {
 
 return [
     'app' => [
-        'name'            => Env::get('APP_NAME', 'Asset Register'),
+        'name'            => Env::get('APP_NAME', 'Kitwell'),
 
         // Product branding, as distinct from `name` (what this instance calls
         // itself) and the `organisation_name` setting (whose workshop it is).
-        // `mark` is the two-letter fallback shown in the header when no logo
-        // has been uploaded; it is a brand mark, not initials of `name`.
+        // `full_name` is the longer form used where a line has room for it:
+        // footer branding, print headers and email templates. `mark` is the
+        // two-letter fallback shown in the header when no logo has been
+        // uploaded; it is a brand mark, not initials of `name`.
         'product'         => Env::get('APP_PRODUCT', 'Kitwell'),
+        'full_name'       => Env::get('APP_FULL_NAME', 'Kitwell by Junction'),
         'product_tagline' => Env::get('APP_PRODUCT_TAGLINE', 'Asset Management'),
         'mark'            => Env::get('APP_MARK', 'KW'),
         'vendor'          => Env::get('APP_VENDOR', 'Junction Inc Ltd'),
@@ -49,14 +52,14 @@ return [
     'database' => [
         'host'     => Env::get('DB_HOST', '127.0.0.1'),
         'port'     => (int) Env::get('DB_PORT', 3306),
-        'database' => Env::get('DB_DATABASE', 'asset_register'),
+        'database' => Env::get('DB_DATABASE', 'kitwell'),
         'username' => Env::get('DB_USERNAME', ''),
         'password' => Env::get('DB_PASSWORD', ''),
         'charset'  => Env::get('DB_CHARSET', 'utf8mb4'),
     ],
 
     'session' => [
-        'name'      => Env::get('SESSION_NAME', 'asset_register_session'),
+        'name'      => Env::get('SESSION_NAME', 'kitwell_session'),
         'lifetime'  => (int) Env::get('SESSION_LIFETIME', 480), // minutes
         'samesite'  => Env::get('SESSION_SAMESITE', 'Lax'),
     ],

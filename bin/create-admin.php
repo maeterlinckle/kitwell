@@ -51,7 +51,7 @@ function prompt(string $question, bool $hidden = false): string
     return trim((string) fgets(STDIN));
 }
 
-echo "Asset Register — create user\n\n";
+echo "Kitwell — create user\n\n";
 
 // Roles must exist before a user can be created.
 try {

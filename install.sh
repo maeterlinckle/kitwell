@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Asset Register — turn-key installer for a Linux server.
+# Kitwell — turn-key installer for a Linux server.
 #
 #   sudo ./install.sh
 #
@@ -12,7 +12,7 @@
 # Everything it asks for can also be supplied in an answers file so the whole
 # thing can run unattended:
 #
-#   sudo ./install.sh --answers=/root/asset-register.answers --non-interactive
+#   sudo ./install.sh --answers=/root/kitwell.answers --non-interactive
 #
 # Run it with --dry-run first if you want to see the plan without touching
 # anything. Day-to-day administration afterwards lives in ./manage.sh.
@@ -100,14 +100,14 @@ trap cleanup EXIT
 
 usage() {
     cat <<'USAGE'
-Asset Register installer
+Kitwell installer
 
   sudo ./install.sh [options]
 
 Options
   --answers=FILE       read the answers from a file (shell KEY=value lines)
   --non-interactive    never prompt; every required answer must already be set
-  --dir=PATH           where to install            (default /var/www/asset-register)
+  --dir=PATH           where to install            (default /var/www/kitwell)
   --domain=NAME        the hostname the site answers on
   --web-server=WHICH   apache | nginx | none       (default apache)
   --tls=MODE           proxy | direct-https | plain-http
@@ -358,7 +358,7 @@ if [ -n "$ANSWERS_FILE" ]; then
 fi
 
 say ""
-say "${C_BOLD}Asset Register installer ${INSTALLER_VERSION}${C_RESET}"
+say "${C_BOLD}Kitwell installer ${INSTALLER_VERSION}${C_RESET}"
 say "${C_DIM}Source: ${SRC_DIR}${C_RESET}"
 
 # ---------------------------------------------------------------------------
@@ -374,7 +374,7 @@ case "$(uname -s)" in
 esac
 
 [ -f "$SRC_DIR/public/index.php" ] && [ -d "$SRC_DIR/database/migrations" ] \
-    || die "This does not look like the Asset Register source tree — public/index.php is missing. Run install.sh from inside the unpacked project."
+    || die "This does not look like the Kitwell source tree — public/index.php is missing. Run install.sh from inside the unpacked project."
 
 # /etc/os-release is a shell fragment defining NAME, VERSION, ID, HOME_URL and
 # a dozen more. Sourcing it here would drop all of them into this script's
@@ -483,7 +483,7 @@ if [ -z "$WEB_SERVER" ]; then
     fi
 fi
 
-ask_required INSTALL_DIR "Install directory" "/var/www/asset-register"
+ask_required INSTALL_DIR "Install directory" "/var/www/kitwell"
 
 # An existing install has a .env. Unpacking the source straight into the
 # install directory and running from there is a first install, not an upgrade,
@@ -500,7 +500,7 @@ if [ -f "$INSTALL_DIR/.env" ] \
     confirm "Continue and upgrade in place?" || die "Nothing was changed."
 fi
 
-ask_required APP_NAME "Application name (shown in the browser title)" "Asset Register"
+ask_required APP_NAME "Application name (shown in the browser title)" "Kitwell"
 ask ORGANISATION_NAME "Organisation name, printed on labels (optional)"
 ask SERVER_NAME "Hostname the site answers on (blank for any)"
 
@@ -536,8 +536,8 @@ if [ -z "$APP_TIMEZONE" ]; then
     ask_required APP_TIMEZONE "Timezone" "${detected:-Europe/London}"
 fi
 
-ask_required DB_NAME "Database name" "asset_register"
-ask_required DB_USER "Database user" "asset_register"
+ask_required DB_NAME "Database name" "kitwell"
+ask_required DB_USER "Database user" "kitwell"
 
 [[ "$DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] || die "The database name may only contain letters, digits and underscores."
 [[ "$DB_USER" =~ ^[A-Za-z0-9_]+$ ]] || die "The database user may only contain letters, digits and underscores."
@@ -984,23 +984,14 @@ if db_root -N -B -e "SHOW DATABASES LIKE '${db_name_sql}'" | grep -q .; then
     db_existed=yes
 fi
 
-# DROP is included, and that is a correction rather than a relaxation.
+# The application user gets what it needs to own and migrate its own schema:
+# SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX and REFERENCES.
+# DROP is part of that — a migration may need it, and withholding it would not
+# buy much when the same user already holds DELETE and ALTER.
 #
-# This grant originally withheld DROP on the reasoning that "the application
-# never issues one". That is true of the *application* but not of its
-# migrations: `RENAME TABLE` requires ALTER **and DROP** on the source table,
-# so migration 017 (loans -> hires) failed on every existing install with
-# "ERROR 1142: DROP command denied". A database user that cannot migrate the
-# database it owns is not a safe configuration, it is a broken one.
-#
-# What withholding DROP actually bought was thinner than it looked: the same
-# user already holds DELETE (empty every table) and ALTER (drop any column or
-# index). It blocked exactly one verb while leaving the equivalent damage
-# available by two other routes.
-#
-# Still withheld, and these are the ones that matter: no GRANT OPTION, no
-# CREATE USER, no FILE, no SUPER, no PROCESS, and no rights on any other
-# database. A compromise stays inside this schema.
+# Withheld, and these are the ones that matter: no GRANT OPTION, no CREATE
+# USER, no FILE, no SUPER, no PROCESS, and no rights on any other database. A
+# compromise stays inside this schema.
 db_root <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${db_user_sql}'@'localhost' IDENTIFIED BY '${db_pass_sql}';
@@ -1133,7 +1124,7 @@ DB_PASSWORD=$(env_quote "$DB_PASSWORD")
 DB_CHARSET=utf8mb4
 
 # Sessions / security
-SESSION_NAME=asset_register_session
+SESSION_NAME=kitwell_session
 SESSION_LIFETIME=480
 SESSION_SAMESITE=Lax
 FORCE_HTTPS=${force_https}
@@ -1185,8 +1176,8 @@ done
 # the installed one is an easy mistake — it manages nothing, because the source
 # tree has no .env. Put the real one on PATH so there is an unambiguous way in.
 if [ -d /usr/local/sbin ] && [ -f "$INSTALL_DIR/manage.sh" ]; then
-    ln -sf "$INSTALL_DIR/manage.sh" /usr/local/sbin/asset-register
-    ok "Linked /usr/local/sbin/asset-register -> $INSTALL_DIR/manage.sh"
+    ln -sf "$INSTALL_DIR/manage.sh" /usr/local/sbin/kitwell
+    ok "Linked /usr/local/sbin/kitwell -> $INSTALL_DIR/manage.sh"
 fi
 
 ok "Application files: root:$WEB_GROUP, directories 750, files 640"
@@ -1216,7 +1207,7 @@ step "Raising PHP's upload limits to match the application"
 
 php_ini_body() {
     cat <<INI
-; Written by the Asset Register installer. Delete this file to revert.
+; Written by the Kitwell installer. Delete this file to revert.
 ; These must be at least as large as UPLOAD_MAX_PHOTO_MB / UPLOAD_MAX_PDF_MB
 ; in .env, or PHP rejects the upload before the application ever sees it.
 upload_max_filesize = ${UPLOAD_MAX_PDF_MB}M
@@ -1230,17 +1221,17 @@ INI
 ini_written=0
 for dir in /etc/php/*/apache2/conf.d /etc/php/*/fpm/conf.d /etc/php/*/cli/conf.d /etc/php.d /etc/php8/conf.d /etc/php/conf.d; do
     [ -d "$dir" ] || continue
-    php_ini_body > "$dir/99-asset-register.ini"
-    chmod 644 "$dir/99-asset-register.ini"
-    info "$dir/99-asset-register.ini"
+    php_ini_body > "$dir/99-kitwell.ini"
+    chmod 644 "$dir/99-kitwell.ini"
+    info "$dir/99-kitwell.ini"
     ini_written=$((ini_written + 1))
 done
 
 if [ "$ini_written" -eq 0 ]; then
     scan_dir="$("$PHP_BIN" -i 2>/dev/null | awk -F'=> ' '/Scan this dir/ {print $2}' | tr -d ' ')"
     if [ -n "$scan_dir" ] && [ -d "$scan_dir" ]; then
-        php_ini_body > "$scan_dir/99-asset-register.ini"
-        ok "$scan_dir/99-asset-register.ini"
+        php_ini_body > "$scan_dir/99-kitwell.ini"
+        ok "$scan_dir/99-kitwell.ini"
     else
         warn "No PHP conf.d directory was found. Set upload_max_filesize and post_max_size by hand."
     fi
@@ -1318,19 +1309,19 @@ configure_apache() {
         APACHE_SITES_DIR=/etc/apache2/sites-available
         a2enmod rewrite headers >/dev/null 2>&1 || true
         [ -n "$PHP_FPM_SOCKET" ] && a2enmod proxy_fcgi setenvif >/dev/null 2>&1 || true
-        conf="$APACHE_SITES_DIR/asset-register.conf"
+        conf="$APACHE_SITES_DIR/kitwell.conf"
     else
         APACHE_SITES_DIR=/etc/httpd/conf.d
         [ -d "$APACHE_SITES_DIR" ] || APACHE_SITES_DIR=/etc/apache2/vhosts.d
         [ -d "$APACHE_SITES_DIR" ] || die "Could not find Apache's configuration directory."
-        conf="$APACHE_SITES_DIR/asset-register.conf"
+        conf="$APACHE_SITES_DIR/kitwell.conf"
     fi
 
     server_name_line=""
     [ -n "$SERVER_NAME" ] && server_name_line="    ServerName ${SERVER_NAME}"
 
     {
-        echo "# Asset Register — written by install.sh on $(date '+%Y-%m-%d %H:%M:%S')."
+        echo "# Kitwell — written by install.sh on $(date '+%Y-%m-%d %H:%M:%S')."
         echo "# The document root is public/; everything else stays outside it."
         echo ""
 
@@ -1352,8 +1343,8 @@ ${server_name_line}
 
 $(apache_directory_block)
 
-    ErrorLog ${log_dir}/asset-register-error.log
-    CustomLog ${log_dir}/asset-register-access.log combined
+    ErrorLog ${log_dir}/kitwell-error.log
+    CustomLog ${log_dir}/kitwell-access.log combined
 </VirtualHost>
 VHOST
         else
@@ -1364,8 +1355,8 @@ ${server_name_line}
 
 $(apache_directory_block)
 
-    ErrorLog ${log_dir}/asset-register-error.log
-    CustomLog ${log_dir}/asset-register-access.log combined
+    ErrorLog ${log_dir}/kitwell-error.log
+    CustomLog ${log_dir}/kitwell-access.log combined
 </VirtualHost>
 VHOST
         fi
@@ -1375,7 +1366,7 @@ VHOST
     ok "Wrote $conf"
 
     if [ "$PKG" = apt ]; then
-        a2ensite asset-register >/dev/null 2>&1 || true
+        a2ensite kitwell >/dev/null 2>&1 || true
 
         if [ -z "$MAKE_DEFAULT_SITE" ]; then
             if [ -z "$SERVER_NAME" ]; then MAKE_DEFAULT_SITE=yes; else MAKE_DEFAULT_SITE=ask; fi
@@ -1425,10 +1416,10 @@ configure_nginx() {
     [ -n "$PHP_FPM_SOCKET" ] || die "nginx needs php-fpm, but no php-fpm socket was found. Start php-fpm and re-run."
 
     if [ -d /etc/nginx/sites-available ]; then
-        conf=/etc/nginx/sites-available/asset-register
-        link=/etc/nginx/sites-enabled/asset-register
+        conf=/etc/nginx/sites-available/kitwell
+        link=/etc/nginx/sites-enabled/kitwell
     else
-        conf=/etc/nginx/conf.d/asset-register.conf
+        conf=/etc/nginx/conf.d/kitwell.conf
         link=""
     fi
 
@@ -1436,7 +1427,7 @@ configure_nginx() {
 
     if [ "$TLS_MODE" = direct-https ]; then
         cat > "$conf" <<NGINX
-# Asset Register — written by install.sh on $(date '+%Y-%m-%d %H:%M:%S').
+# Kitwell — written by install.sh on $(date '+%Y-%m-%d %H:%M:%S').
 server {
     listen 80;
     ${server_name_line}
@@ -1471,7 +1462,7 @@ server {
 NGINX
     else
         cat > "$conf" <<NGINX
-# Asset Register — written by install.sh on $(date '+%Y-%m-%d %H:%M:%S').
+# Kitwell — written by install.sh on $(date '+%Y-%m-%d %H:%M:%S').
 server {
     listen ${HTTP_PORT};
     ${server_name_line}
@@ -1599,7 +1590,7 @@ if [ "$DB_PASSWORD_GENERATED" = yes ]; then
 fi
 
 say "  Day-to-day administration:"
-say "    sudo asset-register status            # anywhere on the system"
+say "    sudo kitwell status            # anywhere on the system"
 say "    sudo ${INSTALL_DIR}/manage.sh status"
 say "    sudo ${INSTALL_DIR}/manage.sh reset-password ${ADMIN_EMAIL}"
 say "    sudo ${INSTALL_DIR}/manage.sh backup"

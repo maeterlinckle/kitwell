@@ -4,11 +4,13 @@ Scheduled and unplanned work: the four shapes a schedule can take, recording a c
 
 **On this page**
 
-- [Maintenance](#maintenance)
+- [Recording unplanned work](#recording-unplanned-work)
+- [Evidence: photos and paperwork](#evidence-photos-and-paperwork)
+- [Correcting a record](#correcting-a-record)
+- [Follow-up checks](#follow-up-checks)
+- [Overdue and upcoming](#overdue-and-upcoming)
 
 ---
-
-## Maintenance
 
 Maintenance comes in four shapes. The first three are *schedules* — an asset can
 carry any number of them — and the fourth is not scheduled at all.
@@ -39,7 +41,7 @@ Deleting a schedule keeps every completion already logged against the asset:
 `maintenance_logs.schedule_id` is set to NULL rather than cascading, because
 history should outlive the plan that produced it.
 
-### Recording unplanned work
+## Recording unplanned work
 
 Three ways in, because this is how most workshop repairs actually get recorded:
 
@@ -49,7 +51,7 @@ Three ways in, because this is how most workshop repairs actually get recorded:
 
 None of them needs a schedule to exist first.
 
-### Evidence: photos and paperwork
+## Evidence: photos and paperwork
 
 The Evidence section of the completion form takes both.
 
@@ -71,7 +73,7 @@ Both appear under the completion in the asset's maintenance history and on the
 schedule's own page, and both are streamed through PHP from outside the document
 root like every other upload.
 
-### Correcting a record
+## Correcting a record
 
 People write records on the day, in a workshop, sometimes on a phone. Dates get
 mistyped and a contractor's invoice turns up a week later. **Edit** on any
@@ -85,24 +87,24 @@ edit page itself, so the person making the correction can see the record's whole
 history, and it also appears under **Settings → Activity log**.
 
 Recording maintenance needs *Record maintenance*; correcting a record afterwards
-needs *Manage maintenance* — a deliberate step up, because rewriting history is
+needs *Manage maintenance* — a step up from recording one, because rewriting history is
 a bigger act than writing it. The asset and the schedule a record belongs to
 cannot be changed: moving a record to a different machine is not a correction,
 it is a different record.
 
-### Follow-up checks
+## Follow-up checks
 
 Any completion — scheduled or unplanned — can schedule a **follow-up check**:
 tick the box, say *3 weeks*, and a one-off job appears in the maintenance list
 and in the reminder emails when it falls due. The work you described is copied
 into its instructions, and it is assigned to whoever did the original.
 
-It is deliberately a **one-off**: "check the belt again in three weeks" closes
+It is a **one-off**: "check the belt again in three weeks" closes
 itself once done rather than quietly becoming a recurring job nobody meant to
 create. If it turns out the thing does need checking regularly, make it a
 routine or periodic schedule.
 
-### Overdue and upcoming
+## Overdue and upcoming
 
 Due status is computed **in SQL**, not in PHP, so it can be filtered, sorted and
 counted by the database:

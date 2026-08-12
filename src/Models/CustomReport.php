@@ -60,9 +60,8 @@ final class CustomReport
     /**
      * Turn the JSON columns into arrays.
      *
-     * Defensive on purpose: a row edited by hand, or written by an older
-     * version, must degrade to "no filters, no columns" rather than throwing
-     * halfway through rendering somebody's report.
+     * Defensive: a row edited by hand degrades to "no filters, no columns"
+     * rather than throwing halfway through rendering somebody's report.
      *
      * @param array<string,mixed> $row
      * @return array<string,mixed>

@@ -64,8 +64,8 @@ the script did.
 ### 1. Get the files onto the server
 
 ```bash
-git clone https://github.com/maeterlinckle/kitwell.git /var/www/asset-register
-cd /var/www/asset-register
+git clone https://github.com/maeterlinckle/kitwell.git /var/www/kitwell
+cd /var/www/kitwell
 ```
 
 If the server has no outbound git access, `manage.sh package` on an existing
@@ -85,28 +85,20 @@ Connect as an administrative user (`mariadb -u root -p`, or `mysql -u root -p`
 on older installs — same client) and run:
 
 ```sql
-CREATE DATABASE asset_register CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'asset_register'@'localhost' IDENTIFIED BY 'a-long-random-password';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES ON asset_register.* TO 'asset_register'@'localhost';
+CREATE DATABASE kitwell CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'kitwell'@'localhost' IDENTIFIED BY 'a-long-random-password';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES ON kitwell.* TO 'kitwell'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-`DROP` is needed by the **migrations**, not by the running application: MariaDB
-requires `ALTER` *and* `DROP` on the source table of a `RENAME TABLE`, which
-migration 017 uses. Without it an upgrade stops with
-`ERROR 1142: DROP command denied`.
+That grant lets the user own and migrate its own schema. What it withholds is
+the part that matters: **no `GRANT OPTION`, no `CREATE USER`, no `FILE`, no
+`SUPER`, no `PROCESS`, and no rights on any other database** — so a compromise
+stays inside this one schema.
 
-Withholding it bought less than it appeared to — the same user already holds
-`DELETE` (empty every table) and `ALTER` (drop any column or index), so it
-blocked one verb while leaving equivalent damage available two other ways.
-
-What is still withheld is the part that matters: **no `GRANT OPTION`, no
-`CREATE USER`, no `FILE`, no `SUPER`, no `PROCESS`, and no rights on any other
-database.** A compromise stays inside this one schema.
-
-> **Upgrading an install made before 2026-08-11?** It has the older grant.
-> `sudo ./manage.sh db-grant` repairs it, or run the `GRANT` above again.
-> `manage.sh doctor` now checks for this.
+If a migration ever stops with `ERROR 1142: ... command denied`, the grant is
+incomplete. `sudo ./manage.sh db-grant` re-applies it, and `manage.sh doctor`
+checks for it.
 
 ### 3. Configure the environment
 
@@ -145,7 +137,9 @@ chmod 640 .env && chown root:www-data .env
 ### 4. Run the migrations
 
 Migrations are plain `.sql` files in `database/migrations/`, applied in filename
-order and recorded in a `migrations` table, so re-running is safe.
+order and recorded in a `migrations` table, so re-running is safe. Three ship
+with the application: the schema, the built-in roles and permissions, and the
+default settings.
 
 ```bash
 php bin/migrate.php
@@ -153,7 +147,7 @@ php bin/migrate.php --status   # see what is applied and what is pending
 ```
 
 To add a migration later, drop a new numbered file into `database/migrations/`
-(e.g. `009_add_something.sql`) and run `php bin/migrate.php` again.
+(e.g. `004_add_something.sql`) and run `php bin/migrate.php` again.
 
 ### 5. Create the first administrator
 
@@ -229,9 +223,9 @@ The document root **must** be `public/`. Everything else — `src/`, `.env`,
 ```apache
 <VirtualHost *:80>
     ServerName assets.example.com
-    DocumentRoot /var/www/asset-register/public
+    DocumentRoot /var/www/kitwell/public
 
-    <Directory /var/www/asset-register/public>
+    <Directory /var/www/kitwell/public>
         AllowOverride All
         Require all granted
     </Directory>
@@ -244,7 +238,7 @@ The document root **must** be `public/`. Everything else — `src/`, `.env`,
 server {
     listen 443 ssl http2;
     server_name assets.example.com;
-    root /var/www/asset-register/public;
+    root /var/www/kitwell/public;
     index index.php;
 
     client_max_body_size 25m;   # match UPLOAD_MAX_PDF_MB
@@ -352,7 +346,7 @@ Two things need backing up, and **both** are required for a working restore:
 
 1. **The database** — everything except uploaded files.
    ```bash
-   mariadb-dump --single-transaction --routines asset_register > asset-register-$(date +%F).sql
+   mariadb-dump --single-transaction --routines kitwell > kitwell-$(date +%F).sql
    ```
 2. **`storage/uploads/`** — photos, PDF manuals and import files. These cannot
    be regenerated from the database; the database only holds their paths.
@@ -367,18 +361,16 @@ To restore, load the dump and unpack the uploads to the same relative paths.
 `manage.sh` does all three, keeps the last 14 sets and can schedule itself:
 
 ```bash
-sudo ./manage.sh backup              # dump + uploads + .env, into /var/backups/asset-register
+sudo ./manage.sh backup              # dump + uploads + .env, into /var/backups/kitwell
 sudo ./manage.sh cron-install        # nightly at 02:15
-sudo ./manage.sh restore /var/backups/asset-register/asset_register-20260807-021500.sql.gz \
-                        /var/backups/asset-register/uploads-20260807-021500.tar.gz
+sudo ./manage.sh restore /var/backups/kitwell/kitwell-20260807-021500.sql.gz \
+                        /var/backups/kitwell/uploads-20260807-021500.tar.gz
 ```
 
 The backups are written mode 600 in a mode 700 directory because the dump
 contains every password hash and the `.env` copy contains the database
 password. **They still need copying off the machine** — a backup that only
 exists on the server it protects is not a backup.
-
----
 
 ---
 
