@@ -217,6 +217,10 @@ final class EmailController extends Controller
                 'pat'         => Reminders::windowDays('pat'),
                 'maintenance' => Reminders::windowDays('maintenance'),
                 'hire'        => Reminders::windowDays('hire'),
+                // Faulty equipment has no due date, so no window — see
+                // Reminders::WINDOWED_TYPES. The template shows it a repeat
+                // interval instead.
+                'faulty'      => 0,
             ],
             'candidates'  => self::notifyCandidates(),
             'selectedIds' => Reminders::notifyUserIds(),
@@ -283,19 +287,28 @@ final class EmailController extends Controller
             'reminder_maintenance_days' => 'integer|min_value:0|max_value:365',
             'reminder_hire_days'        => 'integer|min_value:0|max_value:365',
             'reminder_repeat_days'      => 'required|integer|min_value:1|max_value:90',
+            'reminder_faulty_repeat_days' => 'integer|min_value:0|max_value:90',
         ], [
             'reminder_pat_days'         => 'PAT reminder window',
             'reminder_maintenance_days' => 'Maintenance reminder window',
             'reminder_hire_days'        => 'Hire reminder window',
             'reminder_repeat_days'      => 'Remind again after',
+            'reminder_faulty_repeat_days' => 'Faulty equipment repeat',
         ], '/admin/email/reminders');
 
         foreach (array_keys(Reminders::TYPES) as $type) {
             Setting::put('reminder_' . $type . '_enabled', Request::boolean('reminder_' . $type . '_enabled') ? '1' : '0');
+        }
+
+        // Only the types that count items against a date have a "days before
+        // due" window; faulty equipment has a repeat interval instead.
+        foreach (Reminders::WINDOWED_TYPES as $type) {
             Setting::put('reminder_' . $type . '_days', (string) (int) $data['reminder_' . $type . '_days']);
         }
 
         Setting::put('reminder_repeat_days', (string) (int) $data['reminder_repeat_days']);
+        Setting::put('reminder_faulty_repeat_days', (string) (int) $data['reminder_faulty_repeat_days']);
+        Setting::put('fault_notify_immediately', Request::boolean('fault_notify_immediately') ? '1' : '0');
         Setting::put('reminder_maintenance_assignee', Request::boolean('reminder_maintenance_assignee') ? '1' : '0');
         Setting::put('reminder_hire_notify_hirer', Request::boolean('reminder_hire_notify_hirer') ? '1' : '0');
 
@@ -359,13 +372,23 @@ final class EmailController extends Controller
             $would  += (int) $report['would_send'];
             $failed += (int) $report['failed'];
 
-            $lines[] = sprintf(
-                '%s: %d overdue, %d due soon, %d already reminded',
-                $report['label'],
-                $report['overdue_items'],
-                $report['due_items'],
-                $report['suppressed']
-            );
+            // Faulty equipment has no "due soon" half — a fault is open or it
+            // is not — so it gets a sentence that says what its numbers mean
+            // rather than one with a permanent "0 due soon" in it.
+            $lines[] = $report['type'] === 'faulty'
+                ? sprintf(
+                    '%s: %d faulty, %d already reminded',
+                    $report['label'],
+                    $report['overdue_items'],
+                    $report['suppressed']
+                )
+                : sprintf(
+                    '%s: %d overdue, %d due soon, %d already reminded',
+                    $report['label'],
+                    $report['overdue_items'],
+                    $report['due_items'],
+                    $report['suppressed']
+                );
         }
 
         if ($lines === []) {

@@ -77,9 +77,26 @@ $canReport = can('reports.view');
     </div>
 <?php endif; ?>
 
-<?php if (isset($stats['maintenance']) || isset($stats['pat']) || isset($stats['hires'])): ?>
+<?php if (isset($stats['maintenance']) || isset($stats['pat']) || isset($stats['hires']) || isset($stats['faults'])): ?>
     <h2 class="section-title">Needs attention</h2>
     <div class="stat-grid">
+        <?php if (isset($stats['faults'])): ?>
+            <?php /* First in the row. Everything else here is a date that has
+                     arrived; this is a thing that is broken now. */ ?>
+            <?= $tile((string) (int) $stats['faults']['total'], 'Assets faulty',
+                $canReport ? '/reports/faulty-assets' : '/assets?status%5B%5D=Faulty',
+                ((int) $stats['faults']['total']) > 0 ? 'danger' : '') ?>
+
+            <?php /* Only once there is one. A permanent "0 critical faults"
+                     tile is a row of the dashboard spent saying nothing, and
+                     the total above already covers the quiet case. */ ?>
+            <?php if ((int) $stats['faults']['urgent'] > 0): ?>
+                <?= $tile((string) (int) $stats['faults']['urgent'], 'Faults Critical or High',
+                    $canReport ? '/reports/faulty-assets?urgency=urgent' : '/assets?status%5B%5D=Faulty',
+                    'danger') ?>
+            <?php endif; ?>
+        <?php endif; ?>
+
         <?php if (isset($stats['maintenance'])): ?>
             <?= $tile((string) (int) $stats['maintenance']['overdue'], 'Maintenance overdue',
                 $canReport ? '/reports/maintenance-due?window=overdue' : '/maintenance?status%5B%5D=Overdue',

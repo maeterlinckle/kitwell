@@ -11,6 +11,8 @@ use App\Models\Asset;
  * @var array<int,array<string,mixed>> $categories
  * @var array<int,array<string,mixed>> $locations
  * @var array<int,array<string,mixed>> $parents
+ * @var array<int,array<string,mixed>> $responsibleUsers
+ * @var array<int,array<string,mixed>> $responsibleTeams
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
@@ -43,6 +45,12 @@ $checked = static function (string $field, bool $default) use ($old, $asset): bo
 };
 
 $parentId = $value('parent_asset_id', $parent['id'] ?? '');
+
+// The single "user:7" / "team:2" value, from the rejected submission if there
+// was one, otherwise from the record.
+$responsible = array_key_exists('responsible', $old)
+    ? (string) $old['responsible']
+    : Asset::responsibleValue($asset);
 ?>
 <div class="page-head">
     <div>
@@ -135,6 +143,42 @@ $parentId = $value('parent_asset_id', $parent['id'] ?? '');
                     <p class="field-hint"><a href="<?= e(url('/admin/locations')) ?>">Manage locations</a></p>
                 <?php endif; ?>
             </div>
+        </div>
+
+        <?php /* One control, not two. An asset is looked after by a person or
+                 by a team, never by both, and two separate dropdowns would let
+                 somebody say both and leave the notification code to choose.
+                 The prefixed value is unpacked by Asset::parseResponsible().
+                 Same shape as the maintenance assignment — see
+                 App\Models\Assignment. */ ?>
+        <div class="field">
+            <label class="label" for="responsible">Responsible party <span class="optional">(optional)</span></label>
+            <select class="input" id="responsible" name="responsible">
+                <option value="">Unassigned</option>
+
+                <?php if ($responsibleTeams !== []): ?>
+                    <optgroup label="Teams">
+                        <?php foreach ($responsibleTeams as $team): ?>
+                            <option value="team:<?= (int) $team['id'] ?>" <?= $responsible === 'team:' . (int) $team['id'] ? 'selected' : '' ?>>
+                                <?= e($team['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                <?php endif; ?>
+
+                <optgroup label="People">
+                    <?php foreach ($responsibleUsers as $person): ?>
+                        <option value="user:<?= (int) $person['id'] ?>" <?= $responsible === 'user:' . (int) $person['id'] ? 'selected' : '' ?>>
+                            <?= e($person['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </optgroup>
+            </select>
+            <p class="field-hint">
+                Who hears about it when this is reported faulty — immediately, and again in the
+                faulty-asset digest. Naming a <a href="<?= e(url('/admin/teams')) ?>">team</a> tells
+                every member. Left unassigned, a fault is recorded but nobody is emailed about it.
+            </p>
         </div>
     </div>
 

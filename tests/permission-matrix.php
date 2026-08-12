@@ -66,6 +66,12 @@ $matrix = [
     '/assets/1/pat'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/1/maintenance/log'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
+    // Faults. Reading the history is part of seeing the asset; reporting one
+    // is its own permission, held by admin and manager but not read-only.
+    '/assets/1/faults'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1/faults/report'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/reports/faulty-assets'     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+
     // Maintenance
     '/maintenance'               => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/maintenance/history'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
@@ -143,6 +149,7 @@ $writeMatrix = [
     '/assets/1/archive'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/assets/1/delete'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/assets/1/photos'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/assets/1/faults'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/assets/1/manuals'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/maintenance'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/pat'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],

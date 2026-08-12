@@ -11,11 +11,14 @@ deploying it (§5.4) followed by stages 13, 14 and 15 — fixes and small change
 then branding, HTML email, export and print, then teams, invitations and
 password recovery. Stage 16, on 2026-08-12, added two-factor authentication
 alongside auto-hiding confirmations, a tree view for the reference data, and
-two navigation fixes.
+two navigation fixes. Stage 17, the same day, added faults: an asset can name a
+responsible party and be reported faulty, with a photograph, an urgency and a
+kept history — and the responsible party is emailed immediately and again in a
+digest until it is dealt with.
 
 Everything below was checked against the files and the database at the time of
 writing, not recalled. The schema section was produced by creating an empty
-database, applying all twenty-two migrations in order and then reading
+database, applying all twenty-three migrations in order and then reading
 `information_schema`, so it describes exactly what a fresh install produces.
 Where something is *not* verified, it says so.
 
@@ -44,13 +47,13 @@ Where something is *not* verified, it says so.
 
 ## 2. Database schema as implemented
 
-Built by applying `database/migrations/001` … `022` to an empty database. All
-twenty-two applied cleanly with no errors.
+Built by applying `database/migrations/001` … `023` to an empty database. All
+twenty-three applied cleanly with no errors.
 
-**Totals:** 28 domain tables, 327 columns, 50 foreign keys, 127 indexes.
+**Totals:** 30 domain tables, 347 columns, 56 foreign keys, 137 indexes.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
-A database migrated with `php bin/migrate.php` has a **29th** table,
+A database migrated with `php bin/migrate.php` has a **31st** table,
 `migrations` (`id`, `migration`, `batch`, `applied_at`, unique on `migration`),
 created by `src/Core/Migrator.php`. It does not appear below because it is
 tracking, not domain data — and note that it is *not* created if you pipe the
@@ -82,6 +85,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 | `020_teams.sql` | `teams`, `team_members`; `maintenance_schedules.assigned_to_team_id`; the `teams.manage` permission, granted to `admin` only |
 | `021_user_tokens.sql` | `user_tokens` — single-use invitation and password-reset links, stored as SHA-256; the `invite_expiry_hours` and `password_reset_expiry_hours` settings |
 | `022_two_factor.sql` | `users` gains `two_factor_enabled`, `totp_secret` (encrypted) and `totp_confirmed_at`; `user_backup_codes`, `trusted_devices`; the five two-factor settings |
+| `023_faults_and_responsibility.sql` | `assets` gains `responsible_user_id` + `responsible_team_id` (mutually exclusive, both real foreign keys) and **`'Faulty'` appended to `assets.status`**; `fault_reports`, `fault_report_photos`; the `faults.report` permission granted to `admin` and `manager`; the `reminder_faulty_*` and `fault_notify_immediately` settings |
 
 Migrations are applied in filename order and recorded. **Never edit an applied
 file** — add a new numbered one.
@@ -142,7 +146,7 @@ Both self-nesting reference tables.
 Unique `uq_locations_name_parent(name, parent_id)` — locations are unique within a parent,
 categories globally by slug.
 
-#### `assets` (28 columns)
+#### `assets` (36 columns)
 | Column | Type | NN | Default / note |
 |---|---|---|---|
 | id | bigint unsigned AI | ✓ | |
@@ -152,8 +156,10 @@ categories globally by slug.
 | description | text | | |
 | category_id | int unsigned | | |
 | location_id | int unsigned | | |
+| responsible_user_id | int unsigned | | **mutually exclusive** with the next; FK to `users`, ON DELETE SET NULL |
+| responsible_team_id | int unsigned | | **mutually exclusive** with the previous; FK to `teams`, ON DELETE SET NULL |
 | condition_rating | enum('Excellent','Good','Fair','Poor','Out of Service') | ✓ | 'Good' |
-| status | enum('In Stock','On Hire','In Maintenance','Retired') | ✓ | 'In Stock' |
+| status | enum('In Stock','On Hire','In Maintenance','Retired','Faulty') | ✓ | 'In Stock' — **'Faulty' is last in the ENUM, first-class in the UI**; see the note below |
 | purchase_date | date | | |
 | purchase_cost | decimal(12,2) | | |
 | current_value | decimal(12,2) | | |
@@ -177,7 +183,16 @@ categories globally by slug.
 
 Indexes: unique `asset_tag`, unique `barcode`; `category_id`, `location_id`,
 `condition_rating`, `name`, `parent_asset_id`, `requires_pat`, `serial_number`,
-`status`, composite `(status, category_id)`, plus the two `*_by` FK indexes.
+`status`, composite `(status, category_id)`, `responsible_user_id`,
+`responsible_team_id`, plus the two `*_by` FK indexes.
+
+**Why `'Faulty'` is at the end of the ENUM.** Appending a member is an instant,
+in-place change that re-maps nothing; inserting one in its natural reading
+position forces a table copy and renumbers every member after it. Presentation
+order is a presentation problem, so it lives in PHP: `Asset::STATUSES` lists it
+between 'In Maintenance' and 'Retired' (which drives every dropdown and filter),
+and `Asset::SORTS['status']` is an explicit `FIELD()` putting Faulty first —
+the same trick the condition sort already used. Do not "tidy" the ENUM.
 
 #### `asset_photos`
 `id` bigint, `asset_id` NN, `file_path` varchar(255) NN (relative to the uploads root),
@@ -236,6 +251,45 @@ Index `idx_teams_active(is_active)`.
 `created_at` and `idx_team_members_user(user_id)`. Both ends CASCADE: a
 membership row is meaningless without both, and the audit trail is what records
 who was added and when.
+
+#### `fault_reports` (migration 023)
+`id` bigint, `asset_id` NN, `description` text NN, `faulty_on` date NN,
+`urgency` enum('Low','Medium','High','Critical') NN 'Medium',
+`condition_rating` enum(the five asset conditions) NN, `reported_by` int
+unsigned, `reported_by_name` varchar(191) NN, `created_at`.
+Indexes `(asset_id, faulty_on)`, `(asset_id, created_at)`, `urgency`;
+`asset_id` CASCADEs, `reported_by` SET NULLs.
+
+A record per report, not a flag. `assets.status` answers *is it faulty now?*;
+this answers *what has gone wrong with it, and how often?* — the same split PAT
+and maintenance already make. An asset reported faulty three times in a year is
+telling you something a status column cannot say, because the column was
+overwritten each time.
+
+Two deliberate snapshots. `condition_rating` is the judgement made *at the time
+of the report*; the asset's own condition moves on, so this is the difference
+between "it was Poor when this was raised" and "it is Poor today".
+`reported_by_name` follows `maintenance_logs` and `email_log`: the report should
+still say who raised it after the account has gone.
+
+**There is no `resolved_at` and no open/closed flag**, and that is not an
+oversight. The asset stops being faulty when its status changes — by editing it,
+or by recording the repair. A second notion of open/closed would be a thing to
+keep in step with the status, and the two would drift. Everything that asks
+"what is faulty?" — the dashboard tile, the report, the digest — reads
+`assets.status`.
+
+#### `fault_report_photos` (migration 023)
+A straight copy of `maintenance_log_photos`, hanging off a report:
+`id`, `fault_report_id` NN, `file_path` NN, `original_filename`, `mime_type` NN,
+`file_size_bytes` NN 0, `caption`, `uploaded_by`, `created_at`.
+Index `(fault_report_id, created_at)`; the report FK CASCADEs.
+Files land under `storage/uploads/faults/{fault_report_id}/`.
+
+Not `asset_photos`, though these are photographs of an asset. A condition photo
+is part of the asset's ongoing record and can become the thumbnail the register
+shows; a fault photo belongs to the report that explains it, and filing it
+against the asset would lose which fault it was evidence of.
 
 #### `user_tokens` (migration 021)
 `id` bigint, `user_id` NN, `purpose` enum('invite','password_reset') NN,
@@ -353,13 +407,13 @@ purpose: an item crossing from "due soon" to "overdue" is a *different*
 reminder and goes out at once rather than waiting out the earlier one's repeat
 window.
 
-### 2.3 Foreign keys (50)
+### 2.3 Foreign keys (56)
 
 | Delete rule | Where it is used |
 |---|---|
-| **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id` |
+| **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
 | **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id` |
-| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id` |
+| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
 
 `maintenance_schedules.assigned_to_team_id` is SET NULL on purpose: archiving is
 the ordinary way to retire a team, so deleting one is a deliberate act that
@@ -376,26 +430,33 @@ deleting a user never destroys the records they touched.
 
 - **4 roles**: `admin` (Administrator, `is_superuser=1`), `manager` (Manager / Staff),
   `viewer` (Read-only), `hirer` (Hirer). All four are `is_system=1`.
-- **33 permissions** in groups Assets, Hirers, Hires, Maintenance,
+- **34 permissions** in groups Assets, Hirers, Hires, Maintenance,
   Photos & files, PAT testing, Reports, Email, Administration:
-  `assets.view/create/edit/delete/export`, `hirers.view/manage`,
+  `assets.view/create/edit/delete/export`, **`faults.report`**, `hirers.view/manage`,
   `hires.view/view_own/create/return/manage`, `maintenance.view/manage/complete`,
   `media.photo.upload/delete`, `media.manual.upload/delete`,
   `pat.view/manage/delete`, `reports.view`, `email.manage/send`,
   `users.view/manage`, `roles.manage`, **`teams.manage`**, `categories.manage`,
   `locations.manage`, `settings.manage`, `audit.view`.
-- **66 role_permissions rows** — admin 33, manager 25, viewer 7, hirer 1.
+- **68 role_permissions rows** — admin 34, manager 26, viewer 7, hirer 1.
   - viewer: `assets.view`, `assets.export`, `hirers.view`, `hires.view`,
     `maintenance.view`, `pat.view`, `reports.view`
   - hirer: **`hires.view_own` and nothing else**
   - manager gained `email.send` (not `email.manage`) in 018
   - `teams.manage` (020) is **admin only**: membership decides who is reminded
     about a job and who it is expected of, which makes it administrative
-- **44 settings** on a fresh install (48 once both logo variants have been
+  - `faults.report` (023) is **admin and manager**. Its own permission rather
+    than `assets.edit`, because the two are not the same act: saying "this is
+    broken" is something the person holding the broken thing does, and need not
+    come with the right to rewrite purchase costs. It is still a change to the
+    register — it moves the status — so read-only does not get it
+- **47 settings** on a fresh install (51 once both logo variants have been
   uploaded — the four `logo_*` keys are written on upload, never seeded).
   Stage 16 added `flash_auto_hide_seconds` (6, 0 = never), `two_factor_required`
   (0), `trusted_device_days` (30), `trusted_device_idle_days` (14),
-  `email_otp_minutes` (10) and `two_factor_max_attempts` (5):
+  `email_otp_minutes` (10) and `two_factor_max_attempts` (5). Stage 17 added
+  `reminder_faulty_enabled` (0), `reminder_faulty_repeat_days` (0 = use the
+  shared repeat) and `fault_notify_immediately` (1):
 
   | Key | Default | |
   |---|---|---|
@@ -422,12 +483,14 @@ deleting a user never destroys the records they touched.
   | `mail_encryption` | `tls` | `tls` \| `ssl` \| `none` |
   | `mail_password` | *(empty)* | **ciphertext**, `v1.`-prefixed; `MAIL_PASSWORD` in `.env` overrides |
   | `mail_timeout` | `15` | seconds |
-  | `reminder_pat_enabled` / `_maintenance_` / `_hire_` | `0` | each off by default |
+  | `reminder_pat_enabled` / `_maintenance_` / `_hire_` / `_faulty_` | `0` | each off by default |
   | `reminder_pat_days` / `_maintenance_` / `_hire_` | `0` | **0 = use the register's own window** |
   | `reminder_repeat_days` | `7` | |
   | `reminder_recipient_user_ids` | *(empty)* | comma-separated user ids |
   | `reminder_maintenance_assignee` | `1` | a team assignment reaches every member |
   | `reminder_hire_notify_hirer` | `0` | |
+  | `reminder_faulty_repeat_days` | `0` | **0 = use `reminder_repeat_days`**; faults have no due date, so this is "how often to mention it again" |
+  | `fault_notify_immediately` | `1` | email the responsible party the moment a fault is reported, off the cron path |
   | `invite_expiry_hours` | `72` | how long an invitation link lasts |
   | `password_reset_expiry_hours` | `2` | deliberately shorter — see §4.10 |
 
@@ -527,46 +590,54 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        format_datetime(), format_money(), config(), str_limit()
 │   ├── Core/                Auth, Barcode, Config, Crypto, Csrf, Csv, CsvReader,
 │   │                        Database, Env, Flash, Image, LoginThrottle, Migrator,
-│   │                        Request, Response, Router, Session, Upload, Validator, View
+│   │                        QrCode, Request, Response, Router, Session, Totp,
+│   │                        Upload, Validator, View
 │   ├── Controllers/         Controller (base) + Account, Asset, AssetCopy,
 │   │                        AssetExport, Auth, Branding, Calendar, Hirer,
-│   │                        Dashboard, Export, Import, Label, Hire,
+│   │                        Dashboard, Export, Fault, Import, Label, Hire,
 │   │                        Maintenance, Manual, MyHires, Pat, Photo, Profile,
-│   │                        Report, Scan
+│   │                        Report, Scan, Security, TwoFactor
 │   │   └── Admin/           Activity, Category, Email, Location, Role, Settings,
 │   │                        Team, User
 │   ├── Mail/                Mailer, EmailTemplate, EmailLog, EmailReminder,
 │   │                        Reminders, Merge, Layout, AccountMail
 │   ├── Middleware/          Auth, Csrf, Guest, Permission, MiddlewareRunner
-│   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto, Hirer,
-│   │                        Category, Hire, Location, MaintenanceLog,
-│   │                        MaintenanceSchedule, PatRecord, Permission, Role,
-│   │                        Setting, Team, User, UserToken
+│   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto,
+│   │                        Assignment, Category, FaultReport, Hire, Hirer,
+│   │                        Location, MaintenanceLog, MaintenanceSchedule,
+│   │                        PatRecord, Permission, Role, Setting, Team, Tree,
+│   │                        TrustedDevice, User, UserToken
 │   ├── Reports/             Report (base), ReportRegistry, AllAssets,
-│   │                        MaintenanceDue, PatDue, AssetsOnHire, HiresDueBack
+│   │                        FaultyAssets, MaintenanceDue, PatDue, AssetsOnHire,
+│   │                        HiresDueBack
 │   ├── Imports/             Importer (base), ImportRegistry, AssetImporter,
 │   │                        PatImporter
-│   └── Services/            AssetTagger, AssetCopier, CalendarFeed, Branding
+│   └── Services/            AssetTagger, AssetCopier, Branding, CalendarFeed,
+│                            FaultNotifier, TwoFactor
 │
 ├── storage/                 ← outside the docroot
 │   ├── logs/                app.log
 │   └── uploads/             assets/{id}/photos, .../photos/thumbs,
 │                            assets/{id}/manuals, maintenance/{logId},
 │                            maintenance/{logId}/documents,
+│                            faults/{faultReportId},
 │                            hires/{hireId}, branding/, imports/
 │
-├── templates/               85 .php templates
+├── templates/               96 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, brand, footer, print-header, flash,
 │   │                        photo-gallery, photo-upload, photo-inputs,
 │   │                        pat-status, pat-record, maintenance-log-evidence,
-│   │                        assignee, report-table, scan-button, verdict,
-│   │                        verdict-cell, email-nav
+│   │                        assignee, fault-banner, reference-tree,
+│   │                        reference-tree-meta, report-table, scan-button,
+│   │                        verdict, verdict-cell, email-nav
 │   ├── assets/              index, show, form, copy, apply, photos, labels,
 │   │                        print, print-list
-│   ├── auth/                login, invite, forgot-password, reset-password
+│   ├── auth/                login, invite, forgot-password, reset-password,
+│   │                        two-factor, two-factor-setup
+│   ├── faults/              form, history
 │   ├── dashboard/ errors/ scan/
-│   ├── profile/             edit, calendar
+│   ├── profile/             edit, calendar, security, two-factor-setup
 │   ├── maintenance/         index, show, form, complete, edit-log, history,
 │   │                        choose-asset
 │   ├── pat/                 index, show, form, history, wizard, choose-asset
@@ -998,11 +1069,76 @@ worth keeping.
   a permission check. Every `/profile/security` route acts on `Auth::id()` and
   has no id in its path, which is why they are on the audit's self-scoping list.
 
+### 4.12 Faults and the responsible party
+
+Two ideas that only work together: an asset can name somebody responsible for
+it, and an asset can be reported faulty. The point of the pair is the
+notification.
+
+**One control, two columns, one parser.** "A person, or a team, or nobody" now
+appears twice in the schema — `maintenance_schedules.assigned_to_*` and
+`assets.responsible_*` — with different words on screen and identical mechanics.
+`App\Models\Assignment` owns the shape: `parse()` turns the form's single
+`user:7` / `team:2` value into `[kind, id]`, `value()` turns a row back into it,
+`label()` renders "Bench fitters (team)" for the places that have only text.
+`MaintenanceSchedule::parseAssignee()` and `Asset::parseResponsible()` both
+delegate. **Do not write a third parser** — the failure mode of a near-copy here
+is silent, and it sends the notification to the wrong half of the workshop.
+
+Two nullable columns rather than a polymorphic `(type, id)`, exactly as
+migration 020 argued: both sides are then real foreign keys, so deleting a team
+cannot leave an asset pointing at a group that no longer exists.
+
+**Nobody named means nobody emailed.** Not an error, not a fallback to an
+administrator or the notify list. Mail addressed to "whoever is around" is mail
+everybody learns to ignore, and once they have, the properly addressed messages
+go unread too. `FaultController` says so on screen at the moment the report is
+filed — "Nobody is set as responsible for this asset, so no notification was
+sent" — rather than a cheerful "the responsible party has been notified" that
+is not true.
+
+**`App\Services\FaultNotifier` is the single answer to "who hears about this".**
+The immediate message and the nightly digest both go through it, so they cannot
+disagree about the recipient. A disagreement there would be worse than either
+alone, because each message would make the other look like a mistake. It
+applies three rules:
+
+1. a team means **every member**, the same argument teams exist for;
+2. recipients are **re-checked against `assets.view` at send time** — being
+   named as responsible is not itself a grant, and a fault report carries the
+   asset's tag, location and condition. Identical to the rule `Reminders`
+   applies to the notify list;
+3. `digestGroups()` groups by person, not by asset, which is what makes the
+   digest one email listing four machines instead of four emails.
+
+**The digest is the fourth reminder type, and the odd one out.** It is in
+`Reminders::TYPES` and runs on the same cron, but it is *not* in
+`Reminders::WINDOWED_TYPES`: a fault has no due date to count down to, so
+`windowDays()` returns 0 for it and the settings screen offers a repeat interval
+instead of a "days before due" field. It also does not use the notify list at
+all — see the note on the reminders page. `Reminders::repeatDays('faulty')`
+reads `reminder_faulty_repeat_days`, falling back to the shared figure at 0.
+
+**The digest lists everything, and suppression only decides whether to send.**
+A message that quietly omitted the machine the reader was told about yesterday
+would read as though it had been fixed. So `EmailReminder::suppressed()` decides
+whether this person hears from us today, and if they do, they get their whole
+list.
+
+**A fault report is a record, not a flag** — see `fault_reports` in §2.2 for why
+there is no resolved/open state, and why `condition_rating` and
+`reported_by_name` are snapshots.
+
+**At least one photograph, checked before anything is written.** A fault report
+without one is a sentence somebody has to interpret. The controller validates
+every upload first and refuses the whole submission if none survive, so a report
+cannot satisfy the rule on a technicality by having every photo rejected.
+
 ---
 
 ## 5. Build-prompt status
 
-All sixteen prompts are **complete**. Nothing is partial or unstarted.
+All seventeen prompts are **complete**. Nothing is partial or unstarted.
 
 > **Terminology:** the application says **Hires** and **Hirers**, never loans or borrowers. Migration 017 renamed the schema to match, so code and interface use the same words — there is no compatibility shim and nothing left calling it a loan. Only the filenames of migrations 006 and 013 still carry the old words, because an applied migration is never edited.
 
@@ -1028,6 +1164,7 @@ All sixteen prompts are **complete**. Nothing is partial or unstarted.
 | 14 | Role creation, branding/logo, HTML email, export page, print documents | complete | 2026-08-11 |
 | 15 | Nav polish, dashboard order, maintenance evidence, Teams, invites, password recovery | complete | 2026-08-11 |
 | 16 | Auto-hiding banners, nav alignment and active-state fix, reference-data tree, two-factor authentication | complete | 2026-08-12 |
+| 17 | Responsible party on an asset, mark-as-faulty with photo and urgency, faulty dashboard card, immediate notification and a faulty digest | complete | 2026-08-12 |
 
 ### 5.1 What each prompt delivered
 
@@ -1125,6 +1262,21 @@ All sixteen prompts are **complete**. Nothing is partial or unstarted.
     codes, **email codes** as the fallback where SMTP allows it, per-user opt-in
     *and* a site-wide requirement, and **trusted devices** that expire four
     different ways.
+17. **Faults.** An asset can name a **responsible party** — one person or one
+    team, never both, never required — set from the edit form and shown on the
+    record. Anyone with `faults.report` can **mark it faulty** from a page of
+    its own: what is wrong, when it was noticed (back-datable), a photograph
+    through the same camera control the condition and maintenance flows use, the
+    condition at the time, and an urgency for *this fault* rather than for the
+    asset. Submitting sets the status to the new `Faulty` and files a
+    **fault report**, kept as history — an item can break twice, and the second
+    report does not erase the first. The current one sits across the top of the
+    asset page; the dashboard gains a Faulty tile drilling into a report
+    filterable and sortable by urgency. The responsible party is **emailed
+    immediately**, and again in a **consolidated digest** on the reminder
+    schedule — one message per person listing every faulty asset of theirs,
+    however many teams it reaches them through. An asset with nobody
+    responsible emails nobody, says so on screen, and does not error.
 
 ### 5.2 What has been verified, and how
 
@@ -1132,16 +1284,17 @@ All sixteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 209 PHP files | 0 failures |
+| `php -l` on all 211 PHP files | 0 failures |
 | `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **2215 output expressions across 93 templates, 0 unescaped** |
-| All 22 migrations against an empty database | applied cleanly; 28 tables, 327 columns, 50 FKs, 127 indexes, all InnoDB |
-| Seed data counts | 4 roles / 33 permissions / 66 grants / 44 settings / 0 template overrides |
-| `tests/permission-matrix.php` | **344 checks, 0 mismatches** |
+| `tests/escape-audit.php` | **2308 output expressions across 96 templates, 0 unescaped** |
+| All 23 migrations against an empty database | applied cleanly; 30 tables, 347 columns, 56 FKs, 137 indexes, all InnoDB |
+| Seed data counts | 4 roles / 34 permissions / 68 grants / 47 settings / 0 template overrides |
+| `tests/permission-matrix.php` | **360 checks, 0 mismatches** |
+| `tests/fault-flow.php` | **68 checks, 0 failed** — end to end over HTTP, with a mail catcher |
 | `tests/totp-vectors.php` | **52 checks, 0 failed** — RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `tests/qr-encode.php` | **21 checks, 0 failed** — ISO/IEC 18004 Annex I error-correction codewords, and the geometry |
 | `tests/report-figures.php` | every figure agrees with the database |
-| Migrations 019–021 on the **populated** dev database | applied cleanly; existing rows untouched |
+| Migrations 019–023 on the **populated** dev database | applied cleanly; existing rows untouched — in particular every `assets.status` value survived the ENUM change unchanged |
 
 **Stage 12 specifically, verified on this machine:**
 
@@ -1482,6 +1635,26 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
    but `hires.asset_id` is RESTRICT, so anything with hire history cannot be
    deleted at all. That is intentional; the README explains archive vs delete.
 
+   Note that `Asset::historyCounts()`, which decides whether a delete is allowed,
+   counts hires, PAT records, maintenance and children — **not fault reports**.
+   A fault report alone does not block a delete, and cascades with the asset.
+   That is the right answer for an item registered and reported broken in the
+   same week, but it is a deliberate choice rather than an oversight.
+9. **Clearing "Faulty" is a status change, nothing more.** There is no "resolve
+   this fault" button, because there is no separate open/closed flag to clear —
+   see `fault_reports` in §2.2. Recording the repair, or editing the asset's
+   status, is what takes it off the dashboard tile, out of the report and out of
+   the digest. The banner offers both routes. The consequence worth knowing:
+   nothing ever *closes* a report, so `fault_reports` is an append-only history
+   and "how long has this been broken?" is answered from the latest report's
+   `faulty_on`, not from a resolution date that does not exist.
+10. **The responsible party is not copied when an asset is duplicated.**
+   `AssetCopier::COPYABLE_FIELDS` does not include it, so copies start
+   unassigned and quietly email nobody until somebody sets one. Defensible —
+   responsibility for a physical item is a per-item decision — but if a workshop
+   registers ten drills by duplication, that is ten assets nobody is responsible
+   for, and only the report's "Nobody responsible" figure will say so.
+
 ### Traps that have already cost time — do not re-introduce
 
 - **Never reuse a named PDO placeholder.** Emulation is off; native prepares
@@ -1495,6 +1668,24 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
 - **When asserting in tests, assert on row links (`href="/assets/12"`)**, not on
   visible text: the search box echoes the query into its own `value` attribute
   and the register prints a child's parent tag, so substring matches lie.
+- **Append to an ENUM; never insert into the middle of one.** Appending is
+  instant and re-maps nothing. Inserting a member in its natural reading
+  position forces a table copy and renumbers everything after it. Migration 023
+  put `'Faulty'` at the end of `assets.status` and solved the reading order in
+  PHP instead — `Asset::STATUSES` for the dropdowns, an explicit `FIELD()` in
+  `Asset::SORTS['status']` for the sort. Do not "tidy" it.
+- **A flash message is consumed by the first request that renders it.** A test
+  that does other `GET`s before checking the confirmation is testing the order
+  of its own assertions. Capture the body of the request that follows the
+  redirect, and assert against that. Cost two false failures in `fault-flow`.
+- **A test that reads a setting it does not set will invert when somebody
+  changes it in the UI.** `tests/fault-flow.php` now pins
+  `fault_notify_immediately` at the top and restores it at the end; before that,
+  a checkbox left off in Settings produced five failures that all read like a
+  broken notifier.
+- **A dashboard tile and the list it links to must run the same query.** The
+  "Critical or High" tile first pointed at `?urgency=Critical`, so it counted two
+  and showed one. `FaultReport::URGENT` exists to keep the pair in step.
 - **Re-fetch the CSRF token after a 302** — the redirect response has no body.
 - **`tests/security-audit.php` scans `bin/` too.** A `Database::…()` call
   written inline inside an array literal ends in `)]`, which its SQL regex

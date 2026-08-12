@@ -22,6 +22,7 @@ use App\Controllers\AssetController;
 use App\Controllers\AssetCopyController;
 use App\Controllers\AssetExportController;
 use App\Controllers\ExportController;
+use App\Controllers\FaultController;
 use App\Controllers\ImportController;
 use App\Controllers\AccountController;
 use App\Controllers\AuthController;
@@ -146,6 +147,18 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/assets/{id:\d+}/manuals', [ManualController::class, 'store'], ['can:media.manual.upload', 'csrf']);
     $router->get('/assets/{id:\d+}/manuals/{manualId:\d+}', [ManualController::class, 'show'], ['can:assets.view']);
     $router->post('/assets/{id:\d+}/manuals/{manualId:\d+}/delete', [ManualController::class, 'destroy'], ['can:media.manual.delete', 'csrf']);
+
+    // Faults. Reporting one is its own permission, not assets.edit: saying
+    // "this is broken" is something the person holding the broken thing does,
+    // and it need not come with the right to rewrite the record. Reading the
+    // history is part of seeing the asset.
+    $router->get('/assets/{assetId:\d+}/faults',        [FaultController::class, 'history'], ['can:assets.view']);
+    $router->get('/assets/{assetId:\d+}/faults/report', [FaultController::class, 'create'],  ['can:faults.report']);
+    $router->post('/assets/{assetId:\d+}/faults',       [FaultController::class, 'store'],   ['can:faults.report', 'csrf']);
+
+    // Evidence, streamed through PHP like every other upload — the files live
+    // outside the document root.
+    $router->get('/faults/{reportId:\d+}/photos/{photoId:\d+}', [FaultController::class, 'photo'], ['can:assets.view']);
 
     // Condition photos.
     $router->get('/assets/{id:\d+}/photos',  [PhotoController::class, 'index'], ['can:assets.view']);

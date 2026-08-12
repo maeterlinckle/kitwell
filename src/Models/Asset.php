@@ -9,7 +9,15 @@ use App\Core\Database;
 final class Asset
 {
     public const CONDITIONS = ['Excellent', 'Good', 'Fair', 'Poor', 'Out of Service'];
-    public const STATUSES   = ['In Stock', 'On Hire', 'In Maintenance', 'Retired'];
+
+    /**
+     * Listed in the order a person reads them, which is not the order the ENUM
+     * declares. 'Faulty' was appended to the column in migration 023 because
+     * adding an ENUM member at the end is instant and re-maps nothing, whereas
+     * inserting one in the middle rewrites the table. Presentation order is a
+     * presentation problem, so it is solved here and in SORTS['status'].
+     */
+    public const STATUSES   = ['In Stock', 'On Hire', 'In Maintenance', 'Faulty', 'Retired'];
     public const RELATIONSHIPS = ['sub-asset', 'accessory', 'related'];
 
     /**
@@ -74,7 +82,10 @@ final class Asset
         'newest'    => 'a.created_at DESC',
         'oldest'    => 'a.created_at ASC',
         'updated'   => 'a.updated_at DESC',
-        'status'    => 'a.status ASC, a.name ASC',
+        // Explicit, because the ENUM's own order puts 'Faulty' last — see the
+        // note on STATUSES. Sorting by status should read the way the dropdown
+        // does, and "needs attention" belongs near the top.
+        'status'    => "FIELD(a.status,'Faulty','In Maintenance','On Hire','In Stock','Retired') ASC, a.name ASC",
         'condition' => "FIELD(a.condition_rating,'Out of Service','Poor','Fair','Good','Excellent') ASC, a.name ASC",
         'value'     => 'a.purchase_cost DESC',
     ];
@@ -86,14 +97,23 @@ final class Asset
                                    p.name AS parent_name,
                                    p.asset_tag AS parent_tag,
                                    cu.name AS created_by_name,
-                                   uu.name AS updated_by_name
+                                   uu.name AS updated_by_name,
+                                   COALESCE(rt.name, ru.name) AS responsible_name,
+                                   ru.email AS responsible_user_email,
+                                   rt.is_active AS responsible_team_is_active,
+                                   CASE
+                                       WHEN a.responsible_team_id IS NOT NULL THEN \'team\'
+                                       WHEN a.responsible_user_id IS NOT NULL THEN \'user\'
+                                   END AS responsible_kind
                               FROM assets a
                               LEFT JOIN categories c ON c.id = a.category_id
                               LEFT JOIN locations l ON l.id = a.location_id
                               LEFT JOIN locations lp ON lp.id = l.parent_id
                               LEFT JOIN assets p ON p.id = a.parent_asset_id
                               LEFT JOIN users cu ON cu.id = a.created_by
-                              LEFT JOIN users uu ON uu.id = a.updated_by';
+                              LEFT JOIN users uu ON uu.id = a.updated_by
+                              LEFT JOIN users ru ON ru.id = a.responsible_user_id
+                              LEFT JOIN teams rt ON rt.id = a.responsible_team_id';
 
     /** @return array<string,mixed>|null */
     public static function find(int $id): ?array
@@ -366,6 +386,71 @@ final class Asset
         $sql .= ' ORDER BY asset_tag';
 
         return Database::select($sql, $params);
+    }
+
+    // -- Who is responsible -------------------------------------------------
+    //
+    // One person, or one team, or nobody. The form carries that as a single
+    // value so the two cannot contradict each other; the shape is shared with
+    // the maintenance assignment — see App\Models\Assignment.
+    //
+    // "Responsible" is not "assigned": nobody is being told to do anything by
+    // being named here. It answers "who should hear about it when this breaks",
+    // which is why it is the recipient of both the immediate fault notification
+    // and the faulty-asset digest.
+
+    /**
+     * Split "user:7" / "team:2" into its parts.
+     *
+     * @return array{0:?string,1:int}
+     */
+    public static function parseResponsible(string $value): array
+    {
+        return Assignment::parse($value);
+    }
+
+    /** The form value for an asset as it stands, for re-selecting the option. */
+    public static function responsibleValue(?array $asset): string
+    {
+        return Assignment::value($asset, 'responsible_user_id', 'responsible_team_id');
+    }
+
+    /**
+     * The three values partials/assignee renders, named as that partial wants
+     * them — the asset's counterpart to MaintenanceSchedule::assigneeParts().
+     *
+     * @param array<string,mixed> $asset
+     * @return array<string,mixed>
+     */
+    public static function responsibleParts(array $asset): array
+    {
+        return [
+            'name'         => $asset['responsible_name'] ?? null,
+            'kind'         => $asset['responsible_kind'] ?? null,
+            'teamIsActive' => $asset['responsible_team_is_active'] ?? null,
+        ];
+    }
+
+    /** The responsible party as one line of text, for emails and CSV columns. */
+    public static function responsibleLabel(array $asset, string $none = 'Unassigned'): string
+    {
+        return Assignment::label(
+            $asset['responsible_name'] ?? null,
+            $asset['responsible_kind'] ?? null,
+            $none
+        );
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public static function responsibleUsers(): array
+    {
+        return Assignment::assignableUsers();
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public static function responsibleTeams(): array
+    {
+        return Assignment::assignableTeams();
     }
 
     /** @param array<string,mixed> $data */

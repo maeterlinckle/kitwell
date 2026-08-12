@@ -205,6 +205,95 @@ HTML,
             ],
         ],
 
+        // -- Faults ----------------------------------------------------------
+        // Both go to the asset's responsible party — the person named on it, or
+        // every member of the named team. An asset with nobody named sends
+        // nothing at all; see App\Services\FaultNotifier for why there is no
+        // fallback recipient.
+        'asset_faulty' => [
+            'name'        => 'Asset reported faulty',
+            'description' => 'Sent the moment somebody marks an asset faulty, to whoever is responsible for it. Not part of the nightly run.',
+            'group'       => 'Faults',
+            'subject'     => '{{urgency}}: {{asset_name}} ({{asset_tag}}) has been reported faulty',
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
+
+<p>{{reported_by}} has reported a fault on equipment you are responsible for.</p>
+
+<div class="items">
+  <strong>{{asset_tag}} — {{asset_name}}</strong><br>
+  Urgency: <strong>{{urgency}}</strong><br>
+  Noticed: {{faulty_date}}<br>
+  Condition: {{condition}}<br>
+  Location: {{location}}
+</div>
+
+<p><strong>What is wrong:</strong><br>
+{{description}}</p>
+
+<p><a href="{{asset_url}}">Open the asset record</a>{{photo_note}}</p>
+
+<p>The asset's status has been set to Faulty, so it will not be offered for hire until
+somebody changes it back.</p>
+HTML,
+            'fields' => [
+                'asset_tag'    => 'The asset tag',
+                'asset_name'   => 'The asset name',
+                'asset_url'    => 'A direct link to the asset record',
+                'urgency'      => 'Low, Medium, High or Critical, as chosen by the reporter',
+                'faulty_date'  => 'When the fault was noticed, which may be earlier than the report',
+                'condition'    => 'The condition recorded at the time of the report',
+                'location'     => 'Where the asset is kept',
+                'description'  => 'What is wrong, in the reporter’s own words',
+                'reported_by'  => 'Who reported it',
+                'photo_note'   => 'A ready-made sentence about the photos, or blank if there are none',
+                'responsible'  => 'Who this was sent to — a person, or a team name followed by “(team)”',
+            ],
+            'sample' => [
+                'asset_tag'   => 'AST-0004',
+                'asset_name'  => 'Compressor',
+                'asset_url'   => 'https://register.example.com/assets/4',
+                'urgency'     => 'High',
+                'faulty_date' => '11 Aug 2026',
+                'condition'   => 'Poor',
+                'location'    => 'Workshop bay 2',
+                'description' => 'Pressure switch will not cut out — it runs continuously and the tank gets hot.',
+                'reported_by' => 'Sam Staff',
+                'photo_note'  => ' — 2 photo(s) attached to the report.',
+                'responsible' => 'Bench fitters (team)',
+            ],
+        ],
+
+        'faulty_digest' => [
+            'name'        => 'Faulty equipment digest',
+            'description' => 'The scheduled round-up of everything still marked faulty, sent to each responsible party — one message listing all of theirs.',
+            'group'       => 'Faults',
+            'subject'     => 'Still faulty: {{count}} item(s) you are responsible for',
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
+
+<p>The following equipment is still marked faulty. You are responsible for it, either
+by name or through a team you belong to.</p>
+
+<div class="items">{{items}}</div>
+
+<p><a href="{{app_url}}/reports/faulty-assets">See the full faulty list</a></p>
+
+<p>An item leaves this list when its status stops being Faulty — when the repair is
+recorded, or when somebody changes the status back by hand.</p>
+HTML,
+            'fields' => [
+                'count'          => 'How many items are listed',
+                'items'          => 'The list itself: urgency, asset tag, name, how long it has been faulty, and what is wrong',
+                'critical_count' => 'How many of them are Critical',
+            ],
+            'sample' => [
+                'count'          => '2',
+                'items'          => "CRITICAL  AST-0004 Compressor — faulty 6 days — pressure switch will not cut out\nMEDIUM    AST-0009 Bandsaw — faulty 2 days — blade guard catches when lowered",
+                'critical_count' => '1',
+            ],
+        ],
+
         // -- Sent to the hirer ----------------------------------------------
         'hirer_hire_list' => [
             'name'        => 'Hire list for a hirer',

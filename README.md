@@ -21,13 +21,17 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
   is overdue or coming up. Assign a job to a person or to a **team**.
 - **PAT testing** — full test history per asset with every reading and its
   unit, and an at-a-glance status that treats a failure as a failure.
+- **Faults** — mark an item faulty from a page of its own, with a photograph, an
+  urgency and the date it was noticed. Every report is kept, so an item that
+  keeps breaking says so. Name a person or a team as **responsible** for an
+  asset and they are told the moment it breaks, and again while it stays broken.
 - **Hires** — check out by barcode scan or by hand, due dates, returns
   with condition notes and photos, and no way to double-book an item.
 - **Hirer self-service** — a hirer signs in and sees only what they hold.
-- **Reports** — five built in, each filterable, printable and exportable.
+- **Reports** — six built in, each filterable, printable and exportable.
 - **CSV** — import an existing register or a contractor's PAT results with a
   preview before anything is written; export what you are looking at.
-- **Email** — reminders for PAT, maintenance and hire returns on a schedule you
+- **Email** — reminders for PAT, maintenance, hire returns and faulty equipment on a schedule you
   choose, sent through your own SMTP server; one-click "email this hirer their
   hire list"; editable templates; and a log of every message, sent or failed.
 - **Calendar** — each user can subscribe their own calendar app to the dates
@@ -52,6 +56,7 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 - [Backups](#backups)
 - [Roles and permissions](#roles-and-permissions)
 - [Teams](#teams)
+- [Faults and the responsible party](#faults-and-the-responsible-party)
 - [Accounts: invitations and password recovery](#accounts-invitations-and-password-recovery)
 - [Two-factor authentication](#two-factor-authentication)
 - [Email and reminders](#email-and-reminders)
@@ -562,6 +567,19 @@ Two permissions cover email:
 | `email.manage` | Administrator | Settings → Email: the SMTP connection, reminder schedule, templates and the send log |
 | `email.send` | Administrator, Manager / Staff | The "Email hire list" and "Email reminder" buttons |
 
+Faults have their own:
+
+| Permission | Held by | Allows |
+|---|---|---|
+| `faults.report` | Administrator, Manager / Staff | The "Mark as faulty" button and the report form |
+
+It is separate from `assets.edit` on purpose. Saying "this is broken" is
+something the person holding the broken thing does, and need not come with the
+right to rewrite purchase costs — so an installation can grant it to a role that
+otherwise only looks. It is still a change to the register, since it moves the
+asset's status, so Read-only does not have it. Reading the fault history needs
+only `assets.view`.
+
 The calendar feed needs no permission of its own: every signed-in user can
 create their own, and what it contains is decided by the permissions they
 already hold.
@@ -608,6 +626,94 @@ still have an answer.
 PAT has no assignment to extend. Its due dates come from each asset's own retest
 interval rather than from a scheduled job, and `pat_records.tester_user_id`
 records who *did* a test rather than who owes one.
+
+---
+
+## Faults and the responsible party
+
+### Saying who looks after an asset
+
+Every asset has a **Responsible party** field on its edit form: one person, or
+one team, or nobody. It is optional, and it can be changed at any time. It
+appears on the asset page and on the printed record.
+
+Being named here does not assign anybody a job and does not grant any access.
+It answers one question — *who should hear about it when this breaks* — and it
+is the only thing that decides who gets a fault email.
+
+Naming a **team** tells every member. That is the point of a team: the news does
+not stop because one person is on holiday.
+
+### Reporting a fault
+
+Anyone with **Report faults** sees a **Mark as faulty** button on the asset page,
+next to Print. It opens a page of its own — not a dialog — asking for:
+
+- **what is wrong**, in whatever words the person has;
+- **when it was noticed**, which defaults to today and can be back-dated if the
+  fault has been there a while;
+- **a photograph**, at least one, through the same camera control the condition
+  photos and maintenance evidence use — "Take photo" opens the camera on a phone;
+- **the condition** now, on the asset's usual scale, which is saved to the asset
+  as well as to the report;
+- **how urgent** it is: Low, Medium, High or Critical, each with a line saying
+  what it is for.
+
+Submitting sets the asset's status to **Faulty** — so it stops being offered for
+hire — and files a fault report.
+
+### Reports are kept, not overwritten
+
+An asset can break more than once. Each report is its own record, with its own
+photograph, urgency and date, and the **Fault history** page lists them all. The
+asset page shows the most recent one across the top while the status is Faulty,
+and the sidebar carries the count.
+
+An item reported faulty four times in a year is telling you to replace it, and
+that is only visible because nothing was overwritten.
+
+### Who is emailed, and when
+
+**Immediately.** The moment a fault is filed, the responsible party is emailed —
+the named person, or every member of the named team. The confirmation on screen
+says who was told.
+
+**Then in the digest.** Everything still marked faulty goes out on the same
+scheduled run as the PAT, maintenance and hire reminders. Each person gets **one
+message listing every faulty asset of theirs**, whether they are named on it
+directly or reach it through a team — not one email per machine.
+
+**An asset with nobody responsible emails nobody.** Not an administrator, not
+the notify list, nobody. The report is still filed and still appears on the
+dashboard and in the report; the screen says plainly that no email went out.
+This is deliberate: mail addressed to "whoever is around" is mail everybody
+learns to filter, and then the properly addressed messages go unread too. The
+faulty-assets report has a **Nobody responsible** figure so these are easy to
+find and fix.
+
+A recipient still needs permission to see assets. Being named as responsible is
+not itself a grant, and the run re-checks at send time — the same rule the other
+reminders follow.
+
+Both are configured under **Settings → Email → Reminders**, in a *Faulty
+equipment* card: switch the digest on, choose how often it repeats, and switch
+the immediate message off if you only want the round-up. The wording of both
+lives in **Settings → Email → Templates** as "Asset reported faulty" and
+"Faulty equipment digest".
+
+### Finding faulty equipment
+
+The dashboard gains an **Assets faulty** tile, plus a second one for Critical and
+High when there are any. Both open the **Faulty equipment** report, which is
+sorted most urgent first and can be filtered by urgency, by who is responsible,
+or by a search across the fault text.
+
+### Clearing a fault
+
+Change the asset's status — either by recording the maintenance that fixed it,
+or by editing the asset. There is no separate "resolve" button, because there is
+no separate open/closed flag: the status is the single answer to "is this faulty
+now?", and everything reads it. The banner on the asset page offers both routes.
 
 ---
 
@@ -792,10 +898,15 @@ Two consequences worth knowing:
 
 ### Reminders
 
-Three kinds, each switched on independently: **PAT**, **maintenance** and
-**hire returns**. Each has its own "remind this many days before due" window;
-leave it at `0` to use the same window the register and dashboard already show,
-so the numbers agree without being written down twice.
+Four kinds, each switched on independently: **PAT**, **maintenance**, **hire
+returns** and **faulty equipment**. The first three have a "remind this many
+days before due" window; leave it at `0` to use the same window the register and
+dashboard already show, so the numbers agree without being written down twice.
+
+Faulty equipment has no window, because a fault has no due date — it is open
+until somebody changes the asset's status. It has a repeat interval instead, and
+it goes to each asset's responsible party rather than to the notify list. See
+[Faults and the responsible party](#faults-and-the-responsible-party).
 
 - **One digest per person, not one email per item.** Forty overdue PAT items
   produce one message listing forty items. Volume is what makes people filter
@@ -1569,7 +1680,7 @@ spellings work too, and any column can be left out.
 | Category | | Matched by name, created on demand | group |
 | Location | | Matched by name, created on demand | where, site |
 | Condition | | Excellent / Good / Fair / Poor / Out of Service. Default Good | state |
-| Status | | In Stock / In Maintenance / Retired. Default In Stock | |
+| Status | | In Stock / In Maintenance / Faulty / Retired. Default In Stock | |
 | Purchase date | | `2024-03-19`, `19/03/2024`, `19 Mar 2024` | bought, acquired |
 | Purchase cost | | Symbols and commas ignored | cost, price |
 | Current value | | | replacement value |
@@ -1588,7 +1699,9 @@ spellings work too, and any column can be left out.
 | Warranty expires | | Date | warranty |
 
 *Status `On Hire` is rejected with a warning — a hire needs a hirer, so
-check the item out afterwards instead.* Three further columns (`Part of`,
+check the item out afterwards instead. `Faulty` is accepted, and the asset then
+appears on the dashboard tile and the faulty report with "no fault report on
+record" against it, which is honest: nobody filled the form in.* Three further columns (`Part of`,
 `Relationship`, `Added`) appear in exports and are recognised but ignored on
 import, so an exported file re-imports without complaint.
 
@@ -1743,6 +1856,12 @@ audit trail wins over tidiness.
 - **Audit trail** — `activity_log` records who did what, when, from which IP,
   with a field-level before/after diff. Rows survive deletion of the thing they
   describe.
+- **Fault notifications carry asset data**, so recipients are re-checked against
+  `assets.view` at send time. Being named as an asset's responsible party is a
+  routing decision, not a grant — somebody whose role no longer lets them see
+  the register stops receiving the emails, immediate and digest alike. An asset
+  with nobody responsible sends nothing rather than falling back to a default
+  recipient.
 - **CSV exports** — cells beginning `=`, `+`, `-` or `@` are prefixed with an
   apostrophe so a spreadsheet cannot execute asset data as a formula.
 

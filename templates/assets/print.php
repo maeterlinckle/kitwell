@@ -36,6 +36,10 @@ $dash = static fn ($value): string => ($value === null || $value === '') ? '—'
             <div><dt>Location</dt><dd><?= e($dash($asset['location_name'] ?? null)) ?></dd></div>
             <div><dt>Status</dt><dd><?= e($asset['status']) ?></dd></div>
             <div><dt>Condition</dt><dd><?= e($asset['condition_rating']) ?></dd></div>
+            <div>
+                <dt>Responsible party</dt>
+                <dd><?= e(\App\Models\Asset::responsibleLabel($asset, 'Unassigned')) ?></dd>
+            </div>
             <div><dt>Manufacturer</dt><dd><?= e($dash($asset['manufacturer'] ?? null)) ?></dd></div>
             <div><dt>Model</dt><dd><?= e($dash($asset['model'] ?? null)) ?></dd></div>
             <div><dt>Serial number</dt><dd class="mono"><?= e($dash($asset['serial_number'] ?? null)) ?></dd></div>
@@ -49,6 +53,30 @@ $dash = static fn ($value): string => ($value === null || $value === '') ? '—'
             <p class="print-note prewrap"><?= e($asset['description']) ?></p>
         <?php endif; ?>
     </section>
+
+    <?php if ($asset['status'] === 'Faulty'): ?>
+        <?php /* A printed record that says "Faulty" and then explains nothing
+                 is the paperwork equivalent of a shrug. This is the same
+                 information the screen's banner carries, without the photos —
+                 they are on the record itself, and this is a document. */ ?>
+        <section class="print-section">
+            <h2>Reported fault</h2>
+            <?php if ($currentFault === null): ?>
+                <p class="print-note">
+                    This asset is marked faulty, but no fault report has been filed against it.
+                </p>
+            <?php else: ?>
+                <dl class="print-dl">
+                    <div><dt>Urgency</dt><dd><?= e((string) $currentFault['urgency']) ?></dd></div>
+                    <div><dt>Noticed</dt><dd><?= e(format_date((string) $currentFault['faulty_on'])) ?></dd></div>
+                    <div><dt>Reported by</dt><dd><?= e((string) $currentFault['reported_by_name']) ?></dd></div>
+                    <div><dt>Reported on</dt><dd><?= e(format_datetime((string) $currentFault['created_at'])) ?></dd></div>
+                    <div><dt>Photos on file</dt><dd><?= (int) $currentFault['photo_count'] ?></dd></div>
+                </dl>
+                <p class="print-note prewrap"><?= e((string) $currentFault['description']) ?></p>
+            <?php endif; ?>
+        </section>
+    <?php endif; ?>
 
     <section class="print-section">
         <h2>Purchase and value</h2>

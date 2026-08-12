@@ -8,6 +8,7 @@ use App\Core\Auth;
 use App\Core\Database;
 use App\Core\Response;
 use App\Models\ActivityLog;
+use App\Models\FaultReport;
 use App\Models\Hire;
 use App\Models\MaintenanceSchedule;
 use App\Models\PatRecord;
@@ -34,6 +35,10 @@ final class DashboardController extends Controller
                 'on_hire'        => (int) Database::scalar("SELECT COUNT(*) FROM assets WHERE status = 'On Hire'"),
                 'in_maintenance' => (int) Database::scalar("SELECT COUNT(*) FROM assets WHERE status = 'In Maintenance'"),
             ];
+
+            // The same query the faulty-assets report runs, so the tile and the
+            // list behind it cannot disagree about how many there are.
+            $stats['faults'] = FaultReport::summary();
         }
 
         if (Auth::can('maintenance.view')) {

@@ -22,6 +22,7 @@ final class ReportRegistry
      */
     private const REPORTS = [
         AllAssetsReport::class,
+        FaultyAssetsReport::class,
         MaintenanceDueReport::class,
         PatDueReport::class,
         AssetsOnHireReport::class,

@@ -72,7 +72,7 @@ final class AssetImporter extends Importer
             ],
             'status' => [
                 'label' => 'Status',
-                'description' => 'In Stock, On Hire, In Maintenance or Retired. Defaults to In Stock.',
+                'description' => 'In Stock, In Maintenance, Faulty or Retired. Defaults to In Stock.',
                 'example' => 'In Stock',
             ],
             'purchase_date' => [

@@ -14,11 +14,14 @@ use App\Models\Asset;
 use App\Models\AssetManual;
 use App\Models\AssetPhoto;
 use App\Models\Category;
+use App\Models\FaultReport;
 use App\Models\Hire;
 use App\Models\Location;
 use App\Models\MaintenanceLog;
 use App\Models\MaintenanceSchedule;
 use App\Models\PatRecord;
+use App\Models\Team;
+use App\Models\User;
 use App\Services\AssetTagger;
 
 final class AssetController extends Controller
@@ -73,6 +76,7 @@ final class AssetController extends Controller
             'patStatus' => Auth::can('pat.view') ? PatRecord::statusForAsset($assetId) : null,
             'patRecords'=> Auth::can('pat.view') ? PatRecord::forAsset($assetId, 3) : [],
             'openHire'  => Hire::openForAsset($assetId),
+            'currentFault' => $asset['status'] === 'Faulty' ? FaultReport::latestForAsset($assetId) : null,
         ], 'layouts/print');
     }
 
@@ -105,9 +109,16 @@ final class AssetController extends Controller
 
         $assetId = (int) $asset['id'];
 
+        // Only looked up when it is going to be shown. The banner is the whole
+        // reason for the query, and an asset that is not faulty has no banner.
+        $currentFault = $asset['status'] === 'Faulty' ? FaultReport::latestForAsset($assetId) : null;
+
         $this->view('assets/show', [
             'pageTitle'  => $asset['asset_tag'] . ' · ' . $asset['name'],
             'asset'      => $asset,
+            'currentFault'       => $currentFault,
+            'currentFaultPhotos' => $currentFault === null ? [] : FaultReport::photos((int) $currentFault['id']),
+            'faultCount'         => FaultReport::countForAsset($assetId),
             'children'   => Asset::children($assetId),
             'manuals'    => AssetManual::forAsset($assetId),
             // The 12 most recent photos inline; the rest on the history page.
@@ -137,6 +148,8 @@ final class AssetController extends Controller
             'categories'  => Category::all(true),
             'locations'   => Location::forSelect(),
             'parents'     => Asset::parentOptions(),
+            'responsibleUsers' => Asset::responsibleUsers(),
+            'responsibleTeams' => Asset::responsibleTeams(),
         ]);
     }
 
@@ -176,6 +189,8 @@ final class AssetController extends Controller
             'categories' => Category::all(true),
             'locations'  => Location::forSelect(),
             'parents'    => Asset::parentOptions((int) $asset['id']),
+            'responsibleUsers' => Asset::responsibleUsers(),
+            'responsibleTeams' => Asset::responsibleTeams(),
         ]);
     }
 
@@ -332,6 +347,7 @@ final class AssetController extends Controller
             'pat_interval_months'   => 'integer|min_value:1|max_value:120',
             'parent_asset_id'       => 'integer',
             'relationship_type'     => 'in:' . implode(',', Asset::RELATIONSHIPS),
+            'responsible'           => 'max:20',
             'notes'                 => 'max:5000',
         ], [
             'asset_tag'             => 'Asset tag',
@@ -343,6 +359,7 @@ final class AssetController extends Controller
             'appliance_class'       => 'Appliance class',
             'load_rating_va'        => 'Load rating (VA)',
             'pat_interval_months'   => 'PAT interval',
+            'responsible'           => 'Responsible party',
         ], $redirect);
 
         $tag = (string) $data['asset_tag'];
@@ -375,6 +392,19 @@ final class AssetController extends Controller
             }
         }
 
+        // One control on the form, two mutually exclusive columns in the
+        // database. An unrecognised or stale value parses as "nobody" rather
+        // than as a silently different person — see App\Models\Assignment.
+        [$responsibleKind, $responsibleId] = Asset::parseResponsible((string) $data['responsible']);
+
+        if ($responsibleKind === 'user' && User::find($responsibleId) === null) {
+            $this->failValidation(['responsible' => 'That person no longer has an account.'], $redirect);
+        }
+
+        if ($responsibleKind === 'team' && Team::find($responsibleId) === null) {
+            $this->failValidation(['responsible' => 'That team no longer exists.'], $redirect);
+        }
+
         $requiresPat = Request::boolean('requires_pat');
         $hasFuse     = Request::boolean('has_fuse');
 
@@ -402,6 +432,8 @@ final class AssetController extends Controller
             'description'           => self::nullIfBlank($data['description']),
             'category_id'           => (int) $data['category_id'] > 0 ? (int) $data['category_id'] : null,
             'location_id'           => (int) $data['location_id'] > 0 ? (int) $data['location_id'] : null,
+            'responsible_user_id'   => $responsibleKind === 'user' ? $responsibleId : null,
+            'responsible_team_id'   => $responsibleKind === 'team' ? $responsibleId : null,
             'condition_rating'      => $data['condition_rating'],
             'status'                => $data['status'],
             'purchase_date'         => self::nullIfBlank($data['purchase_date']),

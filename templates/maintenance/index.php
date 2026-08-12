@@ -239,7 +239,7 @@ $hasFilters = ($filters['q'] ?? '') !== '' || !empty($filters['status']) || !emp
                         <?php endif; ?>
                     </td>
                     <td class="nowrap"><?= e(MaintenanceSchedule::describeFrequency($schedule)) ?></td>
-                    <td><?= partial('partials/assignee', ['schedule' => $schedule]) ?></td>
+                    <td><?= partial('partials/assignee', MaintenanceSchedule::assigneeParts($schedule)) ?></td>
                     <td class="nowrap">
                         <?= e(format_date($schedule['last_completed_date'])) ?>
                         <?php if ((int) $schedule['completion_count'] > 0): ?>

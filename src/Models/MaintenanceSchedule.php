@@ -461,59 +461,55 @@ final class MaintenanceSchedule
     /** @return array<int,array<string,mixed>> */
     public static function assignableUsers(): array
     {
-        return Database::select(
-            'SELECT id, name FROM users WHERE is_active = 1 ORDER BY name'
-        );
+        return Assignment::assignableUsers();
     }
 
     /** @return array<int,array<string,mixed>> */
     public static function assignableTeams(): array
     {
-        return Team::assignable();
+        return Assignment::assignableTeams();
     }
 
     // -- Assignment ---------------------------------------------------------
     //
     // A schedule is assigned to one person, or to one team, or to nobody. The
     // form carries that as a single value so the two cannot contradict each
-    // other, and these three helpers are the only places that know its shape.
+    // other, and these three methods are the only place in the maintenance code
+    // that knows its shape. The shape itself lives in App\Models\Assignment,
+    // which an asset's responsible party uses too — see the note there about
+    // why two near-identical parsers is the wrong answer.
 
     /**
      * Split "user:7" / "team:2" into its parts.
-     *
-     * Anything unrecognised comes back as [null, 0], which every caller treats
-     * as "unassigned" — a stale or hand-edited value must not become a filter
-     * on id 0 or, worse, a silently different assignment.
      *
      * @return array{0:?string,1:int}
      */
     public static function parseAssignee(string $value): array
     {
-        if (preg_match('/^(user|team):(\d+)$/', trim($value), $m) !== 1) {
-            return [null, 0];
-        }
-
-        $id = (int) $m[2];
-
-        return $id > 0 ? [$m[1], $id] : [null, 0];
+        return Assignment::parse($value);
     }
 
     /** The form value for a schedule as it stands, for re-selecting the option. */
     public static function assigneeValue(?array $schedule): string
     {
-        if ($schedule === null) {
-            return '';
-        }
+        return Assignment::value($schedule, 'assigned_to_user_id', 'assigned_to_team_id');
+    }
 
-        if (!empty($schedule['assigned_to_team_id'])) {
-            return 'team:' . (int) $schedule['assigned_to_team_id'];
-        }
-
-        if (!empty($schedule['assigned_to_user_id'])) {
-            return 'user:' . (int) $schedule['assigned_to_user_id'];
-        }
-
-        return '';
+    /**
+     * The three values partials/assignee renders, named as that partial wants
+     * them. Keeps the schedule's column names in this class rather than spread
+     * across every template that shows a badge.
+     *
+     * @param array<string,mixed> $schedule
+     * @return array<string,mixed>
+     */
+    public static function assigneeParts(array $schedule): array
+    {
+        return [
+            'name'         => $schedule['assigned_to_name'] ?? null,
+            'kind'         => $schedule['assigned_to_kind'] ?? null,
+            'teamIsActive' => $schedule['assigned_team_is_active'] ?? null,
+        ];
     }
 
     /**
@@ -527,12 +523,10 @@ final class MaintenanceSchedule
      */
     public static function assigneeLabel(array $schedule, string $none = 'Nobody in particular'): string
     {
-        $name = trim((string) ($schedule['assigned_to_name'] ?? ''));
-
-        if ($name === '') {
-            return $none;
-        }
-
-        return ($schedule['assigned_to_kind'] ?? '') === 'team' ? $name . ' (team)' : $name;
+        return Assignment::label(
+            $schedule['assigned_to_name'] ?? null,
+            $schedule['assigned_to_kind'] ?? null,
+            $none
+        );
     }
 }

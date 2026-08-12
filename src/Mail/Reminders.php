@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Models\FaultReport;
 use App\Models\Hire;
 use App\Models\Hirer;
 use App\Models\MaintenanceSchedule;
@@ -11,6 +12,7 @@ use App\Models\PatRecord;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\FaultNotifier;
 
 /**
  * The scheduled reminder run.
@@ -44,14 +46,41 @@ final class Reminders
         'pat'         => 'PAT testing',
         'maintenance' => 'Maintenance',
         'hire'        => 'Hire returns',
+        'faulty'      => 'Faulty equipment',
     ];
+
+    /**
+     * Types that count items against a date, and so have a "due soon" window.
+     *
+     * Faulty equipment does not: a fault is open or it is not, and something
+     * broken three months ago deserves more attention than something broken
+     * yesterday, not less. It gets its own repeat interval instead — see
+     * repeatDays() — which is what "how often" means for a list with no
+     * deadline on it.
+     *
+     * @var array<int,string>
+     */
+    public const WINDOWED_TYPES = ['pat', 'maintenance', 'hire'];
 
     /**
      * How long a sent reminder suppresses the next one for the same item.
      * 1 means "every day the cron runs".
+     *
+     * A type may override the shared figure with its own
+     * `reminder_<type>_repeat_days`; 0 there means "use the shared one", the
+     * same convention the day windows follow. A Critical fault may be worth
+     * chasing daily while PAT reminders stay weekly.
      */
-    public static function repeatDays(): int
+    public static function repeatDays(?string $type = null): int
     {
+        if ($type !== null) {
+            $own = Setting::int('reminder_' . $type . '_repeat_days', 0);
+
+            if ($own > 0) {
+                return max(1, min(90, $own));
+            }
+        }
+
         return max(1, min(90, Setting::int('reminder_repeat_days', 7)));
     }
 
@@ -64,6 +93,12 @@ final class Reminders
      */
     public static function windowDays(string $type): int
     {
+        // A type with no deadline has no window. Returning a number here would
+        // put a figure on screen that means nothing and cannot be acted on.
+        if (!in_array($type, self::WINDOWED_TYPES, true)) {
+            return 0;
+        }
+
         $configured = Setting::int('reminder_' . $type . '_days', 0);
 
         if ($configured > 0) {
@@ -133,6 +168,7 @@ final class Reminders
             $reports[$type] = match ($type) {
                 'pat'         => self::runPat($dryRun, $force),
                 'maintenance' => self::runMaintenance($dryRun, $force),
+                'faulty'      => self::runFaulty($dryRun, $force),
                 default       => self::runHire($dryRun, $force),
             };
         }
@@ -337,6 +373,131 @@ final class Reminders
             }
 
             self::deliver($templateKey, 'maintenance_schedule', $templateKey, $items, $deliveries, $extra, $report, $dryRun, $force);
+        }
+
+        return $report;
+    }
+
+    // -- Faulty equipment ----------------------------------------------------
+
+    /**
+     * The round-up of everything still marked faulty.
+     *
+     * Different from the other three in two ways worth stating.
+     *
+     * It does not use the notify list. The recipients are the assets'
+     * responsible parties and nobody else — that is what the field is for, and
+     * a digest of "every broken thing in the workshop" sent to the same four
+     * administrators every morning is precisely the message people build a
+     * filter rule for. An asset nobody is responsible for is in nobody's
+     * digest; App\Services\FaultNotifier says why there is no fallback.
+     *
+     * And it is one email per person, not per asset: somebody responsible for
+     * four faulty machines — two by name, two through a team — gets a single
+     * message listing all four. The grouping is FaultNotifier's, shared with
+     * the immediate notification so the two always agree about the recipient.
+     *
+     * @return array<string,mixed>
+     */
+    private static function runFaulty(bool $dryRun, bool $force): array
+    {
+        $report = self::blankReport('faulty');
+
+        if (!self::isEnabled('faulty')) {
+            return $report;
+        }
+
+        $report['enabled'] = true;
+
+        $groups = FaultNotifier::digestGroups();
+        $total  = 0;
+
+        foreach ($groups as $group) {
+            $total += count($group['items']);
+        }
+
+        // Faults have no due date, so they are all "overdue" in the sense the
+        // other reports use: something to act on now. Counted under
+        // overdue_items so the run summary reads consistently.
+        $report['overdue_items'] = $total;
+        $report['recipients']    = count($groups);
+
+        if ($groups === []) {
+            $report['note'] = FaultReport::summary()['total'] > 0
+                ? 'Assets are faulty, but nobody who can see them is set as responsible for any of them.'
+                : 'Nothing is marked faulty.';
+
+            return $report;
+        }
+
+        $repeatDays = self::repeatDays('faulty');
+
+        foreach ($groups as $group) {
+            $user  = $group['user'];
+            $email = trim((string) $user['email']);
+
+            if ($email === '') {
+                $report['no_address']++;
+                continue;
+            }
+
+            $assetIds = array_map(static fn (array $i): int => (int) $i['asset_id'], $group['items']);
+
+            $suppressed = $force
+                ? []
+                : EmailReminder::suppressed('faulty_open', 'asset', $assetIds, $email, $repeatDays);
+
+            $fresh = array_values(array_filter(
+                $group['items'],
+                static fn (array $i): bool => !isset($suppressed[(int) $i['asset_id']])
+            ));
+
+            $report['suppressed'] += count($group['items']) - count($fresh);
+
+            if ($fresh === []) {
+                continue;
+            }
+
+            // The whole of their list, not only the part that is "fresh". A
+            // digest that silently omits the machine they were told about
+            // yesterday reads as though it has been fixed. The suppression
+            // decides *whether* to send, not what the message contains.
+            $critical = count(array_filter(
+                $group['items'],
+                static fn (array $i): bool => (string) ($i['urgency'] ?? '') === 'Critical'
+            ));
+
+            $fields = [
+                'count'          => (string) count($group['items']),
+                'critical_count' => (string) $critical,
+                'items'          => implode("\n", array_map(
+                    static fn (array $i): string => FaultNotifier::digestLine($i),
+                    $group['items']
+                )),
+            ];
+
+            if ($dryRun) {
+                $report['would_send']++;
+                continue;
+            }
+
+            $ok = Mailer::sendTemplate(
+                'faulty_digest',
+                $email,
+                (string) $user['name'],
+                $fields,
+                ['trigger' => 'system', 'entity_type' => 'asset']
+            );
+
+            if ($ok) {
+                // Marked against every asset in the message, not just the fresh
+                // ones, so the repeat window is measured from when the person
+                // was last told about each item.
+                EmailReminder::markSent('faulty_open', 'asset', $assetIds, $email);
+                $report['sent']++;
+            } else {
+                $report['failed']++;
+            }
         }
 
         return $report;

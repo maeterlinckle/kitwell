@@ -1116,7 +1116,16 @@ textarea.input { min-height: 120px; resize: vertical; }
 .status-in-stock       { background: var(--ok-soft); color: var(--ok); }
 .status-on-hire        { background: var(--info-soft); color: var(--info); }
 .status-in-maintenance { background: var(--warn-soft); color: var(--warn); }
+.status-faulty         { background: var(--danger-soft); color: var(--danger); font-weight: 700; }
 .status-retired        { background: var(--bg-sunken); color: var(--text-muted); }
+
+/* Urgency, on a fault report. Deliberately not the same palette as condition:
+   a Critical fault on an item in Good condition is an ordinary thing to see,
+   and two badges the same colour would read as one fact stated twice. */
+.urgency-critical { background: var(--danger-soft); color: var(--danger); font-weight: 700; }
+.urgency-high     { background: var(--danger-soft); color: var(--danger); }
+.urgency-medium   { background: var(--warn-soft); color: var(--warn); }
+.urgency-low      { background: var(--bg-sunken); color: var(--text-muted); }
 
 .condition-excellent      { background: var(--ok-soft); color: var(--ok); }
 .condition-good           { background: var(--ok-soft); color: var(--ok); }
@@ -1472,6 +1481,58 @@ tr.preview-warning td { background: var(--warn-soft); }
 .hire-banner-headline { font-size: 1.1rem; font-weight: 700; }
 .hire-banner-detail { font-size: 0.9rem; }
 .hire-banner-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* --- Faults --------------------------------------------------------------- */
+
+/* Radio buttons that each need a line of explanation — the urgency scale.
+   A <select> would fit in less room, but the whole difficulty of urgency is
+   that people disagree about what the words mean, so the descriptions have to
+   be visible at the moment of choosing rather than hidden behind a click. */
+.radio-stack { display: grid; gap: var(--space-2); }
+.radio-stack .checkbox { align-items: flex-start; }
+.radio-stack .field-hint { display: block; margin: 2px 0 0; }
+
+/* The current fault, across the top of the asset page. Shaped like the hire
+   banner deliberately: both answer "what is going on with this thing right
+   now?", and a reader should not have to learn two layouts for that. */
+.fault-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+    border: 1px solid var(--border);
+    border-left: 5px solid var(--danger);
+    border-radius: var(--radius);
+    background: var(--danger-soft);
+}
+.fault-banner-main { display: grid; gap: var(--space-2); min-width: 0; flex: 1 1 22rem; }
+.fault-banner-label {
+    font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em;
+    text-transform: uppercase; opacity: 0.75;
+}
+.fault-banner-description { font-size: 1.05rem; font-weight: 600; white-space: pre-wrap; }
+.fault-banner-detail { font-size: 0.9rem; }
+.fault-banner-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* A few small thumbnails beside the description, not a gallery. The evidence
+   is worth a glance from here; the full-size versions are one tap away. */
+.fault-thumbs { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.fault-thumbs img {
+    width: 72px; height: 72px;
+    object-fit: cover;
+    display: block;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-sunken);
+}
+
+/* One fault report in the history list. */
+.fault-entry { display: grid; gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.fault-entry:first-of-type { border-top: 0; padding-top: 0; }
+.fault-entry-text { white-space: pre-wrap; margin: 0; }
 
 .hire-summary {
     display: grid;

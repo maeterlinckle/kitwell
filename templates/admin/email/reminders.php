@@ -1,4 +1,7 @@
 <?php
+
+use App\Mail\Reminders;
+
 /**
  * @var array<string,string|null> $settings
  * @var array<string,string> $types
@@ -17,12 +20,14 @@ $typeHints = [
     'pat'         => 'Assets whose PAT retest is coming up or has passed. Uses the same status rules as the PAT register and the “Assets needing PAT” report.',
     'maintenance' => 'Maintenance schedules approaching or past their next due date.',
     'hire'        => 'Equipment approaching or past its due-back date.',
+    'faulty'      => 'Everything still marked faulty. Sent to each asset’s responsible party rather than to the notify list below — one message each, listing all of theirs.',
 ];
 
 $typePermission = [
     'pat'         => 'pat.view',
     'maintenance' => 'maintenance.view',
     'hire'        => 'hires.view',
+    'faulty'      => 'assets.view',
 ];
 ?>
 <div class="page-head">
@@ -61,21 +66,59 @@ $typePermission = [
                 </label>
             </div>
 
-            <div class="field">
-                <label class="label" for="reminder_<?= e($type) ?>_days">Remind this many days before due</label>
-                <input class="input<?= isset($errors['reminder_' . $type . '_days']) ? ' has-error' : '' ?>" type="number"
-                       id="reminder_<?= e($type) ?>_days" name="reminder_<?= e($type) ?>_days"
-                       min="0" max="365" step="1"
-                       value="<?= e(old($old, 'reminder_' . $type . '_days', $setting('reminder_' . $type . '_days', '0'))) ?>">
-                <p class="field-hint">
-                    Leave at <strong>0</strong> to use the same window the register and dashboard already
-                    show — currently <?= e($window) ?> day(s). Set a number to use a different
-                    one for reminders only.
-                </p>
-                <?php if (isset($errors['reminder_' . $type . '_days'])): ?>
-                    <p class="field-error"><?= e($errors['reminder_' . $type . '_days']) ?></p>
-                <?php endif; ?>
-            </div>
+            <?php if (in_array($type, Reminders::WINDOWED_TYPES, true)): ?>
+                <div class="field">
+                    <label class="label" for="reminder_<?= e($type) ?>_days">Remind this many days before due</label>
+                    <input class="input<?= isset($errors['reminder_' . $type . '_days']) ? ' has-error' : '' ?>" type="number"
+                           id="reminder_<?= e($type) ?>_days" name="reminder_<?= e($type) ?>_days"
+                           min="0" max="365" step="1"
+                           value="<?= e(old($old, 'reminder_' . $type . '_days', $setting('reminder_' . $type . '_days', '0'))) ?>">
+                    <p class="field-hint">
+                        Leave at <strong>0</strong> to use the same window the register and dashboard already
+                        show — currently <?= e($window) ?> day(s). Set a number to use a different
+                        one for reminders only.
+                    </p>
+                    <?php if (isset($errors['reminder_' . $type . '_days'])): ?>
+                        <p class="field-error"><?= e($errors['reminder_' . $type . '_days']) ?></p>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($type === 'faulty'): ?>
+                <?php /* No "days before due" field: a fault has no due date, so
+                         there is nothing to count down to. What it has instead
+                         is how often to mention it again, which is the same
+                         question the shared repeat setting answers for the
+                         others — this one just lets faults be chased harder. */ ?>
+                <div class="field">
+                    <label class="label" for="reminder_faulty_repeat_days">Repeat this digest every (days)</label>
+                    <input class="input<?= isset($errors['reminder_faulty_repeat_days']) ? ' has-error' : '' ?>" type="number"
+                           id="reminder_faulty_repeat_days" name="reminder_faulty_repeat_days"
+                           min="0" max="90" step="1"
+                           value="<?= e(old($old, 'reminder_faulty_repeat_days', $setting('reminder_faulty_repeat_days', '0'))) ?>">
+                    <p class="field-hint">
+                        Leave at <strong>0</strong> to use the shared repeat setting below. A fault has no
+                        due date to count down to — it is open until somebody changes the asset's status —
+                        so this is simply how often the person responsible is reminded that it still is.
+                    </p>
+                    <?php if (isset($errors['reminder_faulty_repeat_days'])): ?>
+                        <p class="field-error"><?= e($errors['reminder_faulty_repeat_days']) ?></p>
+                    <?php endif; ?>
+                </div>
+
+                <div class="field">
+                    <label class="checkbox">
+                        <input type="checkbox" name="fault_notify_immediately" value="1"
+                            <?= $setting('fault_notify_immediately', '1') === '1' ? 'checked' : '' ?>>
+                        <span>Also email the moment a fault is reported</span>
+                    </label>
+                    <p class="field-hint">
+                        Sent straight away rather than waiting for the nightly run, using the
+                        <a href="<?= e(url('/admin/email/templates/asset_faulty')) ?>">“Asset reported faulty”</a>
+                        template. An asset with no responsible party emails nobody, either way.
+                    </p>
+                </div>
+            <?php endif; ?>
 
             <?php if ($type === 'maintenance'): ?>
                 <div class="field">
@@ -140,8 +183,15 @@ $typePermission = [
     <div class="card">
         <h2>Who to notify</h2>
         <p class="muted">
-            Staff who should receive the reminder digests. Each person only ever receives the kinds of
-            reminder their role lets them see — ticking a box here does not grant access to anything.
+            Staff who should receive the PAT, maintenance and hire digests. Each person only ever
+            receives the kinds of reminder their role lets them see — ticking a box here does not
+            grant access to anything.
+        </p>
+        <p class="muted">
+            <strong>Faulty equipment is not on this list.</strong> That digest goes to each asset's
+            responsible party instead, set on the asset itself — because a daily round-up of every
+            broken thing in the workshop, sent to the same few people, is the message everyone
+            eventually filters away.
         </p>
 
         <?php if ($candidates === []): ?>

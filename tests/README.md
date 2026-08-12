@@ -74,6 +74,26 @@ prints doubles as the written specification of who can see what.
 It expects the demo accounts from `bin/seed.php`, plus a hirer login; adjust
 the `$accounts` array at the top if your test data differs.
 
+```bash
+php tests/fault-flow.php
+```
+
+`fault-flow.php` drives the whole fault feature over real HTTP: setting a
+responsible party from the asset edit form as a person and as a team, the report
+form refusing a submission with no photo or a future date *before* writing
+anything, a complete report creating its row and its photo and moving the
+asset's status, the immediate email reaching the named person or every member of
+the named team, an unassigned asset sending nothing without erroring, a second
+report being kept as history, the dashboard figure and the report agreeing with
+the database, and the digest arriving as one consolidated message per person
+rather than one per asset.
+
+> **This one writes too**, for the same reason — and it sends. The email
+> assertions need a mail catcher on `127.0.0.1:2525` with `mail_host` pointed at
+> it and `mail_encryption` set to `none`; without one they are skipped and say
+> so rather than passing quietly. It pins the settings it depends on and puts
+> them back at the end.
+
 ## The barcode decoder
 
 ```

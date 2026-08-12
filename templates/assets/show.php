@@ -59,6 +59,12 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <a class="btn" href="<?= e(url('/assets/' . $id . '/edit')) ?>">Edit</a>
         <?php endif; ?>
         <a class="btn" href="<?= e(url('/assets/' . $id . '/print')) ?>">Print</a>
+        <?php if (can('faults.report') && !$retired): ?>
+            <?php /* Right of Print, as asked. Styled as a danger action because
+                     it changes the asset's status and takes it out of service —
+                     it should not look like one more way to view the record. */ ?>
+            <a class="btn btn-danger" href="<?= e(url('/assets/' . $id . '/faults/report')) ?>">Mark as faulty</a>
+        <?php endif; ?>
         <a class="btn" href="<?= e(url('/assets/' . $id . '/label')) ?>">Print label</a>
         <?php if (can('assets.create')): ?>
             <a class="btn" href="<?= e(url('/assets/' . $id . '/copy')) ?>">Copy</a>
@@ -68,6 +74,13 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($asset['status'] === 'Faulty'): ?>
+    <?php /* First on the page, above the hire banner and the PAT warning. An
+             item that is broken is the most important thing about it, and the
+             others are read differently once you know. */ ?>
+    <?= partial('partials/fault-banner', ['asset' => $asset, 'fault' => $currentFault, 'photos' => $currentFaultPhotos]) ?>
+<?php endif; ?>
 
 <?php if ($openHire !== null && can('hires.view')): ?>
     <div class="hire-banner <?= $openHire['effective_status'] === 'Overdue' ? 'is-overdue' : '' ?>">
@@ -134,6 +147,10 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                 <?php endif; ?>
                 <div><dt>Category</dt><dd><?= e($asset['category_name'] ?? '—') ?></dd></div>
                 <div><dt>Location</dt><dd><?= e($location !== '' ? $location : '—') ?></dd></div>
+                <div>
+                    <dt>Responsible party</dt>
+                    <dd><?= partial('partials/assignee', \App\Models\Asset::responsibleParts($asset) + ['none' => 'Unassigned']) ?></dd>
+                </div>
                 <div><dt>Serial number</dt><dd class="mono"><?= e($asset['serial_number'] ?? '—') ?></dd></div>
                 <div><dt>Manufacturer</dt><dd><?= e($asset['manufacturer'] ?? '—') ?></dd></div>
                 <div><dt>Model</dt><dd><?= e($asset['model'] ?? '—') ?></dd></div>
@@ -284,7 +301,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                                     <span class="cell-sub muted">
                                         <?= e(\App\Models\MaintenanceSchedule::describeFrequency($schedule)) ?>
                                         <?php if (!empty($schedule['assigned_to_name'])): ?>
-                                            · <?= partial('partials/assignee', ['schedule' => $schedule]) ?>
+                                            · <?= partial('partials/assignee', \App\Models\MaintenanceSchedule::assigneeParts($schedule)) ?>
                                         <?php endif; ?>
                                     </span>
                                 </div>
@@ -486,6 +503,26 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <?php endif; ?>
             <a class="btn btn-block" href="<?= e(url('/assets/' . $id . '/label')) ?>">Print label</a>
         </div>
+
+        <?php if ($faultCount > 0): ?>
+            <?php /* Only once something has gone wrong. An asset that has never
+                     been reported faulty needs no card saying so — and the
+                     count is the point: four reports in a year is an argument
+                     for replacing the thing. */ ?>
+            <div class="card">
+                <div class="card-head">
+                    <h2>Faults <span class="count-pill"><?= (int) $faultCount ?></span></h2>
+                    <a class="btn btn-sm" href="<?= e(url('/assets/' . $id . '/faults')) ?>">History</a>
+                </div>
+                <p class="muted">
+                    <?= $faultCount === 1 ? 'One fault has' : (int) $faultCount . ' faults have' ?> been reported
+                    on this asset.
+                    <?php if ($asset['status'] !== 'Faulty'): ?>
+                        It is not marked faulty now.
+                    <?php endif; ?>
+                </p>
+            </div>
+        <?php endif; ?>
 
         <div class="card">
             <h2>Record</h2>
