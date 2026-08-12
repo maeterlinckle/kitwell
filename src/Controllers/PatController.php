@@ -215,38 +215,17 @@ final class PatController extends Controller
         Response::redirect('/assets/' . $assetId . '/pat');
     }
 
-    /** One-click flip of the "requires PAT" flag from the asset page. */
-    public function toggleRequirement(string $assetId): void
-    {
-        $id    = (int) $assetId;
-        $asset = Asset::find($id);
-
-        if ($asset === null) {
-            $this->notFound();
-        }
-
-        $required = (int) $asset['requires_pat'] !== 1;
-
-        Asset::update($id, [
-            'requires_pat' => $required ? 1 : 0,
-            'updated_by'   => Auth::id(),
-        ]);
-
-        ActivityLog::record(
-            'updated',
-            'asset',
-            $id,
-            $required
-                ? 'Flagged ' . $asset['asset_tag'] . ' as requiring PAT'
-                : 'Removed the PAT requirement from ' . $asset['asset_tag']
-        );
-
-        Flash::success($required
-            ? $asset['asset_tag'] . ' now requires PAT testing.'
-            : $asset['asset_tag'] . ' no longer requires PAT testing. Any existing test history is kept.');
-
-        Response::back('/assets/' . $id);
-    }
+    /*
+     * There was a toggleRequirement() here: a one-click flip of `requires_pat`
+     * posted from the PAT warning banner. It has gone, along with its route.
+     *
+     * The banner only appears when a test is overdue, failed or has never
+     * happened, and a button that made the warning disappear was the wrong
+     * answer offered at the moment somebody most wants an easy one. Whether an
+     * asset needs testing is a fact about the asset, so it is edited where its
+     * other facts are — the tick box on the asset form, behind the same
+     * `assets.edit` permission, writing the same activity-log entry.
+     */
 
     /**
      * A failed test should not leave the item quietly available for use.

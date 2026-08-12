@@ -666,6 +666,20 @@
     var openTimer = null;
     var closeTimer = null;
 
+    // How long after a hover-open a click on the *summary* is ignored.
+    //
+    // The bug this fixes: a <details> toggles natively when its <summary> is
+    // clicked. Hover opens the panel, the hand keeps moving, and the click that
+    // was aimed at an item inside lands on the summary on the way past — which
+    // the browser reads as "close this", so the menu shuts a frame before the
+    // pointer arrives. The user sees a menu that refuses to be clicked.
+    //
+    // Two seconds, because that is the width of a natural hover-then-click
+    // motion including a moment's reading. It only ever suppresses a click on
+    // the summary itself; every link inside the panel is untouched and works the
+    // instant the panel appears, which is the whole point of opening it.
+    var HOVER_CLICK_GRACE_MS = 2000;
+
     function hoverEnabled() {
         return desktop.matches && hoverCapable.matches;
     }
@@ -676,6 +690,9 @@
     }
 
     Array.prototype.forEach.call(groups, function (group) {
+        // When this group was last opened by hover rather than by a click.
+        var hoverOpenedAt = 0;
+
         group.addEventListener('mouseenter', function () {
             if (!hoverEnabled()) return;
 
@@ -689,7 +706,42 @@
                 // mattering, and leaving it on would hide the panel by CSS.
                 group.removeAttribute('data-nav-autoopen');
                 group.open = true;
+                hoverOpenedAt = Date.now();
             }, 140);
+        });
+
+        // Swallow a click on the summary that is really the tail of the hover
+        // that opened it.
+        //
+        // preventDefault() on a <summary> click cancels the native toggle and
+        // nothing else, so the panel simply stays open and the pointer carries
+        // on to whatever it was aiming at.
+        //
+        // Three guards, each earning its place:
+        //   - `group.open` — a click that would *open* the menu is never
+        //     suppressed, so the keyboard and click-only paths are untouched;
+        //   - `event.detail > 0` — Enter or Space on a focused summary arrives
+        //     as a click with detail 0, and a keyboard user asking for it
+        //     closed means it;
+        //   - the grace window itself, after which the summary goes back to
+        //     being an ordinary toggle so the menu can still be dismissed.
+        var summary = group.querySelector('summary');
+
+        if (summary) {
+            summary.addEventListener('click', function (event) {
+                if (!hoverEnabled() || !group.open) return;
+                if (event.detail === 0) return;
+                if (Date.now() - hoverOpenedAt >= HOVER_CLICK_GRACE_MS) return;
+
+                event.preventDefault();
+            });
+        }
+
+        // A close, however it happened, ends the grace period — otherwise a
+        // stale timestamp could swallow a click on a menu the user opened
+        // deliberately seconds later.
+        group.addEventListener('toggle', function () {
+            if (!group.open) hoverOpenedAt = 0;
         });
 
         group.addEventListener('mouseleave', function () {

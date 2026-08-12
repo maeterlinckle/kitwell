@@ -16,7 +16,10 @@ use App\Controllers\Admin\RoleController;
 use App\Controllers\Admin\EmailController;
 use App\Controllers\Admin\SettingsController;
 use App\Controllers\Admin\TeamController;
+use App\Controllers\Admin\ApiKeyController;
 use App\Controllers\Admin\UserController;
+use App\Controllers\Api\MetaController;
+use App\Controllers\Api\ResourceController;
 use App\Controllers\CalendarController;
 use App\Controllers\AssetController;
 use App\Controllers\AssetCopyController;
@@ -26,6 +29,7 @@ use App\Controllers\FaultController;
 use App\Controllers\ImportController;
 use App\Controllers\AccountController;
 use App\Controllers\AuthController;
+use App\Controllers\CustomReportController;
 use App\Controllers\BrandingController;
 use App\Controllers\HirerController;
 use App\Controllers\DashboardController;
@@ -216,9 +220,11 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/pat/{id:\d+}',          [PatController::class, 'update'],  ['can:pat.manage', 'csrf']);
     $router->post('/pat/{id:\d+}/delete',   [PatController::class, 'destroy'], ['can:pat.delete', 'csrf']);
 
-    // Per-asset history, and the requires-PAT toggle.
+    // Per-asset history. There is no requires-PAT toggle route any more: the
+    // only thing that posted to it was a button on the warning banner, and a
+    // warning that offers to switch itself off is the wrong control. The tick
+    // box on the asset edit form does the same job, with the same permission.
     $router->get('/assets/{assetId:\d+}/pat', [PatController::class, 'history'], ['can:pat.view']);
-    $router->post('/assets/{assetId:\d+}/pat/toggle', [PatController::class, 'toggleRequirement'], ['can:assets.edit', 'csrf']);
 });
 
 // --- Hires and hirers ------------------------------------------------------
@@ -272,7 +278,18 @@ $router->group(['auth'], static function (Router $router): void {
 // --- Reports --------------------------------------------------------------
 // Two routes serve every report; the registry supplies the rest.
 $router->group(['auth'], static function (Router $router): void {
-    $router->get('/reports',                 [ReportController::class, 'index'], ['can:reports.view'], 'reports');
+    $router->get('/reports', [ReportController::class, 'index'], ['can:reports.view'], 'reports');
+
+    // Defining a saved report. Registered before the {key} route, as everywhere
+    // — though these could not be swallowed by it in any case, since {key}
+    // matches no slashes. Opening a saved report needs no route of its own: it
+    // arrives in the registry as an ordinary Report and goes through 'show'.
+    $router->get('/reports/custom/create',            [CustomReportController::class, 'create'],  ['can:reports.manage']);
+    $router->post('/reports/custom',                  [CustomReportController::class, 'store'],   ['can:reports.manage', 'csrf']);
+    $router->get('/reports/custom/{id:\d+}/edit',     [CustomReportController::class, 'edit'],    ['can:reports.manage']);
+    $router->post('/reports/custom/{id:\d+}',         [CustomReportController::class, 'update'],  ['can:reports.manage', 'csrf']);
+    $router->post('/reports/custom/{id:\d+}/delete',  [CustomReportController::class, 'destroy'], ['can:reports.manage', 'csrf']);
+
     $router->get('/reports/{key:[a-z0-9-]+}',[ReportController::class, 'show'],  ['can:reports.view']);
 });
 
@@ -285,6 +302,32 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/my-hires/{hireId:\d+}/photo', [MyHiresController::class, 'photo']);
     $router->get('/my-hires/{hireId:\d+}/manuals/{manualId:\d+}', [MyHiresController::class, 'manual']);
 });
+
+// --- REST API -------------------------------------------------------------
+//
+// Outside every middleware group on purpose. `auth` redirects to a sign-in page,
+// which is the wrong answer to a request carrying an API key; `csrf` protects a
+// browser form, which this is not. App\Api\Gate does the equivalent work and
+// answers in JSON — and the writes it allows are gated on a key, never on a
+// cookie, so there is nothing for a cross-site form post to ride on.
+//
+// Every path is served by one controller pair: the generic ResourceController
+// and the registry behind it. Adding a resource adds no route.
+$router->get('/api/v1',              [MetaController::class, 'index']);
+$router->get('/api/v1/openapi.json', [MetaController::class, 'openapi']);
+
+// The readable version, for a person in a browser. A normal page, so it is in
+// the `auth` group rather than the API's own authentication.
+$router->group(['auth'], static function (Router $router): void {
+    $router->get('/api/docs', [MetaController::class, 'docs'], [], 'api.docs');
+});
+
+$router->get('/api/v1/{resource:[a-z0-9-]+}',              [ResourceController::class, 'index']);
+$router->post('/api/v1/{resource:[a-z0-9-]+}',             [ResourceController::class, 'store']);
+$router->get('/api/v1/{resource:[a-z0-9-]+}/{id:\d+}',     [ResourceController::class, 'show']);
+$router->patch('/api/v1/{resource:[a-z0-9-]+}/{id:\d+}',   [ResourceController::class, 'update']);
+$router->put('/api/v1/{resource:[a-z0-9-]+}/{id:\d+}',     [ResourceController::class, 'update']);
+$router->delete('/api/v1/{resource:[a-z0-9-]+}/{id:\d+}',  [ResourceController::class, 'destroy']);
 
 // --- Administration -------------------------------------------------------
 $router->group(['auth'], static function (Router $router): void {
@@ -363,6 +406,15 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/admin/email/templates/{key:[a-z0-9_]+}',        [EmailController::class, 'editTemplate'],   ['can:email.manage']);
     $router->post('/admin/email/templates/{key:[a-z0-9_]+}',       [EmailController::class, 'updateTemplate'], ['can:email.manage', 'csrf']);
     $router->post('/admin/email/templates/{key:[a-z0-9_]+}/reset', [EmailController::class, 'resetTemplate'],  ['can:email.manage', 'csrf']);
+
+    // API keys. Its own permission rather than settings.manage: issuing a
+    // credential that acts as somebody is the same kind of act as creating
+    // their account.
+    $router->get('/admin/api',                      [ApiKeyController::class, 'index'],          ['can:api.manage'], 'admin.api');
+    $router->post('/admin/api/settings',            [ApiKeyController::class, 'updateSettings'], ['can:api.manage', 'csrf']);
+    $router->post('/admin/api/keys',                [ApiKeyController::class, 'store'],          ['can:api.manage', 'csrf']);
+    $router->post('/admin/api/keys/{id:\d+}/revoke',[ApiKeyController::class, 'revoke'],         ['can:api.manage', 'csrf']);
+    $router->post('/admin/api/keys/{id:\d+}/delete',[ApiKeyController::class, 'destroy'],        ['can:api.manage', 'csrf']);
 
     // Audit trail
     $router->get('/admin/activity', [ActivityController::class, 'index'], ['can:audit.view'], 'admin.activity');

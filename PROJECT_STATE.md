@@ -14,11 +14,16 @@ alongside auto-hiding confirmations, a tree view for the reference data, and
 two navigation fixes. Stage 17, the same day, added faults: an asset can name a
 responsible party and be reported faulty, with a photograph, an urgency and a
 kept history — and the responsible party is emailed immediately and again in a
-digest until it is dealt with.
+digest until it is dealt with. Stage 18, the same day, added **custom reports**
+and a **documented REST API**, moved the long-form documentation out of the
+README into `docs/`, and fixed five interface faults — a PAT warning that
+offered to switch itself off, a crowded button row on the asset page, a
+drop-down that closed under the click aimed at it, and a table column that had
+never lined up with the rest of its row.
 
 Everything below was checked against the files and the database at the time of
 writing, not recalled. The schema section was produced by creating an empty
-database, applying all twenty-three migrations in order and then reading
+database, applying all twenty-five migrations in order and then reading
 `information_schema`, so it describes exactly what a fresh install produces.
 Where something is *not* verified, it says so.
 
@@ -47,13 +52,13 @@ Where something is *not* verified, it says so.
 
 ## 2. Database schema as implemented
 
-Built by applying `database/migrations/001` … `023` to an empty database. All
-twenty-three applied cleanly with no errors.
+Built by applying `database/migrations/001` … `025` to an empty database. All
+twenty-five applied cleanly with no errors.
 
-**Totals:** 30 domain tables, 347 columns, 56 foreign keys, 137 indexes.
+**Totals:** 32 domain tables, 377 columns, 60 foreign keys, 147 indexes.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
-A database migrated with `php bin/migrate.php` has a **31st** table,
+A database migrated with `php bin/migrate.php` has a **33rd** table,
 `migrations` (`id`, `migration`, `batch`, `applied_at`, unique on `migration`),
 created by `src/Core/Migrator.php`. It does not appear below because it is
 tracking, not domain data — and note that it is *not* created if you pipe the
@@ -86,6 +91,8 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 | `021_user_tokens.sql` | `user_tokens` — single-use invitation and password-reset links, stored as SHA-256; the `invite_expiry_hours` and `password_reset_expiry_hours` settings |
 | `022_two_factor.sql` | `users` gains `two_factor_enabled`, `totp_secret` (encrypted) and `totp_confirmed_at`; `user_backup_codes`, `trusted_devices`; the five two-factor settings |
 | `023_faults_and_responsibility.sql` | `assets` gains `responsible_user_id` + `responsible_team_id` (mutually exclusive, both real foreign keys) and **`'Faulty'` appended to `assets.status`**; `fault_reports`, `fault_report_photos`; the `faults.report` permission granted to `admin` and `manager`; the `reminder_faulty_*` and `fault_notify_immediately` settings |
+| `024_custom_reports.sql` | `custom_reports` — a saved report definition: a data source, a set of values for that source's **existing** filters, chosen columns and a sort. Three JSON columns, no SQL anywhere in the table. The `reports.manage` permission, granted to `admin` and `manager` |
+| `025_api_keys.sql` | `api_keys` — a credential tied to one user, stored as a SHA-256 with a clear prefix for display, plus scope, expiry, revocation and a rate-limit counter on the row. The `api.manage` permission (admin only) and the four `api_*` settings |
 
 Migrations are applied in filename order and recorded. **Never edit an applied
 file** — add a new numbered one.
@@ -291,6 +298,43 @@ is part of the asset's ongoing record and can become the thumbnail the register
 shows; a fault photo belongs to the report that explains it, and filing it
 against the asset would lose which fault it was evidence of.
 
+#### `custom_reports` (migration 024)
+`id`, `report_key` varchar(80) NN **unique** (always prefixed `custom-`),
+`name` NN, `description`, `data_source` varchar(40) NN, `filters` JSON NN,
+`columns` JSON NN, `sort_column`, `sort_direction` enum('asc','desc') NN,
+`is_active` NN 1, `created_by`, `updated_by`, timestamps.
+Indexes: unique `report_key`, `(is_active, name)`.
+
+**There is no SQL in this table and no column name from user input near a
+query.** A definition names a data source from `App\Reports\DataSourceRegistry`
+and supplies values for that source's *already existing* filters — the same ones
+the list page offers, handled by the same model code. Anything not on the
+source's declared lists is discarded when the row is read, so a hand-edited row
+cannot widen what a report reaches.
+
+The `custom-` prefix is what keeps this namespace and the built-in report keys
+from colliding: no shipped report may start with it, so a saved report can never
+shadow `all-assets`, nor be shadowed by a future built-in.
+
+Three JSON columns rather than child tables: they are read as one blob, written
+as one blob, never joined and never filtered on.
+
+#### `api_keys` (migration 025)
+`id`, `name` NN, `user_id` NN, `token_prefix` char(12) NN (clear, for display),
+`token_hash` char(64) NN **unique**, `scope` enum('read','full') NN,
+`expires_at`, `revoked_at`, `last_used_at`, `last_used_ip`, `request_count`,
+`rate_window_started_at`, `rate_count`, `created_by`, timestamps.
+`user_id` CASCADEs — a credential belonging to a deleted account must go with it.
+
+**No permission column, deliberately.** A key holds only `user_id`; a request
+adopts that user via `Auth::actAs()` and then runs the same `Auth::can()` the
+interface runs. A key therefore cannot outgrow its owner, and there is no second
+permission model to keep in step. `scope = 'read'` may make it do *less*.
+
+SHA-256 rather than `password_hash()` because this is a 48-character random
+value, not a human-chosen password: there is nothing to brute-force, and a
+lookup has to be one indexed query rather than a verify against every row.
+
 #### `user_tokens` (migration 021)
 `id` bigint, `user_id` NN, `purpose` enum('invite','password_reset') NN,
 `token_hash` char(64) NN **unique**, `expires_at` datetime NN, `used_at`
@@ -407,7 +451,7 @@ purpose: an item crossing from "due soon" to "overdue" is a *different*
 reminder and goes out at once rather than waiting out the earlier one's repeat
 window.
 
-### 2.3 Foreign keys (56)
+### 2.3 Foreign keys (60)
 
 | Delete rule | Where it is used |
 |---|---|
@@ -430,7 +474,7 @@ deleting a user never destroys the records they touched.
 
 - **4 roles**: `admin` (Administrator, `is_superuser=1`), `manager` (Manager / Staff),
   `viewer` (Read-only), `hirer` (Hirer). All four are `is_system=1`.
-- **34 permissions** in groups Assets, Hirers, Hires, Maintenance,
+- **36 permissions** in groups Assets, Hirers, Hires, Maintenance,
   Photos & files, PAT testing, Reports, Email, Administration:
   `assets.view/create/edit/delete/export`, **`faults.report`**, `hirers.view/manage`,
   `hires.view/view_own/create/return/manage`, `maintenance.view/manage/complete`,
@@ -438,19 +482,23 @@ deleting a user never destroys the records they touched.
   `pat.view/manage/delete`, `reports.view`, `email.manage/send`,
   `users.view/manage`, `roles.manage`, **`teams.manage`**, `categories.manage`,
   `locations.manage`, `settings.manage`, `audit.view`.
-- **68 role_permissions rows** — admin 34, manager 26, viewer 7, hirer 1.
+- **71 role_permissions rows** — admin 36, manager 27, viewer 7, hirer 1.
   - viewer: `assets.view`, `assets.export`, `hirers.view`, `hires.view`,
     `maintenance.view`, `pat.view`, `reports.view`
   - hirer: **`hires.view_own` and nothing else**
   - manager gained `email.send` (not `email.manage`) in 018
   - `teams.manage` (020) is **admin only**: membership decides who is reminded
     about a job and who it is expected of, which makes it administrative
+  - `reports.manage` (024) and `api.manage` (025): defining a report is admin and
+    manager, issuing an API key is admin only. Neither grants anything new to
+    *see* — a saved report is refused unless the reader holds its data source's
+    own permission, and a key inherits exactly its owner's role
   - `faults.report` (023) is **admin and manager**. Its own permission rather
     than `assets.edit`, because the two are not the same act: saying "this is
     broken" is something the person holding the broken thing does, and need not
     come with the right to rewrite purchase costs. It is still a change to the
     register — it moves the status — so read-only does not get it
-- **47 settings** on a fresh install (51 once both logo variants have been
+- **51 settings** on a fresh install (55 once both logo variants have been
   uploaded — the four `logo_*` keys are written on upload, never seeded).
   Stage 16 added `flash_auto_hide_seconds` (6, 0 = never), `two_factor_required`
   (0), `trusted_device_days` (30), `trusted_device_idle_days` (14),
@@ -491,6 +539,9 @@ deleting a user never destroys the records they touched.
   | `reminder_hire_notify_hirer` | `0` | |
   | `reminder_faulty_repeat_days` | `0` | **0 = use `reminder_repeat_days`**; faults have no due date, so this is "how often to mention it again" |
   | `fault_notify_immediately` | `1` | email the responsible party the moment a fault is reported, off the cron path |
+  | `api_enabled` | `0` | **off until switched on**; endpoints answer 503 with a reason, not 404 |
+  | `api_rate_limit` | `120` | requests per minute per key, fixed one-minute windows |
+  | `api_default_per_page` / `api_max_per_page` | `25` / `100` | a larger `per_page` is clamped, not refused |
   | `invite_expiry_hours` | `72` | how long an invitation link lasts |
   | `password_reset_expiry_hours` | `2` | deliberately shorter — see §4.10 |
 
@@ -551,7 +602,8 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── .env.example             documented template
 ├── .gitignore
 ├── .gitattributes           forces LF on *.sh — a CRLF shebang breaks the installer
-├── README.md                setup, deployment, usage, security
+├── README.md                short introduction; the detail lives in docs/
+├── docs/                    17 pages, one per topic, plus the index (docs/README.md)
 ├── INSTALL.md               the scripted install, unattended runs, failure modes
 ├── PROJECT_STATE.md         this file
 ├── composer.json            autoload only; no runtime packages
@@ -592,24 +644,27 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        Database, Env, Flash, Image, LoginThrottle, Migrator,
 │   │                        QrCode, Request, Response, Router, Session, Totp,
 │   │                        Upload, Validator, View
+│   ├── Api/                 Gate, Problem, Resource, ResourceRegistry, OpenApi
 │   ├── Controllers/         Controller (base) + Account, Asset, AssetCopy,
-│   │                        AssetExport, Auth, Branding, Calendar, Hirer,
-│   │                        Dashboard, Export, Fault, Import, Label, Hire,
+│   │                        AssetExport, Auth, Branding, Calendar, CustomReport,
+│   │                        Hirer, Dashboard, Export, Fault, Import, Label, Hire,
 │   │                        Maintenance, Manual, MyHires, Pat, Photo, Profile,
 │   │                        Report, Scan, Security, TwoFactor
-│   │   └── Admin/           Activity, Category, Email, Location, Role, Settings,
-│   │                        Team, User
+│   │   └── Api/             ApiController (base), ResourceController, MetaController
+│   │   └── Admin/           Activity, ApiKey, Category, Email, Location, Role,
+│   │                        Settings, Team, User
 │   ├── Mail/                Mailer, EmailTemplate, EmailLog, EmailReminder,
 │   │                        Reminders, Merge, Layout, AccountMail
 │   ├── Middleware/          Auth, Csrf, Guest, Permission, MiddlewareRunner
 │   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto,
 │   │                        Assignment, Category, FaultReport, Hire, Hirer,
 │   │                        Location, MaintenanceLog, MaintenanceSchedule,
-│   │                        PatRecord, Permission, Role, Setting, Team, Tree,
-│   │                        TrustedDevice, User, UserToken
+│   │                        ApiKey, CustomReport, PatRecord, Permission, Role,
+│   │                        Setting, Team, Tree, TrustedDevice, User, UserToken
 │   ├── Reports/             Report (base), ReportRegistry, AllAssets,
 │   │                        FaultyAssets, MaintenanceDue, PatDue, AssetsOnHire,
-│   │                        HiresDueBack
+│   │                        HiresDueBack; StoredReport, DataSource,
+│   │                        DataSourceRegistry (custom reports)
 │   ├── Imports/             Importer (base), ImportRegistry, AssetImporter,
 │   │                        PatImporter
 │   └── Services/            AssetTagger, AssetCopier, Branding, CalendarFeed,
@@ -623,7 +678,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            faults/{faultReportId},
 │                            hires/{hireId}, branding/, imports/
 │
-├── templates/               96 .php templates
+├── templates/               99 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, brand, footer, print-header, flash,
 │   │                        photo-gallery, photo-upload, photo-inputs,
@@ -646,7 +701,8 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── my-hires/            index, show, unlinked
 │   ├── import/              index, show, preview
 │   ├── export/              index, assets, assets-select
-│   ├── reports/             index, show, print
+│   ├── reports/             index, show, print, custom-form
+│   ├── api/                 docs
 │   └── admin/               users, roles, teams, categories, locations,
 │                            settings, activity,
 │                            email/ (index, reminders, templates, template-form, log)
@@ -1134,11 +1190,88 @@ without one is a sentence somebody has to interpret. The controller validates
 every upload first and refuses the whole submission if none survive, so a report
 cannot satisfy the rule on a technicality by having every photo rejected.
 
+### 4.13 Custom reports
+
+A saved report is **not a parallel system**, and the code is arranged so it
+cannot become one. `App\Reports\StoredReport` *is* a `Report`, so
+`ReportController`, the generic table, the print view and the CSV export cannot
+tell it from a built-in; `ReportRegistry::all()` merges the stored definitions
+in beside the classes.
+
+**A definition supplies values for filters that already exist.** Each data
+source in `DataSourceRegistry` declares a subset of the filter keys the model
+already understands — `Asset::searchAll()` has taken `category_id` and `status`
+since stage 2 — and one closure that calls that model method. There is no query
+builder, no column name from user input in any SQL, and no way for a custom
+report to express a condition the equivalent list page could not.
+
+**The sort is applied in PHP, after the rows come back.** The models sort by
+their own named orderings; letting a definition name an arbitrary column would
+mean building a column name into SQL, which is the one thing this feature is
+designed never to do. Sorting a bounded result set in memory costs nothing worth
+measuring and keeps every query parameterised.
+
+**Definitions hold keys, not a copy of the schema.** Columns and filters are
+filtered against the source on the way out, so a field added to a source becomes
+available to reports already saved, and a field removed disappears rather than
+rendering an empty column under a heading for something that is gone.
+
+A definition's `report_key` never changes after the first save, even when the
+report is renamed — a report's URL is a stable thing that ends up in emails.
+
+### 4.14 The REST API
+
+**`Auth::actAs()` is the whole design.** An API request authenticates a key,
+loads its user, and adopts them for the rest of the request. From that point
+`Auth::can()`, `Auth::id()` and `ActivityLog::record()` behave exactly as they do
+for the same person in a browser. "A key never allows more than its owner could
+already do" is therefore a property of the code rather than a promise: there is
+no second permission model, because there is nowhere to put one.
+
+It writes no session and rotates no CSRF token. An API request must not leave the
+caller signed in, and presenting a key must not create a browser session.
+
+**Why the API routes carry no `auth` or `csrf` middleware.** `auth` redirects to
+a sign-in page, which is the wrong answer to a request carrying a key; `csrf`
+protects a browser form. `App\Api\Gate` does strictly more in their place. The
+CSRF exemption is safe because a write needs a key in a *header* — which a
+cross-site form cannot set, and which a cross-origin `fetch` would have to
+preflight — and because a request authenticated by a session cookie is refused
+anything but GET. `tests/security-audit.php` asserts both halves rather than
+trusting the prose.
+
+**One controller for every resource.** Pagination, filtering, sorting, the
+permission check, the writable allow-list, the response envelope and the error
+shape are written once in `ResourceController`. Six hand-written controllers
+would be six chances to forget a permission check and six pagination
+conventions.
+
+**Refusals are loud.** An unknown filter, an unknown enum value, an unknown
+field in a body and a read-only field in a body are all 400s rather than silent
+drops. A misspelled filter that quietly returns everything is how somebody
+publishes a list containing rows they meant to exclude — and that exact bug was
+in the repeatable-filter branch for one build before `tests/api-contract.php`
+caught it.
+
+**`PUT` resets to a declared default, not to null.** A writable field that maps
+to a NOT NULL column carries a `default` in its declaration; a replacement sends
+it back to that. Without it, `PUT` on an asset blanked `status` and
+`condition_rating` and the write failed at the database — which is how it was
+found.
+
+**The OpenAPI document is generated from the resource declarations**, so a field
+that appears in it appears in the response and a filter it documents is one the
+router accepts: they are the same array. The viewer at `/api/docs` is
+first-party because the CSP is `default-src 'self'` and permits no off-origin
+scripts — a CDN Swagger UI simply would not load. It requests same-origin paths
+rather than the spec's absolute server URL, so it works behind any hostname or
+subdirectory.
+
 ---
 
 ## 5. Build-prompt status
 
-All seventeen prompts are **complete**. Nothing is partial or unstarted.
+All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
 > **Terminology:** the application says **Hires** and **Hirers**, never loans or borrowers. Migration 017 renamed the schema to match, so code and interface use the same words — there is no compatibility shim and nothing left calling it a loan. Only the filenames of migrations 006 and 013 still carry the old words, because an applied migration is never edited.
 
@@ -1165,6 +1298,7 @@ All seventeen prompts are **complete**. Nothing is partial or unstarted.
 | 15 | Nav polish, dashboard order, maintenance evidence, Teams, invites, password recovery | complete | 2026-08-11 |
 | 16 | Auto-hiding banners, nav alignment and active-state fix, reference-data tree, two-factor authentication | complete | 2026-08-12 |
 | 17 | Responsible party on an asset, mark-as-faulty with photo and urgency, faulty dashboard card, immediate notification and a faulty digest | complete | 2026-08-12 |
+| 18 | Asset-page button cleanup, maintenance card layout, drop-down click race, shared table alignment, custom reports, REST API with OpenAPI, README split into docs/ | complete | 2026-08-12 |
 
 ### 5.1 What each prompt delivered
 
@@ -1277,6 +1411,22 @@ All seventeen prompts are **complete**. Nothing is partial or unstarted.
     schedule — one message per person listing every faulty asset of theirs,
     however many teams it reaches them through. An asset with nobody
     responsible emails nobody, says so on screen, and does not error.
+18. **Custom reports, a REST API, and a documentation split**, plus five
+    interface fixes. The PAT warning no longer offers a button that switches
+    the warning off; the asset page keeps four buttons at the top and moves
+    marking-faulty, copying and label printing into the rail where they belong;
+    the maintenance side cards stack their values under their labels; a
+    drop-down opened by hover no longer closes under the click aimed at it; and
+    the actions column of every table lines up with its row again — it had been
+    `display: flex` on a `<td>`, which takes the cell out of table layout, so
+    its bottom border sat ten pixels above every other column's.
+    **Custom reports** are stored definitions rendered through the same `Report`
+    abstraction as the built-ins (§4.13). The **REST API** at `/api/v1` covers
+    eleven resources through one generic controller, authenticated by keys that
+    adopt their owner's role exactly, with a generated OpenAPI document and a
+    first-party browsable viewer (§4.14). The README went from 2,015 lines to
+    87, with the detail moved into `docs/` as seventeen focused pages and an
+    index.
 
 ### 5.2 What has been verified, and how
 
@@ -1284,13 +1434,15 @@ All seventeen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 211 PHP files | 0 failures |
-| `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **2308 output expressions across 96 templates, 0 unescaped** |
-| All 23 migrations against an empty database | applied cleanly; 30 tables, 347 columns, 56 FKs, 137 indexes, all InnoDB |
-| Seed data counts | 4 roles / 34 permissions / 68 grants / 47 settings / 0 template overrides |
-| `tests/permission-matrix.php` | **360 checks, 0 mismatches** |
+| `php -l` on all 238 PHP files | 0 failures |
+| `tests/security-audit.php` | **42 passed, 0 failed** |
+| `tests/escape-audit.php` | **2433 output expressions across 99 templates, 0 unescaped** |
+| All 25 migrations against an empty database | applied cleanly; 32 tables, 377 columns, 60 FKs, 147 indexes, all InnoDB |
+| Seed data counts | 4 roles / 36 permissions / 71 grants / 51 settings / 0 template overrides |
+| `tests/permission-matrix.php` | **380 checks, 0 mismatches** |
 | `tests/fault-flow.php` | **68 checks, 0 failed** — end to end over HTTP, with a mail catcher |
+| `tests/api-contract.php` | **84 checks, 0 failed** — the API against its own generated specification |
+| Documentation links | every anchor and file link in `docs/` and `README.md` resolves |
 | `tests/totp-vectors.php` | **52 checks, 0 failed** — RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `tests/qr-encode.php` | **21 checks, 0 failed** — ISO/IEC 18004 Annex I error-correction codewords, and the geometry |
 | `tests/report-figures.php` | every figure agrees with the database |
@@ -1648,7 +1800,23 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
    nothing ever *closes* a report, so `fault_reports` is an append-only history
    and "how long has this been broken?" is answered from the latest report's
    `faulty_on`, not from a resolution date that does not exist.
-10. **The responsible party is not copied when an asset is duplicated.**
+10. **The API is read-only for hires, PAT records, maintenance records, faults
+   and users.** Not an unfinished feature. Checking a hire out moves the
+   asset's status, allocates a reference and refuses a double booking;
+   recording maintenance rolls the schedule forward and may create a follow-up;
+   a PAT record without its per-step verdicts claims a test nobody performed;
+   a fault report needs a photograph. A `POST` that inserted a row would produce
+   a record the rest of the application does not believe in. Each resource says
+   so in its own description, and in the generated specification.
+11. **API rate limiting is a fixed window, not a sliding one.** One counter on
+   the key's row, one UPDATE per request, nothing that grows. A burst
+   straddling a boundary can briefly reach twice the limit. A sliding window
+   means a row per request, which on this hosting is a bigger problem than the
+   burst it prevents.
+12. **A custom report's sort happens in PHP**, after the model returns its rows.
+   That is what keeps a column name out of SQL, and it means a definition sorts
+   at most the 5,000 rows `searchAll()` returns.
+13. **The responsible party is not copied when an asset is duplicated.**
    `AssetCopier::COPYABLE_FIELDS` does not include it, so copies start
    unassigned and quietly email nobody until somebody sets one. Defensible —
    responsibility for a physical item is a per-item decision — but if a workshop
@@ -1686,6 +1854,36 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
 - **A dashboard tile and the list it links to must run the same query.** The
   "Critical or High" tile first pointed at `?urgency=Critical`, so it counted two
   and showed one. `FaultReport::URGENT` exists to keep the pair in step.
+- **Never set `display: flex` on a `<td>`.** It stops being a table-cell, drops
+  out of the row's layout, and no longer stretches to the row height — so the
+  `border-bottom` that draws the row separator is painted short. Measured on
+  /assets: a 73px row with a 63px actions cell, on every table using the
+  pattern. The actions column lays out inline instead, with half a gap because
+  inline layout contributes the other half as a word space.
+- **A grep for a call will match a comment saying not to make that call.** The
+  security audit's "the API never renders an HTML 403" check failed on
+  `Gate.php`, whose docblock says "…never `Auth::authorize()`". It now strips
+  comments with `token_get_all()` first. A check that reads documentation as
+  code fails on the file that documents the rule best.
+- **`??` cannot tell a null from an absence.** Four contract-test assertions
+  reported "(missing)" against a response that correctly contained `null`. Use
+  `array_key_exists()` when null is a legitimate expected value.
+- **A generated absolute URL is the wrong thing for a page to fetch.** The
+  OpenAPI document's `servers[0].url` comes from `APP_URL`; the docs page tried
+  to call it and every request failed with "Failed to fetch", because the browser
+  was on a hostname `APP_URL` did not name and `connect-src 'self'` refused the
+  cross-origin call. The viewer takes only the *path* and requests its own
+  origin — which is also what makes a subdirectory install work.
+- **An enum filter that intersects and moves on is a filter that silently
+  disappears.** `?status[]=Nonsense` returned the whole register for one build:
+  the repeatable branch intersected against the allowed set, got nothing, and
+  skipped the filter. Reject unknown values instead. The single-value branch had
+  always done this; only the repeatable one had the hole.
+- **`PUT` as replacement must know each field's default.** Blanking every
+  writable field the caller omitted put NULL into `assets.status` and
+  `hirers.hirer_type`, both NOT NULL — a 500 rather than a replacement. Fields
+  that map to a NOT NULL column declare a `default`, which `PUT` resets to and
+  the OpenAPI document publishes.
 - **Re-fetch the CSRF token after a 302** — the redirect response has no body.
 - **`tests/security-audit.php` scans `bin/` too.** A `Database::…()` call
   written inline inside an array literal ends in `)]`, which its SQL regex

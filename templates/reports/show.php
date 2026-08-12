@@ -26,6 +26,9 @@ $printQuery  = $queryString === '' ? 'format=print' : $queryString . '&format=pr
         <p class="muted"><?= e($subtitle) ?></p>
     </div>
     <div class="head-actions">
+        <?php if ($report->isCustom() && can('reports.manage') && method_exists($report, 'id')): ?>
+            <a class="btn" href="<?= e(url('/reports/custom/' . $report->id() . '/edit')) ?>">Edit report</a>
+        <?php endif; ?>
         <a class="btn" href="<?= e(url('/reports/' . $report->key() . '?' . $printQuery)) ?>">Print</a>
         <?php if (can($report->exportPermission())): ?>
             <a class="btn btn-primary" href="<?= e(url('/reports/' . $report->key() . '?' . $exportQuery)) ?>">Export CSV</a>

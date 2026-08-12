@@ -55,6 +55,7 @@ $links = [
         ['label' => 'Categories',   'href' => '/admin/categories', 'permission' => 'categories.manage'],
         ['label' => 'Locations',    'href' => '/admin/locations',  'permission' => 'locations.manage'],
         ['label' => 'Email',        'href' => '/admin/email',      'permission' => 'email.manage'],
+        ['label' => 'API keys',     'href' => '/admin/api',        'permission' => 'api.manage'],
         ['label' => 'Activity log', 'href' => '/admin/activity',   'permission' => 'audit.view'],
         ['label' => 'Import data',  'href' => '/import',           'permission' => 'assets.create'],
         ['label' => 'Export data',  'href' => '/export',           'permission' => 'assets.export'],

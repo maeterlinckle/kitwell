@@ -72,6 +72,18 @@ $matrix = [
     '/assets/1/faults/report'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
     '/reports/faulty-assets'     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
 
+    // Defining a report is `reports.manage` — admin and manager. Reading one is
+    // still just reports.view plus the data's own permission.
+    '/reports/custom/create'     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+
+    // API keys: issuing a credential that acts as somebody is administrator-only.
+    '/admin/api'                 => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny',  'hirer' => 'deny'],
+
+    // The API documentation page is readable by anyone signed in — it describes
+    // an interface whose every endpoint enforces its own permissions, and it
+    // reads no data itself.
+    '/api/docs'                  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
+
     // Maintenance
     '/maintenance'               => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/maintenance/history'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
@@ -150,6 +162,8 @@ $writeMatrix = [
     '/assets/1/delete'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/assets/1/photos'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/assets/1/faults'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/reports/custom'         => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/api/keys'         => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
     '/assets/1/manuals'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/maintenance'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/pat'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],

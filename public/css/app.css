@@ -646,11 +646,33 @@ main.container { padding-block: var(--space-5) var(--space-6); }
 .cell-sub { font-size: 0.85rem; color: var(--text-muted); }
 .empty { text-align: center; color: var(--text-muted); padding: var(--space-6) !important; }
 
+/* The actions column: one or more buttons in the last cell of a row.
+ *
+ * This used to be `display: flex`, which quietly broke every table it appeared
+ * in. A `<td>` set to flex stops being a table-cell, so it drops out of the row
+ * layout: it no longer stretches to the row's height, and since the row's
+ * separator is `border-bottom` on the cell, the line under the last column was
+ * drawn ten pixels above the line under all the others. Measured on /assets: a
+ * 73px row with a 63px actions cell, on every row of every table using it —
+ * /assets, /pat, /admin/users, /hires, /hirers, /maintenance and the trusted
+ * devices list all at once, which is why it looked like a per-page bug.
+ *
+ * So the cell stays a cell and the buttons lay out inline. `align-items` and
+ * `gap` have no meaning without flex, hence `vertical-align` and a margin;
+ * `nowrap` keeps a pair of buttons on one line, and the table already scrolls
+ * horizontally inside `.table-wrap` when it needs to.
+ */
 td.actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+    white-space: nowrap;
+    vertical-align: middle;
 }
+
+td.actions > * { vertical-align: middle; }
+
+/* Half a gap, because inline layout contributes the other half itself: the
+   newline between two buttons in the template collapses to one word space.
+   Measured rather than assumed — see the note in PROJECT_STATE. */
+td.actions > * + * { margin-left: var(--space-1); }
 
 .inline-form { display: inline; margin: 0; }
 
@@ -1300,6 +1322,18 @@ input[type="file"].input { padding: var(--space-2); line-height: 1.6; }
 .danger-card { border-left: 4px solid var(--warn); }
 .delete-form { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
 
+/* The Manage card in the asset rail: ordinary actions at the top, then a ruled
+   line, then the ones you cannot take back. The rule is the whole point — it is
+   what stops "Copy" and "Delete permanently" reading as one undifferentiated
+   stack of buttons in a 320px column. */
+.manage-actions { display: grid; gap: var(--space-2); }
+.manage-divider {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+}
+.manage-divider .muted { margin-top: 0; }
+
 .timeline li {
     display: grid;
     gap: 2px;
@@ -1528,6 +1562,68 @@ tr.preview-warning td { background: var(--warn-soft); }
     border: 1px solid var(--border);
     background: var(--bg-sunken);
 }
+
+/* --- API documentation and keys -------------------------------------------- */
+
+/* The one time a secret is on screen. Big, monospaced and selectable in one
+   gesture, because the instruction is "copy this now" and the page means it. */
+.key-reveal {
+    display: block;
+    padding: var(--space-3);
+    background: var(--bg-sunken);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 1.05rem;
+    word-break: break-all;
+    user-select: all;
+}
+
+.code-block {
+    padding: var(--space-3);
+    background: var(--bg-sunken);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.88rem;
+}
+
+.api-op { border-top: 1px solid var(--border); padding: var(--space-2) 0; }
+.api-op:first-of-type { border-top: 0; }
+.api-op-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    padding: var(--space-1) 0;
+}
+.api-op-body { display: grid; gap: var(--space-3); padding: var(--space-3) 0 var(--space-2); }
+
+.api-method {
+    flex: 0 0 auto;
+    min-width: 4.5rem;
+    text-align: center;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    background: var(--bg-sunken);
+    color: var(--text-muted);
+}
+.api-method-get    { background: var(--info-soft); color: var(--info); }
+.api-method-post   { background: var(--ok-soft); color: var(--ok); }
+.api-method-patch,
+.api-method-put    { background: var(--warn-soft); color: var(--warn); }
+.api-method-delete { background: var(--danger-soft); color: var(--danger); }
+
+.api-path { font-weight: 600; }
+.api-summary { color: var(--text-muted); font-size: 0.9rem; }
+.api-url { word-break: break-all; font-size: 0.82rem; }
+.api-response { max-height: 26rem; overflow: auto; }
+.api-params .input-sm { min-width: 8rem; }
+.input-sm { padding: var(--space-1) var(--space-2); font-size: 0.9rem; }
 
 /* One fault report in the history list. */
 .fault-entry { display: grid; gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--border); }

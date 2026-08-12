@@ -50,6 +50,13 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
     </div>
 
     <div class="head-actions">
+        <?php /* Four buttons, not eight. What is left here is what somebody
+                 arriving at this page actually came to do: move the item on or
+                 off hire, correct the record, or take a copy away with them.
+                 Marking it faulty, duplicating it and pushing its details onto
+                 other assets are all deliberate acts on the record rather than
+                 things you reach for in passing, so they live in Manage in the
+                 rail; printing the label lives with the barcode it prints. */ ?>
         <?php if ($openHire !== null && can('hires.return')): ?>
             <a class="btn btn-primary" href="<?= e(url('/hires/' . $openHire['id'] . '/return')) ?>">Book in</a>
         <?php elseif ($openHire === null && can('hires.create') && $hireBlocked === null): ?>
@@ -59,19 +66,6 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <a class="btn" href="<?= e(url('/assets/' . $id . '/edit')) ?>">Edit</a>
         <?php endif; ?>
         <a class="btn" href="<?= e(url('/assets/' . $id . '/print')) ?>">Print</a>
-        <?php if (can('faults.report') && !$retired): ?>
-            <?php /* Right of Print, as asked. Styled as a danger action because
-                     it changes the asset's status and takes it out of service —
-                     it should not look like one more way to view the record. */ ?>
-            <a class="btn btn-danger" href="<?= e(url('/assets/' . $id . '/faults/report')) ?>">Mark as faulty</a>
-        <?php endif; ?>
-        <a class="btn" href="<?= e(url('/assets/' . $id . '/label')) ?>">Print label</a>
-        <?php if (can('assets.create')): ?>
-            <a class="btn" href="<?= e(url('/assets/' . $id . '/copy')) ?>">Copy</a>
-        <?php endif; ?>
-        <?php if (can('assets.edit')): ?>
-            <a class="btn" href="<?= e(url('/assets/' . $id . '/apply')) ?>">Copy details to…</a>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -535,26 +529,54 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             </dl>
         </div>
 
-        <?php if (can('assets.edit') || can('assets.delete')): ?>
-            <div class="card danger-card">
+        <?php $canManage = can('assets.edit') || can('assets.delete') || can('assets.create')
+            || (can('faults.report') && !$retired); ?>
+        <?php if ($canManage): ?>
+            <?php /* No longer `danger-card`. Half of what is in here now is
+                     ordinary — take a copy, push details onto other assets —
+                     and a warning stripe down the side of the whole card would
+                     be crying wolf. The destructive end keeps its own divider
+                     and its own colour instead, which is where the warning
+                     belongs. */ ?>
+            <div class="card">
                 <h2>Manage</h2>
+
+                <div class="manage-actions">
+                    <?php if (can('faults.report') && !$retired): ?>
+                        <?php /* First, and amber rather than red: it takes the
+                                 item out of service, which is a serious thing
+                                 to do and a reversible one. Red is kept for the
+                                 delete at the bottom, which is neither. */ ?>
+                        <a class="btn btn-warning btn-block" href="<?= e(url('/assets/' . $id . '/faults/report')) ?>">Mark as faulty</a>
+                    <?php endif; ?>
+
+                    <?php if (can('assets.create')): ?>
+                        <a class="btn btn-block" href="<?= e(url('/assets/' . $id . '/copy')) ?>">Copy</a>
+                    <?php endif; ?>
+
+                    <?php if (can('assets.edit')): ?>
+                        <a class="btn btn-block" href="<?= e(url('/assets/' . $id . '/apply')) ?>">Copy details to…</a>
+                    <?php endif; ?>
+                </div>
 
                 <?php if ($retired): ?>
                     <?php if (can('assets.edit')): ?>
-                        <form method="post" action="<?= e(url('/assets/' . $id . '/restore')) ?>">
+                        <form method="post" action="<?= e(url('/assets/' . $id . '/restore')) ?>" class="manage-divider">
                             <?= csrf_field() ?>
                             <button type="submit" class="btn btn-block">Restore to stock</button>
                         </form>
                     <?php endif; ?>
                 <?php elseif (can('assets.edit')): ?>
-                    <p class="muted">Archiving keeps every record — history, PAT results and hires — but takes the asset out of day-to-day lists.</p>
-                    <form method="post" action="<?= e(url('/assets/' . $id . '/archive')) ?>">
-                        <?= csrf_field() ?>
-                        <button type="submit" class="btn btn-warning btn-block"
-                                data-confirm="Archive <?= e($asset['asset_tag']) ?>?<?= count($children) > 0 ? ' Its ' . count($children) . ' attached item(s) will be archived too.' : '' ?>">
-                            Archive asset
-                        </button>
-                    </form>
+                    <div class="manage-divider">
+                        <p class="muted">Archiving keeps every record — history, PAT results and hires — but takes the asset out of day-to-day lists.</p>
+                        <form method="post" action="<?= e(url('/assets/' . $id . '/archive')) ?>">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-warning btn-block"
+                                    data-confirm="Archive <?= e($asset['asset_tag']) ?>?<?= count($children) > 0 ? ' Its ' . count($children) . ' attached item(s) will be archived too.' : '' ?>">
+                                Archive asset
+                            </button>
+                        </form>
+                    </div>
                 <?php endif; ?>
 
                 <?php if (can('assets.delete')): ?>

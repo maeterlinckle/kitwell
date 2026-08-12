@@ -51,6 +51,18 @@ abstract class Report
         return 'General';
     }
 
+    /**
+     * Was this defined by somebody, rather than shipped?
+     *
+     * Only the index and the report header use it, to offer Edit and Delete
+     * next to a saved report. Everything else treats the two identically, which
+     * is the point.
+     */
+    public function isCustom(): bool
+    {
+        return false;
+    }
+
     /** Permission required to export. Defaults to the view permission. */
     public function exportPermission(): string
     {

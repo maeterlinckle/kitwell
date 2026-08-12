@@ -111,7 +111,12 @@ $id = (int) $schedule['id'];
     <aside class="detail-side">
         <div class="card">
             <h2>Schedule</h2>
-            <dl class="detail-list detail-list-tight">
+            <?php /* Stacked, like the Record card on the asset page and for
+                     the same reason: in a 320px rail a two-column list gives
+                     "Assigned to" and "Created" about 120px for a name, a
+                     date and a badge, and they wrap into a ragged block
+                     against a wall of white space. */ ?>
+            <dl class="detail-list detail-list-tight detail-list-stacked">
                 <div><dt>Next due</dt><dd><?= e(format_date($schedule['next_due_date'])) ?></dd></div>
                 <div><dt>Last completed</dt><dd><?= e(format_date($schedule['last_completed_date'])) ?></dd></div>
                 <div><dt>Repeats</dt><dd><?= e(MaintenanceSchedule::describeFrequency($schedule)) ?></dd></div>
@@ -125,7 +130,7 @@ $id = (int) $schedule['id'];
 
         <div class="card">
             <h2>Asset</h2>
-            <dl class="detail-list detail-list-tight">
+            <dl class="detail-list detail-list-tight detail-list-stacked">
                 <div><dt>Tag</dt><dd class="mono"><a href="<?= e(url('/assets/' . $schedule['asset_id'])) ?>"><?= e($schedule['asset_tag']) ?></a></dd></div>
                 <div><dt>Status</dt><dd><span class="badge status-<?= e(strtolower(str_replace(' ', '-', (string) $schedule['asset_status']))) ?>"><?= e($schedule['asset_status']) ?></span></dd></div>
                 <div><dt>Condition</dt><dd><?= e($schedule['asset_condition']) ?></dd></div>

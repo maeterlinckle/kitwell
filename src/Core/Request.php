@@ -9,6 +9,9 @@ final class Request
     /** @var array<string,string> */
     private static array $routeParams = [];
 
+    /** @var array<string,mixed>|null Memoised JSON body — php://input reads once. */
+    private static ?array $json = null;
+
     public static function method(): string
     {
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
@@ -22,6 +25,72 @@ final class Request
         }
 
         return $method;
+    }
+
+    /**
+     * One request header, by its human name ("Authorization", "X-API-Key").
+     *
+     * `getallheaders()` is not available on every SAPI — notably not on some
+     * FastCGI setups — so the `$_SERVER` fallback is the one that actually
+     * runs in production more often than not.
+     */
+    public static function header(string $name): ?string
+    {
+        $normalised = strtoupper(str_replace('-', '_', trim($name)));
+
+        if (function_exists('getallheaders')) {
+            foreach ((array) getallheaders() as $key => $value) {
+                if (strtoupper(str_replace('-', '_', (string) $key)) === $normalised) {
+                    return (string) $value;
+                }
+            }
+        }
+
+        foreach (['HTTP_' . $normalised, $normalised] as $key) {
+            if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') {
+                return (string) $_SERVER[$key];
+            }
+        }
+
+        // Apache with mod_php strips Authorization from the CGI environment
+        // unless it is explicitly passed through; this is where it lands when
+        // the rewrite in .htaccess forwards it.
+        if ($normalised === 'AUTHORIZATION' && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            return (string) $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+        }
+
+        return null;
+    }
+
+    public static function isJson(): bool
+    {
+        return str_contains(strtolower((string) self::header('Content-Type')), 'application/json');
+    }
+
+    /**
+     * The request body decoded as JSON.
+     *
+     * Read once and kept: `php://input` is a stream that cannot be rewound on
+     * every SAPI, so a second read can come back empty.
+     *
+     * @return array<string,mixed>
+     * @throws \JsonException when the body is present but not valid JSON
+     */
+    public static function json(): array
+    {
+        if (self::$json !== null) {
+            return self::$json;
+        }
+
+        $raw = (string) file_get_contents('php://input');
+
+        if (trim($raw) === '') {
+            return self::$json = [];
+        }
+
+        $decoded = json_decode($raw, true, 32, JSON_THROW_ON_ERROR);
+
+        return self::$json = is_array($decoded) ? $decoded : [];
     }
 
     public static function path(): string

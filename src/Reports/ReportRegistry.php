@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Reports;
 
 use App\Core\Auth;
+use App\Models\CustomReport;
 
 /**
  * The report registry.
@@ -32,11 +33,19 @@ final class ReportRegistry
     /** @var array<string,Report>|null */
     private static ?array $instances = null;
 
+    /** @var array<string,Report>|null */
+    private static ?array $stored = null;
+
     /** Extra reports registered at runtime (used by the test suite). */
     private static array $additional = [];
 
     /**
      * Every report, keyed by its key.
+     *
+     * Built-ins first, then the saved definitions — which arrive here as
+     * ordinary `Report` objects, so nothing downstream has to know the
+     * difference. A definition whose data source no longer exists is dropped by
+     * `StoredReport::fromRow()` rather than appearing and then failing to open.
      *
      * @return array<string,Report>
      */
@@ -52,7 +61,46 @@ final class ReportRegistry
             }
         }
 
-        return array_merge(self::$instances, self::$additional);
+        return array_merge(self::$instances, self::storedReports(), self::$additional);
+    }
+
+    /**
+     * The saved definitions, read once per request.
+     *
+     * @return array<string,Report>
+     */
+    private static function storedReports(): array
+    {
+        if (self::$stored !== null) {
+            return self::$stored;
+        }
+
+        self::$stored = [];
+
+        // Guarded because the registry is reachable from the reports index on a
+        // database that has not been migrated to 024 yet. A missing table
+        // should cost the saved reports, not the whole page.
+        try {
+            $rows = CustomReport::all(true);
+        } catch (\Throwable) {
+            return self::$stored;
+        }
+
+        foreach ($rows as $row) {
+            $report = StoredReport::fromRow($row);
+
+            if ($report !== null) {
+                self::$stored[$report->key()] = $report;
+            }
+        }
+
+        return self::$stored;
+    }
+
+    /** Drop the memoised definitions — after one is saved, edited or deleted. */
+    public static function forgetStored(): void
+    {
+        self::$stored = null;
     }
 
     /**

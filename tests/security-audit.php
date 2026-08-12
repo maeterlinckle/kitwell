@@ -69,7 +69,7 @@ foreach ($lines as $line) {
         $groupStack[] = ['depth' => $braceDepth, 'middleware' => $names[1]];
     }
 
-    if (preg_match('/\$router->(get|post|put|delete)\(\s*\'([^\']+)\'\s*,\s*\[([^\]]+)\]\s*(?:,\s*\[([^\]]*)\])?/', $line, $m) === 1) {
+    if (preg_match('/\$router->(get|post|put|patch|delete)\(\s*\'([^\']+)\'\s*,\s*\[([^\]]+)\]\s*(?:,\s*\[([^\]]*)\])?/', $line, $m) === 1) {
         preg_match_all("/'([^']+)'/", $m[4] ?? '', $middlewareNames);
 
         $inherited = [];
@@ -95,15 +95,74 @@ foreach ($lines as $line) {
 
 check('routes parsed', count($routes) > 60, count($routes) . ' found');
 
+/**
+ * The REST API is deliberately outside the browser middleware, and this is the
+ * one place that says why.
+ *
+ * `auth` redirects to a sign-in page, which is the wrong answer to a request
+ * carrying an API key. `csrf` protects a browser form, which this is not. In
+ * their place `App\Api\Gate::authenticate()` runs on every request and does
+ * strictly more: it checks the key, its expiry, its revocation, its scope and
+ * its rate limit, and then calls `Auth::actAs()` so that every later permission
+ * check is the *same* `Auth::can()` the interface runs.
+ *
+ * The CSRF exemption is safe for a reason that has to be stated, not assumed:
+ *
+ *   - a write requires an API key in a request header, and a cross-site HTML
+ *     form cannot set one. A cross-origin `fetch` that tried would need a CORS
+ *     preflight, which this application does not answer;
+ *   - a request authenticated by an ordinary **session cookie** — the thing a
+ *     cross-site form *can* ride — is refused anything but GET by Gate, before
+ *     it reaches a resource.
+ *
+ * So the attack CSRF protects against cannot be constructed here. That claim is
+ * not left as prose: the checks below assert both halves of it, and
+ * tests/api-contract.php exercises them over HTTP.
+ */
+$isApiRoute = static fn (array $route): bool => str_starts_with($route['path'], '/api/v1');
+
 // 1. Every state-changing route must verify CSRF.
 $missingCsrf = [];
 foreach ($routes as $route) {
-    if (in_array($route['method'], ['POST', 'PUT', 'DELETE'], true)
-        && !in_array('csrf', $route['middleware'], true)) {
+    if (in_array($route['method'], ['POST', 'PUT', 'PATCH', 'DELETE'], true)
+        && !in_array('csrf', $route['middleware'], true)
+        && !$isApiRoute($route)) {
         $missingCsrf[] = $route['method'] . ' ' . $route['path'];
     }
 }
-check('every POST/PUT/DELETE route verifies CSRF', $missingCsrf === [], implode("\n        ", $missingCsrf));
+check('every POST/PUT/PATCH/DELETE route verifies CSRF', $missingCsrf === [], implode("\n        ", $missingCsrf));
+
+// 1b. …and the API, which is exempt, earns it.
+$gate       = (string) file_get_contents(__DIR__ . '/../src/Api/Gate.php');
+$controller = (string) file_get_contents(__DIR__ . '/../src/Controllers/Api/ApiController.php');
+
+check(
+    'every API request is authenticated by Gate',
+    str_contains($controller, 'Gate::authenticate()'),
+    'ApiController::handle() must call it'
+);
+
+check(
+    'a session-authenticated API request may only read',
+    str_contains($gate, "Request::method() !== 'GET'")
+        && str_contains($gate, 'may only read from the API'),
+    'without this, a cross-site form post could ride the session cookie'
+);
+
+check(
+    'an API key is presented in a header, never a form field or query string',
+    str_contains($gate, "Request::header('Authorization')")
+        && str_contains($gate, "Request::header('X-API-Key')")
+        && !preg_match('/Request::(post|query)\(\s*[\'"](?:api_key|token|key)/', $gate),
+    'a key in a query string ends up in access logs and browser history'
+);
+
+check(
+    'API keys are stored hashed, never in clear',
+    str_contains((string) file_get_contents(__DIR__ . '/../src/Models/ApiKey.php'), "hash('sha256', \$token)")
+        && !str_contains((string) file_get_contents(__DIR__ . '/../src/Models/ApiKey.php'), "'token' => \$token,\n            'user_id'"),
+    'the database must not be a set of working credentials'
+);
 
 // 2. Every route must be authenticated, except the deliberately public ones.
 //
@@ -131,6 +190,12 @@ $unauthed     = [];
 
 foreach ($routes as $route) {
     if (in_array($route['path'], $publicRoutes, true)) {
+        continue;
+    }
+
+    // The API proves who you are with a key rather than a session — see the
+    // block above, and the four checks that hold it to that.
+    if ($isApiRoute($route)) {
         continue;
     }
 
@@ -170,6 +235,13 @@ $permissionExempt = [
     '/profile/security/backup-codes',
     '/profile/security/devices/{id:\d+}/forget',
     '/profile/security/devices/forget-all',
+    // The API documentation page. An ordinary signed-in HTML page with no
+    // permission of its own, deliberately: it describes an interface whose
+    // every endpoint enforces its own permissions, and it reads no data — the
+    // specification it renders is fetched by the browser from
+    // /api/v1/openapi.json, which *is* authenticated. Gating the page would
+    // mean somebody being told the API exists but not what it does.
+    '/api/docs',
     // Public branding, per the reasoning above. There is no permission that
     // would make sense here: the page that needs it most is the one shown to
     // people who have not signed in.
@@ -204,11 +276,77 @@ foreach ($routes as $route) {
         continue;
     }
 
+    // The API's permission check is per *resource*, not per route: one generic
+    // controller serves eleven resources whose permissions differ, so the check
+    // cannot live in the route table. `Gate::require()` runs it from
+    // `ResourceController::authorise()` on every action, and the check below
+    // asserts that every declared resource actually names a permission for
+    // everything it offers — which is the property this rule is really after.
+    if ($isApiRoute($route)) {
+        continue;
+    }
+
     if (!preg_grep('/^can(any)?:/', $route['middleware'])) {
         $noPermission[] = $route['method'] . ' ' . $route['path'];
     }
 }
 check('every other route carries a permission check', $noPermission === [], implode("\n        ", $noPermission));
+
+// 3b. …and the API resources, exempt from the route rule above, each name a
+//     permission for every action they offer. A resource that supported an
+//     action without declaring its permission would be reachable by anyone the
+//     Gate let in.
+$resourceRegistry = (string) file_get_contents(__DIR__ . '/../src/Api/ResourceRegistry.php');
+$resourceController = (string) file_get_contents(__DIR__ . '/../src/Controllers/Api/ResourceController.php');
+
+check(
+    'every API action runs a permission check',
+    substr_count($resourceController, '$this->authorise(') >= 5,
+    'index, show, store, update and destroy must each call it'
+);
+
+/**
+ * Strip comments before searching for a call.
+ *
+ * Gate.php contains the sentence "…never `Auth::authorize()` — the latter
+ * renders an HTML error page", which is exactly the right thing to have written
+ * and exactly the wrong thing to match on. A grep that reads documentation as
+ * code fails on the file that documents the rule best.
+ */
+$codeOnly = static function (string $path): string {
+    $source = (string) file_get_contents($path);
+    $out    = '';
+
+    foreach (token_get_all($source) as $token) {
+        if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+
+        $out .= is_array($token) ? $token[1] : $token;
+    }
+
+    return $out;
+};
+
+check(
+    'the API never renders an HTML 403',
+    !str_contains($codeOnly(__DIR__ . '/../src/Controllers/Api/ResourceController.php'), 'Auth::authorize(')
+        && !str_contains($codeOnly(__DIR__ . '/../src/Api/Gate.php'), 'Auth::authorize(')
+        && !str_contains($codeOnly(__DIR__ . '/../src/Controllers/Api/MetaController.php'), 'Auth::authorize('),
+    'Auth::authorize() renders a page; the API must throw a Problem'
+);
+
+// Every `permissions:` block must name a slug for each of list/read, and any
+// action a resource supports must have one — checked structurally rather than
+// by eye, since there are eleven of them.
+$declaredResources = substr_count($resourceRegistry, 'return new Resource(');
+check(
+    'every declared resource sets its list and read permissions',
+    $declaredResources > 0
+        && substr_count($resourceRegistry, "'list'") >= $declaredResources
+        && substr_count($resourceRegistry, "'read'") >= $declaredResources,
+    $declaredResources . ' resources declared'
+);
 
 // 4. A page that only displays data should not demand a write permission —
 //    a viewer must not need assets.edit merely to read something.

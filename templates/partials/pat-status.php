@@ -89,17 +89,15 @@ $headline = match ($state) {
             </a>
         <?php endif; ?>
 
-        <?php if (can('assets.edit')): ?>
-            <form method="post" action="<?= e(url('/assets/' . $asset['id'] . '/pat/toggle')) ?>" class="inline-form">
-                <?= csrf_field() ?>
-                <button type="submit" class="btn btn-sm btn-ghost"
-                        data-confirm="<?= $requiresPat
-                            ? 'Stop requiring PAT for this asset? Its test history is kept.'
-                            : 'Flag this asset as requiring PAT testing?' ?>">
-                    <?= $requiresPat ? 'Not required' : 'Requires PAT' ?>
-                </button>
-            </form>
-        <?php endif; ?>
+        <?php /* No "Not required" button here any more.
+                 This banner only appears when something needs doing — a test is
+                 overdue, or failed, or has never happened — and offering a
+                 one-click way to make the warning go away is offering the wrong
+                 answer at exactly the moment somebody wants an easy one.
+                 Whether an asset needs PAT is a fact about the asset, so it is
+                 changed where the asset's other facts are: the tick box on the
+                 edit form, which needs the same `assets.edit` permission this
+                 button did and leaves the same audit-log entry. */ ?>
     </div>
     <?php endif; ?>
 </div>

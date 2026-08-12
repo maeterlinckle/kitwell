@@ -176,6 +176,26 @@ final class Auth
         return null;
     }
 
+    /**
+     * Act as this user for the rest of the request, with no session.
+     *
+     * The API's way in. Everything downstream — `can()`, `id()`, the audit
+     * trail — then behaves exactly as it does for the same person in a browser,
+     * which is what makes "an API key never allows more than its owner could
+     * already do" a property of the code rather than a promise.
+     *
+     * Deliberately writes no session and rotates no CSRF token: an API request
+     * must not leave the caller signed in, and a browser session must not be
+     * created by presenting a key.
+     *
+     * @param array<string,mixed> $user A row from User::findActive()
+     */
+    public static function actAs(array $user): void
+    {
+        self::$user        = $user;
+        self::$permissions = null;
+    }
+
     public static function login(int $userId): void
     {
         Session::regenerate();

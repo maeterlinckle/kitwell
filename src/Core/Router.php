@@ -41,6 +41,12 @@ final class Router
         $this->add('DELETE', $path, $handler, $middleware, $name);
     }
 
+    /** @param array<int,string> $middleware */
+    public function patch(string $path, mixed $handler, array $middleware = [], ?string $name = null): void
+    {
+        $this->add('PATCH', $path, $handler, $middleware, $name);
+    }
+
     /**
      * Apply a set of middleware to every route registered inside the callback.
      *
@@ -107,16 +113,54 @@ final class Router
             return;
         }
 
+        // Under /api, a miss has to answer in JSON. A client that asked for data
+        // and got an HTML error page has to guess what happened, and the guess
+        // is usually "the server is broken" rather than "that path is wrong".
+        $isApi = str_starts_with($path, '/api/') || $path === '/api';
+
         if ($allowedMethods !== []) {
-            header('Allow: ' . implode(', ', array_unique($allowedMethods)));
+            $allow = implode(', ', array_unique($allowedMethods));
+            header('Allow: ' . $allow);
             http_response_code(405);
+
+            if ($isApi) {
+                self::apiError(405, 'method_not_allowed', 'That method is not available on this endpoint. Allowed: ' . $allow . '.');
+
+                return;
+            }
+
             View::renderError(405, 'Method not allowed', 'That action is not available on this page.');
 
             return;
         }
 
         http_response_code(404);
+
+        if ($isApi) {
+            self::apiError(404, 'not_found', 'No such endpoint. GET /api/v1 for the index, or open /api/docs.');
+
+            return;
+        }
+
         View::renderError(404, 'Page not found', 'The page you were looking for does not exist.');
+    }
+
+    /**
+     * The API's error shape, for the two cases the router answers itself.
+     *
+     * Kept identical to App\Api\Problem's body by hand — a four-line duplicate
+     * rather than pulling the API layer into the router, which would make the
+     * core depend on a feature that can be switched off.
+     */
+    private static function apiError(int $status, string $code, string $message): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        echo json_encode(
+            ['error' => ['status' => $status, 'code' => $code, 'message' => $message]],
+            JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT
+        );
     }
 
     /**
