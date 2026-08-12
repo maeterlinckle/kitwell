@@ -374,6 +374,49 @@ a:hover { color: var(--accent-hover); }
        at 12px a side is 144px of air, which is most of a menu item. */
     .nav-link { min-height: 40px; padding-inline: var(--space-2); white-space: nowrap; }
 
+    /* The menu text sits on the foot of the logo.
+       ---------------------------------------------------------------------
+       Everything in the bar bottom-aligns against a shared floor, and the
+       brand and the menu text are each lifted off it by the same variable — so
+       they cannot drift apart: change it and both move together.
+
+       `align-items: baseline` is the obvious thing to reach for here and is a
+       trap. A menu item is `display: flex`, and a flex container's baseline is
+       synthesised from its first child — which differs between a plain link
+       (an anonymous text item) and a group's `<summary>` (a real `<span>`).
+       Measured, the two disagreed by 6.8px while looking entirely plausible.
+
+       Bottom-aligning alone is not enough either: a menu item's box bottom is
+       the bottom of its *line box*, which carries half-leading below the
+       glyphs — measured, that left the text sitting a couple of pixels high.
+       `line-height: 1` collapses the line box onto the text, after which one
+       shared floor value puts the logo's foot and the text's on the same line.
+
+       The account block and the quick actions opt out and stay centred: they
+       are controls rather than text on a line, and dropped to the baseline
+       they read as having slipped. */
+    .header-inner { align-items: flex-end; --bar-floor: 14px; }
+    .header-actions { align-self: center; }
+    .primary-nav { align-items: flex-end; }
+    .nav-account { align-self: center; }
+    .nav-list { align-items: flex-end; }
+
+    .brand { padding-bottom: var(--bar-floor); }
+
+    .nav-list > .nav-item > .nav-link,
+    .nav-list > .nav-item > .nav-group > .nav-group-toggle {
+        align-items: flex-end;
+        line-height: 1;
+        padding-bottom: var(--bar-floor);
+    }
+
+    /* The caret is a shape, not a letter: it belongs against the middle of the
+       text rather than sitting on the same line as its feet. */
+    .nav-list > .nav-item > .nav-group > .nav-group-toggle .caret { align-self: center; }
+
+    /* The underline sits at the foot of the box, which is now the floor of the
+       bar rather than the underside of the text — so it reads as an underline
+       for the whole row instead of a strike through the descenders. */
     .nav-link.is-active {
         box-shadow: inset 0 -3px 0 var(--accent);
         background: transparent;
@@ -508,10 +551,20 @@ main.container { padding-block: var(--space-5) var(--space-6); }
 
 /* A short form that sits on one line where there is room: the test-email box,
    and anything else that is a single field plus its button. */
+/* A field or two and the button that acts on them, on one line.
+   ---------------------------------------------------------------------------
+   flex-end, not flex-start. These fields carry a label above the control, so
+   aligning to the top put the button level with the *label* and floating above
+   the input it belongs to. Aligned to the bottom the two sit on the same line
+   and read as one control, which is what they are.
+
+   The wrapped case is why this is not `align-items: center`: at a narrow width
+   the button drops to its own line, and centring would leave it half-height
+   against a tall field. */
 .form-inline {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-start;
+    align-items: flex-end;
     gap: var(--space-2);
     margin: 0;
 }
@@ -798,6 +851,73 @@ textarea.input { min-height: 120px; resize: vertical; }
     border-left: 4px solid var(--border-strong);
     background: var(--bg-raised);
     font-weight: 500;
+}
+
+.text-danger { color: var(--danger); }
+
+/* --- Two-factor ----------------------------------------------------------- */
+
+/* A code is read off a screen and typed in a hurry: wide, spaced and monospaced
+   beats an ordinary input that turns 0 and O into the same shape. */
+.input-code {
+    font-family: var(--font-mono);
+    font-size: 1.4rem;
+    letter-spacing: 0.35em;
+    text-align: center;
+}
+
+.totp-enrol { display: grid; gap: var(--space-4); align-items: start; }
+@media (min-width: 700px) {
+    .totp-enrol { grid-template-columns: auto 1fr; }
+}
+
+/* White behind the symbol whatever the theme: a QR inverted by a dark mode is
+   one a lot of readers will not see at all. */
+.totp-qr {
+    background: #fff;
+    padding: var(--space-3);
+    border-radius: var(--radius);
+    line-height: 0;
+}
+
+.backup-codes {
+    list-style: none;
+    margin: var(--space-3) 0 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-2);
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+.backup-codes li {
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-sunken);
+    text-align: center;
+    letter-spacing: 0.06em;
+}
+
+/* The outcome of the last reminder run, kept on the page rather than left in a
+   banner that now times out. */
+.last-run {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+}
+.last-run h3 { margin-bottom: var(--space-1); }
+.last-run p { margin-bottom: var(--space-1); }
+
+/* Fading out rather than snapping away: a banner that simply disappears looks
+   like the page reloaded. Nothing depends on the transition finishing — the
+   script removes the element on a timer of its own. */
+.flash.is-leaving {
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 240ms ease, transform 240ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .flash.is-leaving { transition: none; transform: none; }
 }
 
 .flash-success { background: var(--ok-soft); border-left-color: var(--ok); color: var(--ok); }
@@ -1788,33 +1908,80 @@ tr.preview-warning td { background: var(--warn-soft); }
 .conditional-block[hidden] { display: none; }
 .form-wide { max-width: 900px; }
 
-/* --- Reference data (categories, locations) ------------------------------- */
-.reference-list { display: grid; gap: var(--space-3); }
-.reference-row { margin-bottom: 0; max-width: none; }
-.reference-row.is-inactive { opacity: 0.65; }
+/* --- Reference data (categories, locations) -------------------------------
+   A tree of compact rows. One row is a single line: caret, name, what uses it,
+   and the three actions. Everything else about an entry lives on its own page,
+   which is what keeps this readable when there are fifty of them.
 
-.reference-fields {
-    display: grid;
-    gap: var(--space-3);
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-.reference-fields .field { margin-bottom: 0; }
-.field-grow { grid-column: 1 / -1; }
-@media (min-width: 900px) {
-    .field-grow { grid-column: auto; }
+   The indent is on the nested list rather than on each row, so a branch and the
+   rule down its left edge move together. */
+.tree-card { padding: var(--space-2) var(--space-3); }
+
+.tree-list { list-style: none; margin: 0; padding: 0; }
+
+.tree-list .tree-list {
+    margin-left: 10px;
+    padding-left: var(--space-4);
+    border-left: 1px solid var(--border);
 }
 
-.reference-meta {
+.tree-row {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
-    margin-top: var(--space-3);
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border);
+    gap: var(--space-2);
+    padding: 5px var(--space-2);
+    border-radius: var(--radius-sm);
+    min-height: 34px;
+    cursor: pointer;
+    list-style: none;
 }
-.reference-actions { margin-left: auto; }
-.reference-delete { margin: calc(var(--space-2) * -1) 0 0; text-align: right; }
+.tree-row::-webkit-details-marker { display: none; }
+.tree-row:hover { background: var(--bg-hover); }
+
+/* A leaf discloses nothing, so it gets no control — but it keeps the caret's
+   width, or the names would not line up down the column. */
+.tree-row.is-leaf { cursor: default; }
+.caret-placeholder { visibility: hidden; }
+
+.tree-row.is-inactive .tree-name { color: var(--text-muted); text-decoration: line-through; }
+
+.tree-name { font-weight: 600; }
+
+/* Pushed to the right and allowed to collapse first: on a narrow screen the
+   name and the actions are what matter. */
+.tree-meta {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.86rem;
+}
+.tree-count { color: var(--text-muted); white-space: nowrap; }
+
+.tree-actions { display: flex; align-items: center; gap: var(--space-1); flex: 0 0 auto; }
+
+/* Only on hover or keyboard focus, so a long list is a list of names rather
+   than a wall of buttons — but always visible on a touch screen, where there
+   is no hover to reveal them with. */
+@media (hover: hover) and (pointer: fine) {
+    .tree-actions { opacity: 0; transition: opacity 120ms ease; }
+    .tree-row:hover .tree-actions,
+    .tree-row:focus-within .tree-actions { opacity: 1; }
+}
+
+.btn-xs {
+    min-height: 26px;
+    padding: 0 var(--space-2);
+    font-size: 0.8rem;
+    border-radius: var(--radius-sm);
+}
+
+@media (max-width: 599px) {
+    /* The count is the first thing to go: the name and the actions are why you
+       are on this page. */
+    .tree-count { display: none; }
+    .tree-list .tree-list { padding-left: var(--space-3); }
+}
 
 /* --- Print ---------------------------------------------------------------- */
 @media print {
@@ -2228,7 +2395,11 @@ details[open] > summary .caret { transform: rotate(180deg); }
    the desktop navigation: both are single-class selectors, so source order is
    the only thing deciding which wins. */
 @media (min-width: 1150px) {
-    .brand-stack { align-items: center; }
+    /* The wordmark stands on the logo's foot, which is the same line the menu
+       items stand on — so the whole bar reads as one row of type rather than a
+       lockup floating above a menu. It was centred against the logo until the
+       menu was brought down to that line, and then it was the odd one out. */
+    .brand-stack { align-items: flex-end; }
 
     /* Large enough to balance a menu-sized wordmark, small enough to leave the
        header at 60px. max-width caps a wide banner logo — object-fit
@@ -2236,7 +2407,9 @@ details[open] > summary .caret { transform: rotate(180deg); }
     .brand-stack-logo .brand-logo { height: 36px; max-width: 128px; }
 
     /* Item for item with the menu: same size (inherited, because the body is
-       17px and a rem is 16px), same weight, same line.
+       17px and a rem is 16px), same weight, and standing on the same line —
+       `line-height: 1` plus the descent correction, exactly as the menu items
+       do it, so all three feet coincide.
 
        max-width is the safety net the logo already has: APP_NAME is whatever
        the operator typed, and an unbounded wordmark is the one thing left in
@@ -2245,7 +2418,7 @@ details[open] > summary .caret { transform: rotate(180deg); }
     .brand-stack .brand-name {
         font-size: inherit;
         font-weight: 600;
-        line-height: 1.2;
+        line-height: 1;
         padding-bottom: 0;
         max-width: 12rem;
         overflow: hidden;

@@ -28,7 +28,37 @@ final class Category
     /** @return array<string,mixed>|null */
     public static function find(int $id): ?array
     {
-        return Database::selectOne('SELECT * FROM categories WHERE id = ?', [$id]);
+        return Database::selectOne(
+            'SELECT c.*, (SELECT COUNT(*) FROM assets a WHERE a.category_id = c.id) AS asset_count
+               FROM categories c WHERE c.id = ?',
+            [$id]
+        );
+    }
+
+    /**
+     * Everything one entry may be moved inside, as a depth-ordered list with a
+     * readable path ("Power tools → Cordless").
+     *
+     * Excludes the entry itself and everything under it. Moving a branch inside
+     * its own child would make a cycle, and a cycle in a self-nesting table is
+     * not a validation error you notice later — it is a tree walk that never
+     * ends, and every screen that renders it hangs.
+     *
+     * @return array<int,array{id:int,path:string}>
+     */
+    public static function parentOptions(int $excludeId = 0): array
+    {
+        return Tree::options(self::all(), $excludeId);
+    }
+
+    /**
+     * The ids of one entry and all of its descendants.
+     *
+     * @return array<int,int>
+     */
+    public static function descendantIds(int $id): array
+    {
+        return Tree::descendantIds(self::all(), $id);
     }
 
     public static function create(string $name, ?int $parentId, ?string $description): int

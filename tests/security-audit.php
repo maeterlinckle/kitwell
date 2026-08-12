@@ -157,6 +157,19 @@ $permissionExempt = [
     // anybody else's — a feed URL is a credential, not an admin surface.
     '/profile/calendar', '/profile/calendar/revoke',
     '/calendar/{token:[a-f0-9]+}.ics',
+    // A user's own second factor, and self-scoping for the same reason: every
+    // one of these acts on Auth::id() and nothing else. There is no id in any
+    // path, so there is no route by which one person reaches another's
+    // enrolment, backup codes or trusted devices. An administrator *removing*
+    // somebody's second factor is a different act on a different route
+    // (/admin/users/{id}/two-factor/reset) and does carry users.manage.
+    '/profile/security',
+    '/profile/security/totp',
+    '/profile/security/email',
+    '/profile/security/disable',
+    '/profile/security/backup-codes',
+    '/profile/security/devices/{id:\d+}/forget',
+    '/profile/security/devices/forget-all',
     // Public branding, per the reasoning above. There is no permission that
     // would make sense here: the page that needs it most is the one shown to
     // people who have not signed in.
@@ -172,6 +185,17 @@ $permissionExempt = [
     '/invite/{token:[a-f0-9]+}',
     '/forgot-password',
     '/reset-password/{token:[a-f0-9]+}',
+    // The second factor. Same contradiction, one step further along: the
+    // password has been accepted but no session exists yet, on purpose — see
+    // App\Services\TwoFactor. What identifies these requests is the pending
+    // challenge in the session, which only Auth::attempt() can create and which
+    // names the user; without one, every route here redirects to /login. The
+    // codes themselves are metered twice over, on a per-challenge counter and
+    // on the ordinary sign-in throttle, so six digits cannot be walked through.
+    '/two-factor',
+    '/two-factor/resend',
+    '/two-factor/cancel',
+    '/two-factor/setup',
 ];
 
 $noPermission = [];

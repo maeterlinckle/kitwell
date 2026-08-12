@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Core;
 
 use App\Models\ActivityLog;
+use App\Models\TrustedDevice;
 use App\Models\User;
+use App\Services\TwoFactor;
 
 /**
  * Authentication and the read side of role-based access control.
@@ -81,7 +83,17 @@ final class Auth
     }
 
     /**
-     * Attempt a login. Returns an error message on failure, null on success.
+     * Attempt a login.
+     *
+     * Returns an error message on failure, null on success — where "success"
+     * now means one of two things, and the caller has to ask which:
+     *
+     *   - signed in, if no second factor is owed;
+     *   - **password accepted, challenge pending**, if one is. In that case no
+     *     session is created at all. `TwoFactor::pending()` is what says so,
+     *     and until it is answered the request is anonymous to every route,
+     *     permission check and template helper in the application. There is no
+     *     half-signed-in user to have taught anything about.
      */
     public static function attempt(string $email, string $password): ?string
     {
@@ -115,17 +127,51 @@ final class Auth
             return 'That account has been deactivated. Please contact an administrator.';
         }
 
+        // Re-hashing the same password is housekeeping, not a password change:
+        // `false` keeps it from revoking every trusted device the first time
+        // PASSWORD_DEFAULT moves on.
         if (password_needs_rehash((string) $user['password_hash'], PASSWORD_DEFAULT)) {
-            User::updatePassword((int) $user['id'], $password);
+            User::updatePassword((int) $user['id'], $password, false);
         }
 
         LoginThrottle::record($email, $ip, true);
+
+        $userId  = (int) $user['id'];
+        $trusted = false;
+
+        // The password was right. Whether that is enough depends on the second
+        // factor, and on whether this browser has already answered one.
+        if (TwoFactor::challengeRequired($user)) {
+            $trusted = TrustedDevice::isTrusted($userId, TwoFactor::deviceToken());
+
+            if (!$trusted) {
+                // Note what this does *not* do: no session, no "Signed in"
+                // audit entry, no clearing of the lockout counter. None of them
+                // has been earned yet, and the request stays anonymous until
+                // the challenge is answered.
+                //
+                // methodFor() returning null means the account has no
+                // authenticator and the server cannot send email either. That
+                // is not a refusal — refusing would lock everybody out the
+                // moment SMTP broke — it is what sends the challenge screen to
+                // enrolment instead.
+                TwoFactor::beginChallenge($userId, (string) TwoFactor::methodFor($user));
+
+                return null;
+            }
+        }
+
         LoginThrottle::clear($email, $ip);
 
-        self::login((int) $user['id']);
+        self::login($userId);
 
-        User::touchLogin((int) $user['id'], $ip);
-        ActivityLog::record('login', 'user', (int) $user['id'], 'Signed in');
+        User::touchLogin($userId, $ip);
+        ActivityLog::record(
+            'login',
+            'user',
+            $userId,
+            $trusted ? 'Signed in from a trusted device (no code needed)' : 'Signed in'
+        );
 
         return null;
     }

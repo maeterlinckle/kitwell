@@ -124,6 +124,98 @@ $setting = static fn (string $key, string $default = ''): string => (string) ($s
     </div>
 
     <div class="card">
+        <h2>Interface</h2>
+
+        <div class="field">
+            <label class="label" for="flash_auto_hide_seconds">Hide confirmation banners after (seconds)</label>
+            <input class="input<?= isset($errors['flash_auto_hide_seconds']) ? ' has-error' : '' ?>" type="number"
+                   id="flash_auto_hide_seconds" name="flash_auto_hide_seconds" min="0" max="120" step="1" required
+                   value="<?= e(old($old, 'flash_auto_hide_seconds', $setting('flash_auto_hide_seconds', '6'))) ?>">
+            <p class="field-hint">
+                <strong>0 keeps them until they are closed.</strong> This applies to green confirmations
+                only — “saved”, “added”, “welcome back”. Warnings and errors always stay until dismissed,
+                because they are usually the only place the problem is stated. The close button is there
+                either way, and the countdown pauses while you are hovering over or tabbed into a banner.
+            </p>
+            <?php if (isset($errors['flash_auto_hide_seconds'])): ?><p class="field-error"><?= e($errors['flash_auto_hide_seconds']) ?></p><?php endif; ?>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Two-factor authentication</h2>
+
+        <div class="field">
+            <label class="checkbox">
+                <input type="checkbox" name="two_factor_required" value="1"
+                    <?= $setting('two_factor_required', '0') === '1' ? 'checked' : '' ?>
+                    <?= $canRequireTwoFactor ? '' : 'disabled' ?>>
+                <span>Require it for everyone
+                    <span class="field-hint">
+                        Anybody without a second factor is walked through setting one up at their next
+                        sign-in. Individual users can always switch it on for themselves from their own
+                        account page; this makes it compulsory.
+                    </span>
+                </span>
+            </label>
+
+            <?php if (!$canRequireTwoFactor): ?>
+                <p class="field-error">
+                    Not available yet: <a href="<?= e(url('/admin/email')) ?>">email is not configured</a>,
+                    so a user without an authenticator app would have no way to receive a code — and no
+                    way to sign in. Set up email first.
+                </p>
+            <?php endif; ?>
+            <?php if (isset($errors['two_factor_required'])): ?><p class="field-error"><?= e($errors['two_factor_required']) ?></p><?php endif; ?>
+        </div>
+
+        <div class="field-row">
+            <div class="field">
+                <label class="label" for="trusted_device_days">Trust a device for (days)</label>
+                <input class="input<?= isset($errors['trusted_device_days']) ? ' has-error' : '' ?>" type="number"
+                       id="trusted_device_days" name="trusted_device_days" min="1" max="365" step="1" required
+                       value="<?= e(old($old, 'trusted_device_days', $setting('trusted_device_days', '30'))) ?>">
+                <p class="field-hint">The outer limit on “don’t ask again on this computer”.</p>
+                <?php if (isset($errors['trusted_device_days'])): ?><p class="field-error"><?= e($errors['trusted_device_days']) ?></p><?php endif; ?>
+            </div>
+
+            <div class="field">
+                <label class="label" for="trusted_device_idle_days">…or until unused for (days)</label>
+                <input class="input<?= isset($errors['trusted_device_idle_days']) ? ' has-error' : '' ?>" type="number"
+                       id="trusted_device_idle_days" name="trusted_device_idle_days" min="1" max="365" step="1" required
+                       value="<?= e(old($old, 'trusted_device_idle_days', $setting('trusted_device_idle_days', '14'))) ?>">
+                <p class="field-hint">
+                    A machine not signed in from for this long is asked again. Capped at the figure on the
+                    left. A code is also required again if the browser or the network changes.
+                </p>
+                <?php if (isset($errors['trusted_device_idle_days'])): ?><p class="field-error"><?= e($errors['trusted_device_idle_days']) ?></p><?php endif; ?>
+            </div>
+        </div>
+
+        <div class="field-row">
+            <div class="field">
+                <label class="label" for="email_otp_minutes">Emailed code lasts (minutes)</label>
+                <input class="input<?= isset($errors['email_otp_minutes']) ? ' has-error' : '' ?>" type="number"
+                       id="email_otp_minutes" name="email_otp_minutes" min="1" max="60" step="1" required
+                       value="<?= e(old($old, 'email_otp_minutes', $setting('email_otp_minutes', '10'))) ?>">
+                <p class="field-hint">Only used for people without an authenticator app.</p>
+                <?php if (isset($errors['email_otp_minutes'])): ?><p class="field-error"><?= e($errors['email_otp_minutes']) ?></p><?php endif; ?>
+            </div>
+
+            <div class="field">
+                <label class="label" for="two_factor_max_attempts">Wrong codes allowed</label>
+                <input class="input<?= isset($errors['two_factor_max_attempts']) ? ' has-error' : '' ?>" type="number"
+                       id="two_factor_max_attempts" name="two_factor_max_attempts" min="3" max="10" step="1" required
+                       value="<?= e(old($old, 'two_factor_max_attempts', $setting('two_factor_max_attempts', '5'))) ?>">
+                <p class="field-hint">
+                    Then the sign-in is torn up and has to start from the password again. Wrong codes also
+                    count towards the ordinary sign-in lockout, so guessing six digits locks the account.
+                </p>
+                <?php if (isset($errors['two_factor_max_attempts'])): ?><p class="field-error"><?= e($errors['two_factor_max_attempts']) ?></p><?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
         <h2>Maintenance</h2>
 
         <div class="field">

@@ -12,6 +12,7 @@ use App\Models\ActivityLog;
 use App\Models\Setting;
 use App\Services\AssetTagger;
 use App\Services\Branding;
+use App\Services\TwoFactor;
 
 final class SettingsController extends Controller
 {
@@ -21,6 +22,9 @@ final class SettingsController extends Controller
             'pageTitle' => 'Settings',
             'settings'  => Setting::all(),
             'nextTag'   => AssetTagger::next(),
+            // Whether the site-wide requirement can be switched on at all —
+            // the form says why not, rather than offering a control that fails.
+            'canRequireTwoFactor' => TwoFactor::canEnforceSiteWide(),
             'logos'     => [
                 // Setting::path(), not resolve(): this page must show what is
                 // actually stored in each slot, not what stands in for it.
@@ -101,6 +105,11 @@ final class SettingsController extends Controller
             'pat_guide_earth_lead_metres' => 'required|numeric|min_value:0.1|max_value:1000',
             'pat_guide_leakage_class1_ma' => 'required|numeric|min_value:0|max_value:1000',
             'pat_guide_leakage_class2_ma' => 'required|numeric|min_value:0|max_value:1000',
+            'flash_auto_hide_seconds'     => 'required|integer|min_value:0|max_value:120',
+            'trusted_device_days'         => 'required|integer|min_value:1|max_value:365',
+            'trusted_device_idle_days'    => 'required|integer|min_value:1|max_value:365',
+            'email_otp_minutes'           => 'required|integer|min_value:1|max_value:60',
+            'two_factor_max_attempts'     => 'required|integer|min_value:3|max_value:10',
         ], [
             'asset_tag_prefix'     => 'Asset tag prefix',
             'asset_tag_pad'        => 'Number padding',
@@ -114,6 +123,11 @@ final class SettingsController extends Controller
             'pat_guide_earth_lead_metres' => 'Earth continuity lead length',
             'pat_guide_leakage_class1_ma' => 'Leakage guideline (Class I)',
             'pat_guide_leakage_class2_ma' => 'Leakage guideline (Class II)',
+            'flash_auto_hide_seconds'     => 'Confirmation banner timeout',
+            'trusted_device_days'         => 'Trusted device duration',
+            'trusted_device_idle_days'    => 'Trusted device inactivity window',
+            'email_otp_minutes'           => 'Emailed code lifetime',
+            'two_factor_max_attempts'     => 'Code attempts allowed',
         ], '/admin/settings');
 
         $prefix = (string) $data['asset_tag_prefix'];
@@ -143,6 +157,33 @@ final class SettingsController extends Controller
                   'pat_guide_earth_lead_metres', 'pat_guide_leakage_class1_ma', 'pat_guide_leakage_class2_ma'] as $key) {
             Setting::put($key, (string) (float) $data[$key]);
         }
+
+        Setting::put('flash_auto_hide_seconds', (string) (int) $data['flash_auto_hide_seconds']);
+
+        // Two-factor policy. Requiring it site-wide is refused unless a code can
+        // actually be delivered: with no authenticator enrolled and no SMTP,
+        // turning it on would lock every account out of the application at once,
+        // including the administrator doing the turning on.
+        $requireTwoFactor = Request::boolean('two_factor_required');
+
+        if ($requireTwoFactor && !TwoFactor::canEnforceSiteWide()) {
+            $this->failValidation([
+                'two_factor_required' => 'Email is not configured, so users without an authenticator app '
+                    . 'would have no way to receive a code — and no way to sign in. Set up email first.',
+            ], '/admin/settings');
+        }
+
+        Setting::put('two_factor_required',      $requireTwoFactor ? '1' : '0');
+        Setting::put('trusted_device_days',      (string) (int) $data['trusted_device_days']);
+        Setting::put('email_otp_minutes',        (string) (int) $data['email_otp_minutes']);
+        Setting::put('two_factor_max_attempts',  (string) (int) $data['two_factor_max_attempts']);
+
+        // An idle window longer than the outer limit would never be reached, so
+        // it is capped rather than saved as written — the two are a pair.
+        Setting::put(
+            'trusted_device_idle_days',
+            (string) min((int) $data['trusted_device_idle_days'], (int) $data['trusted_device_days'])
+        );
 
         ActivityLog::record('updated', 'settings', null, 'Updated application settings', [
             'before' => array_intersect_key($before, array_flip(['asset_tag_prefix', 'asset_tag_pad', 'organisation_name'])),

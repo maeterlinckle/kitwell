@@ -91,15 +91,19 @@ foreach ($links as $link) {
     $visible[] = $link;
 }
 
-/** Is the current page this entry, or anything inside it? */
-$groupIsOpen = static function (array $link): bool {
-    foreach ($link['children'] ?? [] as $child) {
-        if (is_active_path($child['href'])) {
-            return true;
-        }
-    }
-
-    return false;
+/**
+ * Which child of a group is the page you are actually on — at most one.
+ *
+ * Not `is_active_path()` per child. These menus nest one item inside another:
+ * "Add maintenance" is /maintenance/log and "Schedules" is /maintenance, so on
+ * the first of those the prefix rule matched both and the bar showed two
+ * current pages. `active_path()` picks the longest match, which is the one the
+ * user is really looking at.
+ *
+ * @return string|null The active child's href
+ */
+$activeChild = static function (array $link): ?string {
+    return active_path($link['children'] === [] ? [] : array_column($link['children'], 'href'));
 };
 ?>
 <header class="site-header">
@@ -132,18 +136,20 @@ $groupIsOpen = static function (array $link): bool {
                                      top of the page you just navigated to —
                                      data-nav-autoopen lets the stylesheet keep it shut
                                      there until you actually reach for it. */ ?>
+                            <?php $active = $activeChild($link); ?>
                             <details class="nav-group" data-nav-group
-                                <?= $groupIsOpen($link) ? 'open data-nav-autoopen' : '' ?>>
-                                <summary class="nav-link nav-group-toggle<?= $groupIsOpen($link) ? ' is-active' : '' ?>">
+                                <?= $active !== null ? 'open data-nav-autoopen' : '' ?>>
+                                <summary class="nav-link nav-group-toggle<?= $active !== null ? ' is-active' : '' ?>">
                                     <span><?= e($link['label']) ?></span>
                                     <span class="caret" aria-hidden="true"></span>
                                 </summary>
                                 <ul class="nav-sublist">
                                     <?php foreach ($link['children'] as $child): ?>
+                                        <?php $isCurrent = $child['href'] === $active; ?>
                                         <li>
                                             <a href="<?= e(url($child['href'])) ?>"
-                                               class="nav-link nav-sublink<?= is_active_path($child['href']) ? ' is-active' : '' ?>"
-                                                <?= is_active_path($child['href']) ? 'aria-current="page"' : '' ?>>
+                                               class="nav-link nav-sublink<?= $isCurrent ? ' is-active' : '' ?>"
+                                                <?= $isCurrent ? 'aria-current="page"' : '' ?>>
                                                 <?= e($child['label']) ?>
                                             </a>
                                         </li>
@@ -167,7 +173,11 @@ $groupIsOpen = static function (array $link): bool {
                          <details> mechanics as the main nav groups, so it
                          accordions on a phone and drops down on a desktop
                          without a second structure. */ ?>
-                <?php $accountOpen = is_active_path('/profile'); ?>
+                <?php /* Same "most specific wins" rule as the menu groups. This
+                         list had the sibling problem too, and used to work
+                         around it by hand with a `&& !is_active_path(...)`. */ ?>
+                <?php $accountActive = active_path(['/profile', '/profile/security', '/profile/calendar']); ?>
+                <?php $accountOpen   = $accountActive !== null; ?>
                 <details class="nav-group nav-account-group" data-nav-group
                     <?= $accountOpen ? 'open data-nav-autoopen' : '' ?>>
                     <summary class="nav-link nav-user nav-group-toggle<?= $accountOpen ? ' is-active' : '' ?>">
@@ -187,11 +197,15 @@ $groupIsOpen = static function (array $link): bool {
                         </li>
                         <li>
                             <a href="<?= e(url('/profile')) ?>"
-                               class="nav-link nav-sublink<?= is_active_path('/profile') && !is_active_path('/profile/calendar') ? ' is-active' : '' ?>">My account</a>
+                               class="nav-link nav-sublink<?= $accountActive === '/profile' ? ' is-active' : '' ?>">My account</a>
+                        </li>
+                        <li>
+                            <a href="<?= e(url('/profile/security')) ?>"
+                               class="nav-link nav-sublink<?= $accountActive === '/profile/security' ? ' is-active' : '' ?>">Security</a>
                         </li>
                         <li>
                             <a href="<?= e(url('/profile/calendar')) ?>"
-                               class="nav-link nav-sublink<?= is_active_path('/profile/calendar') ? ' is-active' : '' ?>">Calendar feed</a>
+                               class="nav-link nav-sublink<?= $accountActive === '/profile/calendar' ? ' is-active' : '' ?>">Calendar feed</a>
                         </li>
                     </ul>
                 </details>

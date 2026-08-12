@@ -35,6 +35,10 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 - **Accounts** — new users are emailed an invitation and set their own
   password; anyone who forgets theirs can reset it by email. Both links are
   single-use with a configurable expiry, and both degrade sensibly with no SMTP.
+- **Two-factor authentication** — an authenticator app (with backup codes), or
+  a code by email where that is set up. Each user can switch it on for
+  themselves, or an administrator can require it for everyone. "Don't ask again
+  on this computer" lasts as long as you decide, and no longer.
 
 ---
 
@@ -49,6 +53,7 @@ and vanilla JS: no build step, nothing to compile, deployable by copying files.
 - [Roles and permissions](#roles-and-permissions)
 - [Teams](#teams)
 - [Accounts: invitations and password recovery](#accounts-invitations-and-password-recovery)
+- [Two-factor authentication](#two-factor-authentication)
 - [Email and reminders](#email-and-reminders)
 - [Calendar feeds](#calendar-feeds)
 - [Using the asset register](#using-the-asset-register)
@@ -668,6 +673,69 @@ account-takeover links. It also means a lost link cannot be looked up and
 re-sent; a fresh one has to be issued, which is the right answer anyway.
 
 The two link expiry windows are on **Settings → Email**, under "Account links".
+
+---
+
+## Two-factor authentication
+
+A second check at sign-in, so a stolen password is not enough on its own.
+
+### Turning it on for yourself
+
+**My account → Security**. Two ways in:
+
+- **An authenticator app** (recommended) — Google Authenticator, Authy,
+  1Password, Bitwarden, or whatever your phone already has. Scan the QR code,
+  type the code it shows to prove it worked, and you are done. Nothing is saved
+  until that code matches, so an abandoned setup leaves no trace.
+- **A code by email** — one click, no app, but it needs SMTP configured and a
+  code by email is only as safe as the mailbox it lands in.
+
+Either way you get **ten backup codes**, shown once. Each works once, in place
+of a code from your app. Print them, or put them somewhere that is not your
+phone — because the day you need one is the day you cannot get in to make more.
+
+### Requiring it for everyone
+
+**Settings → Application settings → Two-factor authentication**. When it is on,
+anybody without a second factor is walked through setting one up at their next
+sign-in.
+
+The control is **disabled until email is configured**, and says so. With no SMTP
+and no authenticator app enrolled, a user would have no way to receive a code
+and no way to sign in — including the administrator who switched it on.
+
+### Trusted devices
+
+After a successful check you can tick **"Don't ask again on this computer"**.
+That lasts for `trusted_device_days` (30 by default), and stops sooner if any of
+these happen:
+
+- the device is not used for `trusted_device_idle_days` (14 by default);
+- the browser changes — an update to the browser counts;
+- you sign in from a noticeably different network;
+- you change your password, or an administrator deactivates the account;
+- you forget it yourself, from **My account → Security**.
+
+Never tick it on a shared or public machine.
+
+### If somebody loses their phone
+
+An administrator opens their user page and uses **Remove two-factor
+authentication**. That clears the secret, the backup codes and the trusted
+devices; the person can then sign in with their password and set it up again.
+
+There is no way to *read* somebody's second factor — the secret only exists on
+their device — so this is a removal, not a reset. It is also the step that turns
+a stolen password into an account, so check who you are talking to first.
+
+### What is stored
+
+The TOTP secret is **encrypted at rest** with `APP_KEY`. Backup codes are stored
+with `password_hash()`, never in the clear. A trusted device is 32 random bytes
+in a cookie, of which the database holds only a SHA-256. Wrong codes are counted
+against the same lockout as wrong passwords, so a six-digit code cannot be
+guessed at leisure.
 
 ---
 
@@ -1616,9 +1684,17 @@ formula.
 ### Categories, locations and settings
 
 Categories and locations are managed under **Admin** (`categories.manage` /
-`locations.manage`) and can nest one level, e.g. Main Workshop → Bench 3.
-Neither can be deleted while assets still reference it — deactivate it instead,
-which hides it from the pickers but leaves existing assets intact.
+`locations.manage`) and nest, e.g. Main Workshop → Bench 3.
+
+Each is shown as a **tree**: one compact row per entry, branches you can collapse,
+and three buttons on every row — *Add inside*, *Edit*, *Delete*. Editing has its
+own page, which is what keeps the list readable when there are fifty of them.
+
+Nothing can be deleted while assets still reference it (the button is disabled
+and says why) — make it inactive instead, which hides it from the pickers but
+leaves existing assets intact. Nothing can be moved inside one of its own
+children either; that would make a loop, and a loop in a tree is a page that
+never finishes drawing.
 
 ### Archiving vs deleting
 
@@ -1641,6 +1717,13 @@ audit trail wins over tidiness.
 - **Sessions** — `HttpOnly`, `SameSite=Lax`, `Secure` when HTTPS is in use;
   strict mode on, ID regenerated on sign-in, idle timeout from `SESSION_LIFETIME`,
   and the session is bound to the browser's user-agent fingerprint.
+- **Two-factor authentication** — TOTP (RFC 6238) or a code by email, per user
+  or required site-wide. The secret is encrypted at rest, backup codes are
+  hashed with `password_hash()`, and trusted-device tokens are 32 random bytes
+  of which only a SHA-256 is stored. **A correct password with a challenge
+  outstanding creates no session at all**, so nothing in the application has to
+  understand a half-signed-in user. Wrong codes count against the same lockout
+  as wrong passwords.
 - **CSRF** — every state-changing route carries the `csrf` middleware; forms
   include `csrf_field()`. A stale token gives a clear "session expired" page
   rather than a silent failure.

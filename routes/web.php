@@ -32,6 +32,8 @@ use App\Controllers\LabelController;
 use App\Controllers\HireController;
 use App\Controllers\MyHiresController;
 use App\Controllers\ScanController;
+use App\Controllers\SecurityController;
+use App\Controllers\TwoFactorController;
 use App\Controllers\MaintenanceController;
 use App\Controllers\ManualController;
 use App\Controllers\PatController;
@@ -64,6 +66,16 @@ $router->post('/forgot-password', [AccountController::class, 'sendReset'],  ['gu
 $router->get('/reset-password/{token:[a-f0-9]+}',  [AccountController::class, 'showReset'],     ['guest']);
 $router->post('/reset-password/{token:[a-f0-9]+}', [AccountController::class, 'resetPassword'], ['guest', 'csrf']);
 
+// The second factor. In the `guest` group because there is genuinely no session
+// yet: Auth::attempt() stops at the password and leaves a pending state behind,
+// and nothing here is reachable without one. See App\Services\TwoFactor.
+$router->get('/two-factor',          [TwoFactorController::class, 'challenge'],  ['guest'], 'two-factor');
+$router->post('/two-factor',         [TwoFactorController::class, 'verify'],     ['guest', 'csrf']);
+$router->post('/two-factor/resend',  [TwoFactorController::class, 'resend'],     ['guest', 'csrf']);
+$router->post('/two-factor/cancel',  [TwoFactorController::class, 'cancel'],     ['guest', 'csrf']);
+$router->get('/two-factor/setup',    [TwoFactorController::class, 'setup'],      ['guest']);
+$router->post('/two-factor/setup',   [TwoFactorController::class, 'setupEmail'], ['guest', 'csrf']);
+
 // The logo, outside 'auth' because the sign-in page shows it and nobody has a
 // session at that point. It takes no id, reads one of two settings and returns
 // an image an administrator chose to publish. See App\Controllers\BrandingController.
@@ -85,6 +97,17 @@ $router->group(['auth'], static function (Router $router): void {
 
     // Personal, not administrative: a user manages only their own feed token,
     // and there is no route by which anyone can reach somebody else's.
+    // Two-factor, trusted devices and backup codes: a user's own, and only
+    // their own. See App\Controllers\SecurityController.
+    $router->get('/profile/security',                [SecurityController::class, 'index'], [], 'profile.security');
+    $router->get('/profile/security/totp',           [SecurityController::class, 'startTotp']);
+    $router->post('/profile/security/totp',          [SecurityController::class, 'confirmTotp'], ['csrf']);
+    $router->post('/profile/security/email',         [SecurityController::class, 'enableEmail'], ['csrf']);
+    $router->post('/profile/security/disable',       [SecurityController::class, 'disable'], ['csrf']);
+    $router->post('/profile/security/backup-codes',  [SecurityController::class, 'regenerateBackupCodes'], ['csrf']);
+    $router->post('/profile/security/devices/{id:\d+}/forget', [SecurityController::class, 'forgetDevice'], ['csrf']);
+    $router->post('/profile/security/devices/forget-all',      [SecurityController::class, 'forgetAllDevices'], ['csrf']);
+
     $router->get('/profile/calendar',         [CalendarController::class, 'show'], [], 'profile.calendar');
     $router->post('/profile/calendar',        [CalendarController::class, 'regenerate'], ['csrf']);
     $router->post('/profile/calendar/revoke', [CalendarController::class, 'revoke'], ['csrf']);
@@ -260,6 +283,10 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/admin/users/{id:\d+}',          [UserController::class, 'update'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/password', [UserController::class, 'resetPassword'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/invite',   [UserController::class, 'invite'],        ['can:users.manage', 'csrf']);
+
+    // The lost-phone path: an administrator removes somebody's second factor.
+    // A removal, not a reset — see SecurityController::adminReset().
+    $router->post('/admin/users/{id:\d+}/two-factor/reset', [SecurityController::class, 'adminReset'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/status',   [UserController::class, 'toggleActive'],  ['can:users.manage', 'csrf']);
 
     // Roles and permissions
@@ -280,13 +307,18 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/admin/teams/{id:\d+}/members/{userId:\d+}/remove', [TeamController::class, 'removeMember'], ['can:teams.manage', 'csrf']);
 
     // Reference data
+    // The static /create must be registered before the {id} routes, as everywhere.
     $router->get('/admin/categories',                 [CategoryController::class, 'index'],   ['can:categories.manage'], 'admin.categories');
+    $router->get('/admin/categories/create',          [CategoryController::class, 'create'],  ['can:categories.manage']);
     $router->post('/admin/categories',                [CategoryController::class, 'store'],   ['can:categories.manage', 'csrf']);
+    $router->get('/admin/categories/{id:\d+}/edit',   [CategoryController::class, 'edit'],    ['can:categories.manage']);
     $router->post('/admin/categories/{id:\d+}',       [CategoryController::class, 'update'],  ['can:categories.manage', 'csrf']);
     $router->post('/admin/categories/{id:\d+}/delete',[CategoryController::class, 'destroy'], ['can:categories.manage', 'csrf']);
 
     $router->get('/admin/locations',                 [LocationController::class, 'index'],   ['can:locations.manage'], 'admin.locations');
+    $router->get('/admin/locations/create',          [LocationController::class, 'create'],  ['can:locations.manage']);
     $router->post('/admin/locations',                [LocationController::class, 'store'],   ['can:locations.manage', 'csrf']);
+    $router->get('/admin/locations/{id:\d+}/edit',   [LocationController::class, 'edit'],    ['can:locations.manage']);
     $router->post('/admin/locations/{id:\d+}',       [LocationController::class, 'update'],  ['can:locations.manage', 'csrf']);
     $router->post('/admin/locations/{id:\d+}/delete',[LocationController::class, 'destroy'], ['can:locations.manage', 'csrf']);
 

@@ -207,4 +207,33 @@ $action = $isEdit ? url('/admin/users/' . $user['id']) : url('/admin/users');
             <button type="submit" class="btn btn-warning" data-confirm="Reset this user's password?">Reset password</button>
         </div>
     </form>
+
+    <?php /* The lost-phone path. Not a reset — there is nothing to reset to,
+             because the secret only exists on their device — so this removes
+             the second factor and lets them set a new one up. */ ?>
+    <?php if ((int) ($user['two_factor_enabled'] ?? 0) === 1): ?>
+        <div class="card">
+            <h2>Two-factor authentication</h2>
+            <p class="muted">
+                <span class="badge badge-ok">On</span>
+                <?= !empty($user['totp_confirmed_at'])
+                    ? 'Using an authenticator app, set up ' . e(format_date((string) $user['totp_confirmed_at'])) . '.'
+                    : 'Using codes by email.' ?>
+            </p>
+            <p class="field-hint">
+                If they have lost the device, remove it here. They can then sign in with just their
+                password and set it up again — and if it is required site-wide, the next sign-in walks
+                them through that. Check who you are talking to first: this is the step that turns a
+                stolen password into an account.
+            </p>
+
+            <form method="post" action="<?= e(url('/admin/users/' . $user['id'] . '/two-factor/reset')) ?>" class="form-actions">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-warning"
+                        data-confirm="Remove two-factor authentication from <?= e($user['name']) ?>? Their backup codes and trusted devices go too.">
+                    Remove two-factor authentication
+                </button>
+            </form>
+        </div>
+    <?php endif; ?>
 <?php endif; ?>

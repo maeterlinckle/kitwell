@@ -1,6 +1,6 @@
 # Project state
 
-A ground-truth snapshot of the asset register as it stands on **2026-08-11**,
+A ground-truth snapshot of the asset register as it stands on **2026-08-12**,
 written for whoever (or whatever) picks the code up next.
 
 The original nine build prompts finished on 2026-08-06. Since then:
@@ -9,11 +9,13 @@ deployment tooling on 2026-08-07 (§5.3), the PAT workflow overhaul on
 email plus calendar feeds on 2026-08-10, and on 2026-08-11 three fixes found by
 deploying it (§5.4) followed by stages 13, 14 and 15 — fixes and small changes,
 then branding, HTML email, export and print, then teams, invitations and
-password recovery.
+password recovery. Stage 16, on 2026-08-12, added two-factor authentication
+alongside auto-hiding confirmations, a tree view for the reference data, and
+two navigation fixes.
 
 Everything below was checked against the files and the database at the time of
 writing, not recalled. The schema section was produced by creating an empty
-database, applying all twenty-one migrations in order and then reading
+database, applying all twenty-two migrations in order and then reading
 `information_schema`, so it describes exactly what a fresh install produces.
 Where something is *not* verified, it says so.
 
@@ -30,7 +32,7 @@ Where something is *not* verified, it says so.
 | Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
 | `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 188 PHP files (85 of them templates), 151 routes (81 GET, 70 POST), 21 migrations |
+| Counted at time of writing | 209 PHP files (93 of them templates), 170 routes (89 GET, 81 POST), 22 migrations |
 | Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
@@ -42,13 +44,13 @@ Where something is *not* verified, it says so.
 
 ## 2. Database schema as implemented
 
-Built by applying `database/migrations/001` … `021` to an empty database. All
-twenty-one applied cleanly with no errors.
+Built by applying `database/migrations/001` … `022` to an empty database. All
+twenty-two applied cleanly with no errors.
 
-**Totals:** 26 domain tables, 306 columns, 48 foreign keys, 120 indexes.
+**Totals:** 28 domain tables, 327 columns, 50 foreign keys, 127 indexes.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
-A database migrated with `php bin/migrate.php` has a **27th** table,
+A database migrated with `php bin/migrate.php` has a **29th** table,
 `migrations` (`id`, `migration`, `batch`, `applied_at`, unique on `migration`),
 created by `src/Core/Migrator.php`. It does not appear below because it is
 tracking, not domain data — and note that it is *not* created if you pipe the
@@ -79,6 +81,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 | `019_maintenance_log_documents.sql` | `maintenance_log_documents` — the paperwork attached to a completion (a contractor's report, a certificate), shaped after `asset_manuals` but hanging off the log |
 | `020_teams.sql` | `teams`, `team_members`; `maintenance_schedules.assigned_to_team_id`; the `teams.manage` permission, granted to `admin` only |
 | `021_user_tokens.sql` | `user_tokens` — single-use invitation and password-reset links, stored as SHA-256; the `invite_expiry_hours` and `password_reset_expiry_hours` settings |
+| `022_two_factor.sql` | `users` gains `two_factor_enabled`, `totp_secret` (encrypted) and `totp_confirmed_at`; `user_backup_codes`, `trusted_devices`; the five two-factor settings |
 
 Migrations are applied in filename order and recorded. **Never edit an applied
 file** — add a new numbered one.
@@ -246,6 +249,29 @@ that was sent**, so a database dump is not a set of working account-takeover
 links. `used_at` rather than a delete, so "already used" is a state the page can
 explain instead of an indistinguishable "not found".
 
+#### `user_backup_codes` (migration 022)
+`id`, `user_id` NN (CASCADE), `code_hash` varchar(255) NN, `used_at` datetime,
+`created_at`. Index `(user_id, used_at)`.
+
+Ten codes are issued at enrolment and replaced as a set. Hashed with
+**`password_hash()`, not SHA-256**: ten characters from a 31-letter alphabet is
+short enough to be worth brute-forcing out of a stolen dump, and a slow hash is
+the whole defence. The alphabet omits O/0 and I/1/L because these get written on
+paper and typed back months later.
+
+#### `trusted_devices` (migration 022)
+`id` bigint, `user_id` NN (CASCADE), `token_hash` char(64) NN **unique**,
+`label`, `ip_address`, `user_agent_hash` char(64), `last_seen_at` datetime NN,
+`expires_at` datetime NN, `created_at`.
+Indexes `(user_id, expires_at)`.
+
+"Don't ask again on this computer", with **four** ways it stops working rather
+than one: the outer `expires_at`, an idle window measured from `last_seen_at`, a
+change of browser (`user_agent_hash`), and a change of network (`ip_address`,
+compared as a /24 or a /64 — see `TrustedDevice::sameNetwork()`). The cookie
+holds 32 random bytes and only the SHA-256 is stored. Rows are deleted outright
+on a password change and on deactivation.
+
 #### `pat_records` (24 columns)
 `id`, `asset_id` NN, `test_date` date NN, `retest_due_date` date,
 `tester_user_id`, `tester_name`, `tester_reference`, `test_equipment`,
@@ -327,7 +353,7 @@ purpose: an item crossing from "due soon" to "overdue" is a *different*
 reminder and goes out at once rather than waiting out the earlier one's repeat
 window.
 
-### 2.3 Foreign keys (48)
+### 2.3 Foreign keys (50)
 
 | Delete rule | Where it is used |
 |---|---|
@@ -365,8 +391,11 @@ deleting a user never destroys the records they touched.
   - manager gained `email.send` (not `email.manage`) in 018
   - `teams.manage` (020) is **admin only**: membership decides who is reminded
     about a job and who it is expected of, which makes it administrative
-- **39 settings** on a fresh install (43 once both logo variants have been
-  uploaded — the four `logo_*` keys are written on upload, never seeded):
+- **44 settings** on a fresh install (48 once both logo variants have been
+  uploaded — the four `logo_*` keys are written on upload, never seeded).
+  Stage 16 added `flash_auto_hide_seconds` (6, 0 = never), `two_factor_required`
+  (0), `trusted_device_days` (30), `trusted_device_idle_days` (14),
+  `email_otp_minutes` (10) and `two_factor_max_attempts` (5):
 
   | Key | Default | |
   |---|---|---|
@@ -917,11 +946,63 @@ worth keeping.
   nobody is signed in on these routes and `record()` would file them all under
   "System" — true of the request, useless in the trail.
 
+### 4.11 Two-factor authentication
+
+- **There is no half-signed-in user.** `Auth::attempt()` verifies the password
+  and then, when a second factor is owed, **creates no session at all** — it
+  leaves a pending challenge in `TwoFactor::pending()` instead. Every `auth`
+  route, permission check and template helper therefore treats the request as a
+  stranger's, exactly as before, and nothing had to be taught about a new
+  in-between state. `AuthController::login()` reads that pending state to decide
+  where to send the browser; forgetting to would have let somebody through.
+- **TOTP is written here, and checked against the RFCs' own numbers.**
+  `src/Core/Totp.php` is RFC 6238 over RFC 4226: SHA-1, 6 digits, 30 seconds,
+  ±1 step. Those are constants, not settings — an authenticator app assumes all
+  three, and "configurable" would mean codes that quietly never match.
+  `tests/totp-vectors.php` runs the published vectors from RFC 4226 Appendix D
+  and RFC 6238 Appendix B, so a disagreement means this code is wrong rather
+  than the test.
+- **The QR code is generated on this server** (`src/Core/QrCode.php`, inline
+  SVG, byte mode, level M, versions 1–13). The CSP allows no off-origin scripts,
+  and more to the point *the thing in the picture is the secret* — it must never
+  be a request to somebody else's server to draw it. A deliberate subset, and it
+  throws rather than truncating: a QR that is nearly right still scans, and
+  enrols a secret that will never match.
+- **Nothing is stored until enrolment is proved.** The secret sits in the
+  session between showing the QR and verifying a code from the app, so an
+  abandoned setup leaves no credential on an account whose owner never scanned
+  it. `totp_secret` is encrypted with `Crypto` (which fails closed — a secret
+  that cannot be encrypted is refused, not stored in the clear).
+- **Rate limiting is on the sign-in counters, not a separate budget.** Six
+  digits is a million guesses; wrong codes are recorded in `login_attempts`
+  exactly as wrong passwords are, so guessing a code locks the account the same
+  way. There is a per-challenge counter on top of it
+  (`two_factor_max_attempts`), after which the sign-in is torn up.
+- **The emailed code lives in the session, hashed.** A code valid for one login
+  attempt needs no table, no cleanup job, and leaves no row behind on every
+  abandoned sign-in. It is sent when the challenge screen is *rendered*, not
+  when the password is posted — otherwise it starts expiring before anybody has
+  seen a page.
+- **Trusted devices are a window, not a bypass.** Four independent ways one
+  stops working; see the `trusted_devices` table in §2.2. They are deleted on a
+  password change and on deactivation — and `User::updatePassword()` takes a
+  `$isChange` flag so a silent re-hash of the *same* password does not revoke
+  everybody's devices the first time `PASSWORD_DEFAULT` moves on.
+- **The site-wide requirement is refused when nothing can deliver a code.**
+  With no SMTP and no authenticator enrolled, switching it on would lock every
+  account out at once, including the administrator switching it on. The settings
+  form disables the control and says why.
+- **An administrator can remove somebody's second factor, never read it.**
+  `/admin/users/{id}/two-factor/reset` clears the secret, the backup codes and
+  the trusted devices — the lost-phone path — and is the one 2FA route carrying
+  a permission check. Every `/profile/security` route acts on `Auth::id()` and
+  has no id in its path, which is why they are on the audit's self-scoping list.
+
 ---
 
 ## 5. Build-prompt status
 
-All fifteen prompts are **complete**. Nothing is partial or unstarted.
+All sixteen prompts are **complete**. Nothing is partial or unstarted.
 
 > **Terminology:** the application says **Hires** and **Hirers**, never loans or borrowers. Migration 017 renamed the schema to match, so code and interface use the same words — there is no compatibility shim and nothing left calling it a loan. Only the filenames of migrations 006 and 013 still carry the old words, because an applied migration is never edited.
 
@@ -946,6 +1027,7 @@ All fifteen prompts are **complete**. Nothing is partial or unstarted.
 | 13 | Ten fixes: PAT wizard, scanner hand-off, editable maintenance records | complete | 2026-08-11 |
 | 14 | Role creation, branding/logo, HTML email, export page, print documents | complete | 2026-08-11 |
 | 15 | Nav polish, dashboard order, maintenance evidence, Teams, invites, password recovery | complete | 2026-08-11 |
+| 16 | Auto-hiding banners, nav alignment and active-state fix, reference-data tree, two-factor authentication | complete | 2026-08-12 |
 
 ### 5.1 What each prompt delivered
 
@@ -1030,6 +1112,19 @@ All fifteen prompts are **complete**. Nothing is partial or unstarted.
     sets their own password; and **self-service password recovery**. The last
     two share one expiring, single-use, hash-at-rest link mechanism (§4.10) and
     both fall back cleanly when no SMTP is configured.
+16. **Two-factor authentication**, plus four smaller things. Confirmation
+    banners now time out after a configurable number of seconds (0 = never),
+    while warnings and errors never do — and the one message that reported
+    something nowhere else recorded it, the reminder run's summary, was moved
+    onto the reminders page first (§4.11 explains the rest). The menu text and
+    the wordmark now stand on the foot of the logo, and only the page you are
+    actually on is marked active — the prefix match was lighting two items at
+    once whenever one menu entry sat under another. Categories and locations are
+    a condensed, collapsible tree with the form on its own page. And 2FA:
+    **TOTP** with a QR code generated on this server and ten single-use backup
+    codes, **email codes** as the fallback where SMTP allows it, per-user opt-in
+    *and* a site-wide requirement, and **trusted devices** that expire four
+    different ways.
 
 ### 5.2 What has been verified, and how
 
@@ -1037,12 +1132,14 @@ All fifteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 188 PHP files | 0 failures |
+| `php -l` on all 209 PHP files | 0 failures |
 | `tests/security-audit.php` | **35 passed, 0 failed** |
-| `tests/escape-audit.php` | **2136 output expressions across 85 templates, 0 unescaped** |
-| All 21 migrations against an empty database | applied cleanly; schema as documented above |
-| Seed data counts | 4 roles / 33 permissions / 66 grants / 39 settings / 0 template overrides / 1 demo team |
-| `tests/permission-matrix.php` | **312 checks, 0 mismatches** |
+| `tests/escape-audit.php` | **2215 output expressions across 93 templates, 0 unescaped** |
+| All 22 migrations against an empty database | applied cleanly; 28 tables, 327 columns, 50 FKs, 127 indexes, all InnoDB |
+| Seed data counts | 4 roles / 33 permissions / 66 grants / 44 settings / 0 template overrides |
+| `tests/permission-matrix.php` | **344 checks, 0 mismatches** |
+| `tests/totp-vectors.php` | **52 checks, 0 failed** — RFC 4226 Appendix D and RFC 6238 Appendix B |
+| `tests/qr-encode.php` | **21 checks, 0 failed** — ISO/IEC 18004 Annex I error-correction codewords, and the geometry |
 | `tests/report-figures.php` | every figure agrees with the database |
 | Migrations 019–021 on the **populated** dev database | applied cleanly; existing rows untouched |
 
@@ -1144,13 +1241,30 @@ All fifteen prompts are **complete**. Nothing is partial or unstarted.
 | Invitations and recovery, end to end | **51 checks**: the form asks for no password, one email sent, the token stored **only as a SHA-256**, no sign-in before setup, the "Invited" badge, single use, resend invalidating the old link, a direct password reset revoking it, the identical answer for a real / unknown / deactivated address, throttling, and both fallbacks with email off |
 | Link expiry | **13 checks**: the window comes from the setting, 0 clamps to 1 hour and 99999 to 30 days, the two windows are independent, an expired link explains itself and cannot be used, and deleting a user takes its tokens with it |
 
+**Stage 16 (2026-08-12), verified on this machine:**
+
+| Check | Result |
+|---|---|
+| Banner markup | a success banner carries `data-flash-autohide="N"`, an error banner carries none, and **both keep the dismiss button** — checked over real HTTP at three different settings values |
+| Banner behaviour | in the browser, against the shipped `app.js` and the real markup: two 2-second success banners, one held under the pointer. At 4.5s the un-hovered one was **gone**, the hovered one **still there**, the error banner **untouched** |
+| Nav baseline | all five menu labels and the wordmark land **0.00px** from the foot of the logo at 1280px, one row, 40px tap targets kept, header still 61px, no horizontal overflow |
+| Nav active state | on `/maintenance/log`, `aria-current` is on **“Add maintenance” only** — previously “Schedules” lit up too, because `/maintenance` is a prefix of it |
+| Reference tree, end to end | **37 checks** across categories *and* locations: a tree with a caret per branch, the old card-per-row list gone, three actions per row, “Add inside” preselecting the parent, the child nested under it, a posted cycle refused with the tree unchanged, delete disabled while in use |
+| Tree density | 5 locations render in a **208px** card at 38px a row, against roughly 200px *per entry* before |
+| Team member control | the “Add to team” button and its select share a top and bottom exactly (**delta 0.0px**) |
+| TOTP | **52 checks**: every RFC 4226 Appendix D counter, every SHA-1 row of RFC 6238 Appendix B, RFC 4648 base32 both ways, the ±1 step window, and a mistyped secret refused rather than silently decoded to a shorter one |
+| QR encoder | **21 checks**: the ISO/IEC 18004 Annex I error-correction codewords match the published values, finders/timing/separators/dark module against the specification, and a payload past version 13 refused rather than truncated |
+| QR round trip | six payloads — including a real `otpauth://` URI — encoded by `App\Core\QrCode` and **decoded exactly by `public/js/barcode.js`**, an independently written reader: versions 1, 3, 7, 9 and 11, so both sides of the version-7 boundary |
+| 2FA, end to end | **53 checks**: enrolment writing nothing until a code is proved, the secret stored as `v1.` ciphertext and never in the clear, ten backup codes shown once and hashed with `password_hash`, single use, the challenge blocking protected pages, attempts cut off at the limit *and* counted against the sign-in lockout, trusted-device skip, the same cookie in a **different browser challenged and the row torn up**, a password change and a deactivation each clearing every device, an emailed code delivered through real SMTP with the address masked on screen, and a user with nothing set up stopped by the site-wide requirement |
+
 **Shipped in `tests/` but requiring something more than PHP:**
 
 | Check | What it proves |
 |---|---|
 | `tests/barcode-decode.html` | the decoder, in a browser: 32 checks over Code 128, Code 39 and QR. Needs no server or network — open the file |
+| `tests/qr-encode.php` | the *encoder*, against the ISO Annex I codewords and the specification's geometry. It also writes `tests/qr-encode-output.html`; **open that in a browser** and the symbols are decoded by `public/js/barcode.js`, which shares no code with them |
 | `tests/report-figures.php` | each report's rendered row count matches the same figure taken straight from the database, and the CSV matches the screen (8 cross-checks) |
-| `tests/permission-matrix.php` | ~284 route/role combinations against declared expectations for all four roles. **This one writes — demo databases only** |
+| `tests/permission-matrix.php` | ~344 route/role combinations against declared expectations for all four roles. **This one writes — demo databases only**, and it refuses to run if an account has 2FA switched on, since it cannot answer a challenge |
 
 **Run during the build, living in the session scratchpad rather than the repo**
 (these are *not* part of the deliverable and are not re-runnable from a fresh
@@ -1339,6 +1453,14 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
 5. **The session is bound to the user-agent string.** A browser upgrade that
    changes the UA silently signs the user out. That is the intended trade for
    making a stolen cookie less useful, but it will occasionally look like a bug.
+   **Trusted devices are pinned the same way** (a hash of the UA), so a browser
+   update also costs a device its trust and the next sign-in asks for a code.
+   Same trade, and the same occasional surprise.
+5b. **A password change does not end other sessions** — it revokes trusted
+   devices and outstanding links, but somebody already signed in elsewhere stays
+   signed in until their session times out. Ending them would mean tracking
+   sessions in the database, which nothing here does yet. Worth knowing before
+   telling somebody "change your password and they're locked out".
 6. **`Content-Security-Policy` includes `'unsafe-inline'`** for `script-src` and
    `style-src`. Only two templates actually need it — `layouts/app.php` and
    `layouts/auth.php` carry inline `<script>` blocks. There are **no** inline
@@ -1416,6 +1538,43 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   string**, even in a status message. `tests/security-audit.php` matches
   `"…DELETE…$var"` and cannot tell a message from a query. Use `sprintf` with a
   single-quoted format — `bin/console.php` `cmdMailPrune()` carries a comment.
+- **`scanCanvas()` takes a context and its dimensions, not a canvas element.**
+  Passing the element makes `getImageData` throw, which the reader catches and
+  reports as "no code here" — so a perfectly good symbol comes back as `null`
+  and the encoder looks broken. An hour went into hunting a QR encoder that was
+  already correct. The signature is `scanCanvas(context, width, height)`.
+- **Version information is why a QR stops scanning at exactly 120 characters.**
+  Symbols below version 7 do not carry it, so an encoder that never writes it
+  works perfectly through versions 1–6 and then fails — twice over, because the
+  data is also written *into* the area a reader expects the version in.
+  `QrCode::writeVersion()` reserves it and fills it. If a QR change ever breaks
+  only the long payloads, look there first.
+- **Verify an encoder against something that is not the encoder.** Comparing
+  `App\Core\QrCode` with the JS encoder in `tests/barcode-decode.html`
+  module-for-module proves nothing on its own: the JS one picks *alphanumeric*
+  mode for an uppercase payload where the PHP one always uses byte mode, so the
+  same string legitimately produces two different symbols. What settles it is
+  decoding: same payload out, whatever route it took in. (And when a diff *is*
+  the tool, pin the mask — `QrCode::encode($text, $mask)` exists for that.)
+- **`is_active_path()` matches prefixes, and menus nest.** `/maintenance` is a
+  prefix of `/maintenance/log`, so on the second page both "Schedules" and "Add
+  maintenance" were shown as current. The prefix rule has to stay — it is what
+  lights "Assets" while you are on `/assets/12` — so the fix is to score every
+  sibling and keep the longest match: `active_path([...])`. Any new group of
+  links where one path sits under another needs the same treatment.
+- **`align-items: baseline` on a flex row of flex items is a trap.** It is the
+  obvious way to sit menu text on the foot of a logo, and it looks right until
+  you measure: a flex container's baseline is *synthesised* from its first
+  child, which differs between a plain link (an anonymous text item) and a
+  `<summary>` holding a `<span>`. Measured, the two disagreed by 6.8px. The
+  header bottom-aligns against a shared floor variable instead, with
+  `line-height: 1` to collapse the half-leading the line box would otherwise
+  add.
+- **A media query adds no specificity.** Two rules with the same selector, one
+  inside `@media` and one outside, are decided by *source order* — so a desktop
+  override written above the mobile rule it is meant to beat simply loses. The
+  desktop brand rules live at the end of the branding section for this reason,
+  and say so.
 - **A 3x3 transform has two layouts and they look identical.** The QR
   perspective transform is nine numbers; written row-major it works, and read
   as if it were column-major it still runs, still returns plausible

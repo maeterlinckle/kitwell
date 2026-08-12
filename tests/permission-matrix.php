@@ -125,7 +125,16 @@ $matrix = [
     '/admin/settings'            => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/activity'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/categories'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/categories/create'   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/categories/1/edit'   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/locations'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/locations/create'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/admin/locations/1/edit'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+
+    // Anybody signed in may manage their own second factor — including a hirer,
+    // whose account is worth protecting exactly as much as anyone else's.
+    '/profile/security'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
+    '/profile/security/totp'     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
 ];
 
 /** State-changing routes, checked with a valid CSRF token for that session. */
@@ -146,6 +155,11 @@ $writeMatrix = [
     '/admin/teams/1/members'  => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/settings'         => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/categories'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    // Removing somebody else's second factor is an administrative act, and the
+    // one that turns a stolen password into an account — so it is gated where
+    // the user's own controls are not.
+    '/admin/users/1/two-factor/reset' => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/profile/security/disable'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
     '/import/assets/preview'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
 ];
 
@@ -186,11 +200,20 @@ final class Session
         $this->get('/profile');
 
         if (!str_contains($this->body, 'Sign out')) {
-            fwrite(STDERR, sprintf(
-                "Could not sign in as %s (%s).\nThe accounts at the top of this script must match bin/seed.php.\nRe-seed with:  php bin/migrate.php && php bin/seed.php\n",
-                $role,
-                $email
-            ));
+            // Say *which* wall was hit. A password that is right but owes a
+            // second factor looks identical from here to one that is wrong, and
+            // the fix is completely different — so name it rather than sending
+            // somebody to re-seed a database that is fine.
+            $blocked = str_contains($this->body, 'One more step')
+                || str_contains($this->body, 'two-factor')
+                    ? "That account has two-factor authentication switched on, so a password alone will not\n"
+                        . "sign it in. This harness cannot answer a challenge. Turn it off for the demo accounts:\n"
+                        . "  UPDATE users SET two_factor_enabled = 0, totp_secret = NULL, totp_confirmed_at = NULL;\n"
+                        . "  UPDATE settings SET setting_value = '0' WHERE setting_key = 'two_factor_required';\n"
+                    : "The accounts at the top of this script must match bin/seed.php.\n"
+                        . "Re-seed with:  php bin/migrate.php && php bin/seed.php\n";
+
+            fwrite(STDERR, sprintf("Could not sign in as %s (%s).\n%s", $role, $email, $blocked));
             exit(1);
         }
     }

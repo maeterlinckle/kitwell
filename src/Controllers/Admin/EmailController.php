@@ -222,7 +222,26 @@ final class EmailController extends Controller
             'selectedIds' => Reminders::notifyUserIds(),
             'tracking'    => EmailReminder::summary(),
             'ready'       => Mailer::isReady(),
+            'lastRun'     => self::lastRun(),
         ]);
+    }
+
+    /**
+     * The outcome of the last reminder run, or null if it has never been run.
+     *
+     * @return array<string,mixed>|null
+     */
+    private static function lastRun(): ?array
+    {
+        $raw = (string) Setting::get('reminder_last_run', '');
+
+        if (trim($raw) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : null;
     }
 
     /**
@@ -362,6 +381,25 @@ final class EmailController extends Controller
         );
 
         $summary = implode(' · ', $lines);
+
+        // Kept, not just announced.
+        //
+        // This was the one message in the application that reported something
+        // nowhere else recorded it. A *preview* deliberately writes no log rows,
+        // so its result existed only in the banner — and the per-type breakdown
+        // ("3 overdue, 1 due soon, 12 already reminded") is not in the send log
+        // even after a real run, because the log holds one row per message and
+        // knows nothing about what was suppressed. Now that confirmations time
+        // out, that would have been information with a six-second life.
+        Setting::put('reminder_last_run', json_encode([
+            'at'      => date('Y-m-d H:i:s'),
+            'by'      => Auth::name() ?? 'System',
+            'dry_run' => $dryRun,
+            'sent'    => $sent,
+            'would'   => $would,
+            'failed'  => $failed,
+            'summary' => $summary,
+        ], JSON_UNESCAPED_UNICODE));
 
         if ($dryRun) {
             Flash::success(sprintf('Preview only, nothing sent. %d message(s) would go out. %s', $would, $summary));

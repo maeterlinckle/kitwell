@@ -11,6 +11,10 @@ use App\Core\Response;
 use App\Models\ActivityLog;
 use App\Models\Location;
 
+/**
+ * Locations: the same shape as categories, shown the same way — a tree with the
+ * form on its own page. See CategoryController for why.
+ */
 final class LocationController extends Controller
 {
     public function index(): void
@@ -21,6 +25,16 @@ final class LocationController extends Controller
         ]);
     }
 
+    public function create(): void
+    {
+        $this->view('admin/locations/form', [
+            'pageTitle' => 'Add location',
+            'location'  => null,
+            'parents'   => Location::parentOptions(),
+            'parentId'  => max(0, (int) Request::query('parent', 0)),
+        ]);
+    }
+
     public function store(): void
     {
         $data = $this->validate([
@@ -28,7 +42,7 @@ final class LocationController extends Controller
             'code'        => 'max:40',
             'parent_id'   => 'integer',
             'description' => 'max:255',
-        ], ['name' => 'Location name', 'code' => 'Short code'], '/admin/locations');
+        ], ['name' => 'Location name', 'code' => 'Short code'], '/admin/locations/create');
 
         $id = Location::create(
             $data['name'],
@@ -43,6 +57,22 @@ final class LocationController extends Controller
         Response::redirect('/admin/locations');
     }
 
+    public function edit(string $id): void
+    {
+        $location = Location::find((int) $id);
+
+        if ($location === null) {
+            $this->notFound();
+        }
+
+        $this->view('admin/locations/form', [
+            'pageTitle' => 'Edit ' . $location['name'],
+            'location'  => $location,
+            'parents'   => Location::parentOptions((int) $id),
+            'parentId'  => 0,
+        ]);
+    }
+
     public function update(string $id): void
     {
         $locationId = (int) $id;
@@ -52,16 +82,28 @@ final class LocationController extends Controller
             $this->notFound();
         }
 
+        $redirect = '/admin/locations/' . $locationId . '/edit';
+
         $data = $this->validate([
             'name'        => 'required|max:120',
             'code'        => 'max:40',
             'parent_id'   => 'integer',
             'description' => 'max:255',
-        ], ['name' => 'Location name'], '/admin/locations');
+        ], ['name' => 'Location name'], $redirect);
 
         $parentId = (int) $data['parent_id'];
+
         if ($parentId === $locationId) {
-            $this->failValidation(['parent_id' => 'A location cannot be inside itself.'], '/admin/locations');
+            $this->failValidation(['parent_id' => 'A location cannot be inside itself.'], $redirect);
+        }
+
+        // Checked server-side for the same reason as categories: a cycle here
+        // is a tree walk that never ends, not a message somebody reads later.
+        if ($parentId > 0 && in_array($parentId, Location::descendantIds($locationId), true)) {
+            $this->failValidation(
+                ['parent_id' => 'A location cannot be moved inside one of its own sub-locations.'],
+                $redirect
+            );
         }
 
         Location::update($locationId, [

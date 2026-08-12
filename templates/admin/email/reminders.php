@@ -199,4 +199,32 @@ $typePermission = [
             <button type="submit" class="btn" <?= $ready ? '' : 'disabled' ?>>Run now and send</button>
         </form>
     </div>
+
+    <?php /* The result of the last run, kept rather than only announced.
+             A preview writes no log rows at all, and even a real run leaves no
+             record of what was *suppressed* — so without this the only report
+             of either was a banner. */ ?>
+    <?php if ($lastRun !== null): ?>
+        <div class="last-run">
+            <h3>Last run</h3>
+            <p class="muted">
+                <?= e(format_datetime((string) ($lastRun['at'] ?? ''))) ?>
+                by <?= e((string) ($lastRun['by'] ?? 'System')) ?>
+                <?php if (!empty($lastRun['dry_run'])): ?>
+                    · <span class="badge badge-muted">Preview only</span>
+                <?php endif; ?>
+            </p>
+            <p>
+                <?php if (!empty($lastRun['dry_run'])): ?>
+                    <strong><?= (int) ($lastRun['would'] ?? 0) ?></strong> message(s) would have gone out.
+                <?php else: ?>
+                    <strong><?= (int) ($lastRun['sent'] ?? 0) ?></strong> message(s) sent<?php
+                        if ((int) ($lastRun['failed'] ?? 0) > 0): ?>,
+                        <strong class="text-danger"><?= (int) $lastRun['failed'] ?></strong> failed<?php
+                        endif; ?>.
+                <?php endif; ?>
+            </p>
+            <p class="cell-sub muted"><?= e((string) ($lastRun['summary'] ?? '')) ?></p>
+        </div>
+    <?php endif; ?>
 </div>

@@ -147,6 +147,52 @@
         }
     });
 
+    // --- Auto-hiding confirmations -----------------------------------------
+    // Only the banners the server marked: confirmations, never warnings or
+    // errors. The server also decides the delay, so "0 = stay" needs no special
+    // case here — an element with no attribute simply never enters this loop.
+    //
+    // The countdown pauses while the pointer is over the banner or the keyboard
+    // is inside it. Text that removes itself while it is being read, or a
+    // dismiss button that vanishes as it is tabbed to, both read as a bug.
+    (function () {
+        var banners = document.querySelectorAll('[data-flash-autohide]');
+        if (!banners.length) return;
+
+        Array.prototype.forEach.call(banners, function (banner) {
+            var delay = (parseInt(banner.getAttribute('data-flash-autohide'), 10) || 0) * 1000;
+            if (delay <= 0) return;
+
+            var timer = null;
+
+            function hide() {
+                banner.classList.add('is-leaving');
+
+                // Matches the CSS transition; the banner goes whether or not
+                // the browser fires transitionend.
+                window.setTimeout(function () {
+                    if (banner.parentElement) banner.remove();
+                }, 250);
+            }
+
+            function start() {
+                stop();
+                timer = window.setTimeout(hide, delay);
+            }
+
+            function stop() {
+                if (timer) { window.clearTimeout(timer); timer = null; }
+            }
+
+            banner.addEventListener('mouseenter', stop);
+            banner.addEventListener('mouseleave', start);
+            banner.addEventListener('focusin', stop);
+            banner.addEventListener('focusout', start);
+
+            start();
+        });
+    })();
+
     // --- Select all / none within a permission group -----------------------
     document.addEventListener('click', function (event) {
         var button = event.target.closest('[data-check-group]');

@@ -47,7 +47,28 @@ final class Location
     /** @return array<string,mixed>|null */
     public static function find(int $id): ?array
     {
-        return Database::selectOne('SELECT * FROM locations WHERE id = ?', [$id]);
+        return Database::selectOne(
+            'SELECT l.*, (SELECT COUNT(*) FROM assets a WHERE a.location_id = l.id) AS asset_count
+               FROM locations l WHERE l.id = ?',
+            [$id]
+        );
+    }
+
+    /**
+     * Everything one entry may be moved inside. See Tree::options() — the
+     * exclusion of an entry's own descendants is what stops a cycle.
+     *
+     * @return array<int,array{id:int,path:string,depth:int}>
+     */
+    public static function parentOptions(int $excludeId = 0): array
+    {
+        return Tree::options(self::all(), $excludeId);
+    }
+
+    /** @return array<int,int> */
+    public static function descendantIds(int $id): array
+    {
+        return Tree::descendantIds(self::all(), $id);
     }
 
     public static function create(string $name, ?string $code, ?int $parentId, ?string $description): int

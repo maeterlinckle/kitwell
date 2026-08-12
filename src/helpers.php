@@ -110,14 +110,69 @@ if (!function_exists('is_active_path')) {
     /** True when the current request path is (or is under) the given path. */
     function is_active_path(string $path): bool
     {
+        return active_path_score($path) > 0;
+    }
+}
+
+if (!function_exists('active_path_score')) {
+    /**
+     * How well a link matches the current request: 0 for no match, otherwise
+     * the length of the path that matched.
+     *
+     * The prefix rule is what makes "Assets" light up while you are on
+     * /assets/12, and it has to stay. But it also means a menu whose items are
+     * nested under one another lights up more than one of them: on
+     * /maintenance/log, both "Add maintenance" (/maintenance/log) and
+     * "Schedules" (/maintenance) match, and the user is shown two current
+     * pages.
+     *
+     * Returning the length of the match rather than a boolean lets a group of
+     * sibling links pick the *most specific* winner — /maintenance/log beats
+     * /maintenance because it matched more of the path — without giving up the
+     * prefix behaviour that makes a parent highlight for its own sub-pages.
+     * See active_path() and templates/partials/nav.php.
+     */
+    function active_path_score(string $path): int
+    {
         $current = Request::path();
         $path    = '/' . trim($path, '/');
 
         if ($path === '/') {
-            return $current === '/';
+            return $current === '/' ? 1 : 0;
         }
 
-        return $current === $path || str_starts_with($current, $path . '/');
+        if ($current === $path || str_starts_with($current, $path . '/')) {
+            return strlen($path);
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('active_path')) {
+    /**
+     * Of several candidate paths, the one the current request is really on.
+     *
+     * Returns null when none of them match. Ties cannot happen — two identical
+     * paths are the same link.
+     *
+     * @param array<int,string> $paths
+     */
+    function active_path(array $paths): ?string
+    {
+        $best  = null;
+        $score = 0;
+
+        foreach ($paths as $path) {
+            $candidate = active_path_score($path);
+
+            if ($candidate > $score) {
+                $score = $candidate;
+                $best  = $path;
+            }
+        }
+
+        return $best;
     }
 }
 

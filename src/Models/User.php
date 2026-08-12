@@ -84,14 +84,38 @@ final class User
         }
 
         Database::update('users', $data, $id);
+
+        // Deactivating an account has to reach the trusted devices too.
+        // `is_active = 0` stops Auth::user() finding them, but a row saying
+        // "this browser has already proved itself" surviving a deactivation is
+        // the kind of leftover that matters the day somebody is let go.
+        if (array_key_exists('is_active', $data) && (int) $data['is_active'] === 0) {
+            TrustedDevice::forgetAll($id);
+        }
     }
 
-    public static function updatePassword(int $id, string $password): void
+    /**
+     * @param bool $isChange False only for a silent re-hash of the *same*
+     *                       password, which is not a change and must not have a
+     *                       change's consequences.
+     */
+    public static function updatePassword(int $id, string $password, bool $isChange = true): void
     {
         Database::update('users', [
             'password_hash'      => password_hash($password, PASSWORD_DEFAULT),
             'password_changed_at'=> date('Y-m-d H:i:s'),
         ], $id);
+
+        if (!$isChange) {
+            return;
+        }
+
+        // Every "do not ask again on this computer" goes with the old password.
+        // Somebody changing their password after a scare, or an administrator
+        // resetting one for them, means exactly "whoever had access should not
+        // have it any more" — and a trusted-device cookie issued before that
+        // would walk straight past the second factor.
+        TrustedDevice::forgetAll($id);
     }
 
     public static function touchLogin(int $id, string $ip): void

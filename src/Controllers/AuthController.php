@@ -12,6 +12,7 @@ use App\Core\Response;
 use App\Core\Session;
 use App\Core\Validator;
 use App\Core\View;
+use App\Services\TwoFactor;
 
 final class AuthController extends Controller
 {
@@ -54,6 +55,14 @@ final class AuthController extends Controller
             }
 
             Response::redirect('/login');
+        }
+
+        // The password was right, which is not always the same as being in.
+        // When a second factor is owed, Auth::attempt() deliberately creates no
+        // session and leaves a pending challenge instead — so there is nobody
+        // to welcome back yet, and the intended URL has to keep waiting.
+        if (TwoFactor::pending() !== null) {
+            Response::redirect('/two-factor');
         }
 
         Flash::success('Welcome back, ' . Auth::name() . '.');

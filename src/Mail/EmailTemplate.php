@@ -361,6 +361,37 @@ HTML,
             ],
         ],
 
+        'two_factor_code' => [
+            'name'        => 'Sign-in code',
+            'description' => 'The one-time code sent at sign-in to a user who has two-factor authentication but no authenticator app.',
+            'group'       => 'Accounts',
+            'subject'     => 'Your {{app_name}} sign-in code is {{code}}',
+            'body'        => <<<'HTML'
+<p>Hello {{recipient_name}},</p>
+
+<p>Your sign-in code is:</p>
+
+<div class="items"><strong style="font-size:22px;letter-spacing:3px">{{code}}</strong></div>
+
+<p>It expires in {{minutes}} minutes and works once.</p>
+
+<p><strong>If you were not signing in, somebody has your password.</strong> The attempt came from
+{{device}} at {{ip_address}}. Change your password now and tell an administrator.</p>
+HTML,
+            'fields' => [
+                'code'       => 'The six-digit code. A message without this is a message nobody can act on',
+                'minutes'    => 'How long the code lasts',
+                'ip_address' => 'Where the sign-in was attempted from',
+                'device'     => 'The browser and platform, e.g. “Chrome on Windows”',
+            ],
+            'sample' => [
+                'code'       => '408912',
+                'minutes'    => '10',
+                'ip_address' => '192.0.2.44',
+                'device'     => 'Chrome on Windows',
+            ],
+        ],
+
         // -- Diagnostics ----------------------------------------------------
         'smtp_test' => [
             'name'        => 'SMTP test message',
@@ -405,7 +436,7 @@ HTML,
      *
      * @var array<int,string>
      */
-    public const LOCKED_ACTIVE = ['user_invite', 'password_reset'];
+    public const LOCKED_ACTIVE = ['user_invite', 'password_reset', 'two_factor_code'];
 
     public static function canBeDisabled(string $key): bool
     {
