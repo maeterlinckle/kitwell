@@ -34,21 +34,9 @@ A role created here can never be a superuser. That flag protects the built-in
 Administrator from being edited away, and nothing reachable from the web can set
 it.
 
-Checks are enforced server-side in three places, and the interface hides what a
-user cannot reach:
-
-```php
-// 1. On the route
-$router->get('/assets/create', [AssetController::class, 'create'], ['can:assets.create']);
-
-// 2. Inside a controller, for conditional logic
-Auth::authorize('assets.delete');
-
-// 3. In a template, to hide a control the user cannot use
-<?php if (can('assets.edit')): ?> ... <?php endif; ?>
-```
-
-Never rely on the template check alone — it is a courtesy, not a control.
+Every check is enforced on the server. Hiding a button somebody cannot use is a
+courtesy on top of that, never the control itself — see [Security](security.md)
+for how the checks are arranged and how they are verified.
 
 Two permissions cover email:
 
@@ -101,7 +89,7 @@ emailed a link that shows them their name, sign-in address and role, and lets
 them choose their own password.
 
 - The invitation is good for **one use** and expires after a window set in
-  Settings → Email (72 hours by default).
+  Settings → Email — currently **{{setting:invite_expiry_hours}}**.
 - The Users list marks an account **Invited** until it is accepted, and **Invite
   expired** if it lapses — an account nobody has finished setting up otherwise
   looks exactly like a working one, which is how a new starter ends up locked out
@@ -112,15 +100,17 @@ them choose their own password.
   invitation, so an account cannot end up with two different passwords depending
   on which route was used last.
 
-Without email the form asks for an initial password, as it always did.
+Without email configured, the form asks for an initial password instead and the
+new user is told it in person.
 
 ### Forgotten passwords
 
 **Forgotten your password?** on the sign-in page leads to a form that emails a
-reset link. The link is single-use and expires after a separate, shorter window
-(2 hours by default) — an invitation is expected and may sit for a day; a reset
-is asked for a moment before it arrives, and the shorter it lives the smaller the
-window in which a forwarded message is worth anything.
+reset link. The link is single-use and expires after a separate, shorter window,
+currently **{{setting:password_reset_expiry_hours}}**. An invitation may
+reasonably sit unopened for a day; a reset is asked for a moment before it
+arrives, and the shorter it lives the smaller the window in which a forwarded
+message is worth anything.
 
 Behaviours worth knowing about:
 

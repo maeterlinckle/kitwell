@@ -1,22 +1,28 @@
 # Verification tooling
 
-Five checks that can be re-run after any change. Four are plain PHP scripts
+Nine checks that can be re-run after any change. Eight are plain PHP scripts
 with no test-framework dependency — run them with the same PHP binary the site
-uses. The fifth is a web page, because the thing it tests is JavaScript.
+uses. The ninth is a web page, because the thing it tests is JavaScript.
 
 | Script | Needs | Writes? |
 |--------|-------|---------|
 | `security-audit.php` | Nothing — reads the source | No |
 | `escape-audit.php` | Nothing — reads the templates | No |
+| `docs-audit.php` | Nothing — reads `docs/` | No |
+| `totp-vectors.php` | Nothing | No |
+| `qr-encode.php` | Nothing | No |
 | `barcode-decode.html` | A browser | No |
 | `report-figures.php` | A running site + seeded database | No |
 | `permission-matrix.php` | A running site + seeded database | **Yes** |
+| `api-contract.php` | A running site + seeded database | **Yes** |
+| `fault-flow.php` | A running site + seeded database + an SMTP catcher | **Yes** |
 
 ## Static checks (safe anywhere, including production)
 
 ```bash
 php tests/security-audit.php
 php tests/escape-audit.php
+php tests/docs-audit.php
 ```
 
 `security-audit.php` reads `routes/web.php`, `src/` and `templates/` and
@@ -41,6 +47,13 @@ template with PHP's own tokeniser and proves no variable reaches the page
 unescaped. It understands that a variable used only in a ternary *condition*,
 or passed through `e()` or a formatting helper, or cast to a number, never
 reaches the output — so a report from it is a real finding, not noise.
+
+`docs-audit.php` reads `docs/` and proves that every link and `#anchor`
+resolves using the same rule the in-app renderer uses, that every page keeps the
+house shape, that every `{{setting:…}}` token names a key
+`App\Services\HelpSettings` will substitute — and that no page in the user half
+of the documentation contains a shell command, a SQL statement or a server path,
+which is what keeps Help readable by somebody with no access to the machine.
 
 ## Live checks (need the site running)
 

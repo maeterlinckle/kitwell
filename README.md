@@ -8,7 +8,7 @@ the machine as well as on a desktop.
 PHP 8.1+ and MariaDB 10.4+, no framework. Server-rendered templates and vanilla
 JavaScript: no build step, nothing to compile, deployable by copying files.
 
-**📖 [Full documentation](docs/README.md)** · [Getting started](docs/getting-started.md) · [API](docs/api.md)
+**📖 [Full documentation](docs/README.md)** · [Installation](docs/installation.md) · [API](docs/api.md)
 
 Signed in, **Settings → Help** opens the same documentation inside the
 application.
@@ -63,7 +63,7 @@ sudo ./install.sh
 The installer creates the database, writes `.env`, runs the migrations, sets up
 the web server and TLS, and prompts for the first administrator. See
 [INSTALL.md](INSTALL.md) for unattended runs and failure modes, or
-[Getting started](docs/getting-started.md) to install by hand.
+[Installation](docs/installation.md) to install by hand.
 
 To try it locally with PHP's built-in server:
 

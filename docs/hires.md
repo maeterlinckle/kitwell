@@ -15,19 +15,20 @@ Check an asset out to a person or company, set a due-back date, and book it
 back in. Photos can be taken at both ends, so the condition going out and
 coming back is evidenced rather than argued about.
 
-**Overdue is derived from the due date in SQL**, so it is always correct with
-nothing running on a schedule — no cron job to forget. The stored `status`
-column is kept in step by `Hire::refreshOverdue()` (two cheap indexed updates,
-run when the hires list or dashboard loads), purely so that anything reporting
-straight off the database sees the same thing.
+**Overdue is worked out from the due date every time it is shown**, so a hire is
+never stale and nothing has to run on a schedule to keep it right.
 
 **Double-booking is not possible.** An asset that is already out, retired, not
-hireable, or in maintenance is refused, with the reason given. The check runs
-twice: once for the form, and again inside the checkout transaction with the
-asset row locked (`SELECT … FOR UPDATE`), so two people scanning the same item
-at the same moment cannot both succeed. On checkout the asset moves to *On
-Hire*; on return it goes back to *In Stock* or straight into maintenance if it
-came back needing work.
+hireable, or in maintenance is refused, with the reason given, and two people
+scanning the same item at the same moment cannot both succeed. On checkout the
+asset moves to *On Hire*; on return it goes back to *In Stock*, or straight into
+maintenance if it came back needing work.
+
+The default hire period is {{setting:hire_default_days}} days, and an item
+counts as due back soon {{setting:hire_due_soon_days}} days before its due date.
+Both are set under **Settings → Application settings**. Hire references are
+generated as {{setting:hire_reference_prefix}} followed by the year and a
+number.
 
 ## The Hirer role
 

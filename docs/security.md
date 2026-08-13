@@ -1,10 +1,13 @@
 # Security
 
-What the application does to protect itself, and how to check it.
+What the application does to protect itself, how permissions are enforced, and how to check it.
 
 **On this page**
 
 - [What is protected](#what-is-protected)
+- [How permissions are enforced](#how-permissions-are-enforced)
+- [Secrets and encryption](#secrets-and-encryption)
+- [Hardening the server](#hardening-the-server)
 - [How this is checked](#how-this-is-checked)
 - [If you lock yourself out](#if-you-lock-yourself-out)
 
@@ -56,6 +59,63 @@ What the application does to protect itself, and how to check it.
   recipient.
 - **CSV exports** — cells beginning `=`, `+`, `-` or `@` are prefixed with an
   apostrophe so a spreadsheet cannot execute asset data as a formula.
+
+## How permissions are enforced
+
+A permission is checked on the server in two places, and the interface hides
+what a user cannot reach as a third, cosmetic layer:
+
+```php
+// 1. On the route, as middleware
+$router->get('/assets/create', [AssetController::class, 'create'], ['can:assets.create']);
+
+// 2. Inside a controller, where the logic is conditional
+Auth::authorize('assets.delete');
+
+// 3. In a template, to hide a control the user cannot use
+<?php if (can('assets.edit')): ?> ... <?php endif; ?>
+```
+
+The template check is a courtesy, never a control: removing it would make the
+application untidy, not insecure. `tests/security-audit.php` asserts that every
+route carries one of the first two.
+
+## Secrets and encryption
+
+`APP_KEY` in `.env` encrypts the secrets that have to live in the database — the
+SMTP password and each user's TOTP secret — with AES-256-GCM. Generate one with
+`php bin/console.php key:generate`.
+
+- **Back it up with the database.** A dump restored without its matching key
+  leaves those values unreadable. The application says so and asks for them
+  again rather than failing mysteriously.
+- **Changing it** makes the existing encrypted values unreadable; they have to
+  be re-entered.
+- Without a key set, the SMTP password simply cannot be saved from the
+  interface — `App\Core\Crypto` fails closed rather than storing it in the
+  clear.
+- To keep the SMTP password out of the database entirely, set `MAIL_PASSWORD`
+  in `.env`. It takes precedence, and the Settings page shows the field locked
+  and says where the value is coming from.
+
+Tokens are never stored in a form that can be used: invitation and reset links,
+trusted-device cookies, calendar feed tokens and API keys are all held as a
+SHA-256, and backup codes as a `password_hash()`.
+
+## Hardening the server
+
+- **`.env` should be readable only by the web server user** —
+  `chmod 640 .env && chown root:www-data .env`. `manage.sh doctor` checks this.
+- **`storage/` must not be web-reachable.** The document root is `public/`
+  only. Uploads are served back through PHP so that permissions apply to them.
+- **Set `FORCE_HTTPS=true`** in production, and `TRUST_PROXY=true` when behind
+  a reverse proxy so `X-Forwarded-Proto` is honoured.
+- **The database user needs no rights outside its own schema** — no
+  `GRANT OPTION`, no `CREATE USER`, no `FILE`, no `SUPER`, no `PROCESS`. See
+  [Installation](installation.md).
+- **Keep `APP_DEBUG=false`** in production. With it on, an uncaught error shows
+  a stack trace.
+- `sudo ./manage.sh doctor` checks all of the above in one pass.
 
 ## How this is checked
 

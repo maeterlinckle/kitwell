@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\Config;
 use App\Core\View;
+use App\Services\HelpSettings;
 use App\Services\Markdown;
 
 
@@ -39,24 +40,30 @@ final class HelpController extends Controller
             'pageTitle' => $title . ' · Help',
             'title'     => $title,
             'slug'      => $slug,
-            'source'    => $source,
+            // A page documents configurable values as `{{setting:key}}` so the
+            // file stays readable on disk; here they become what this site has
+            // actually got set.
+            'source'    => HelpSettings::resolve($source),
             'contents'  => self::contents(),
         ]);
     }
 
     /**
-     * Every page in /docs, in the order the index lists them, with anything the
-     * index does not mention appended alphabetically.
+     * The contents panel, grouped and ordered exactly as the index page groups
+     * and orders its links — so the sidebar and README.md cannot disagree, and
+     * moving a page between the user and Administration halves is one edit.
      *
-     * @return array<int,array{slug:string,title:string}>
+     * A page the index does not mention is appended to the last group, so a new
+     * file is never invisible.
+     *
+     * @return array<int,array{label:?string,pages:array<int,array{slug:string,title:string}>}>
      */
     private static function contents(): array
     {
         $directory = self::directory();
-        $files     = glob($directory . '/*.md') ?: [];
         $pages     = [];
 
-        foreach ($files as $file) {
+        foreach (glob($directory . '/*.md') ?: [] as $file) {
             $slug = basename($file, '.md');
 
             if ($slug === self::INDEX) {
@@ -68,20 +75,40 @@ final class HelpController extends Controller
         }
 
         $index  = (string) @file_get_contents($directory . '/' . self::INDEX . '.md');
-        $sorted = [];
+        $groups = [];
 
-        if (preg_match_all('/]\(([a-z0-9-]+)\.md\)/', $index, $matches) > 0) {
-            foreach ($matches[1] as $slug) {
-                if (isset($pages[$slug])) {
-                    $sorted[] = $pages[$slug];
-                    unset($pages[$slug]);
+        // Each `## Heading` in the index opens a group; the .md links beneath it
+        // are its pages. Anything linked before the first heading is ungrouped.
+        foreach (preg_split('/^## /m', str_replace("\r\n", "\n", $index)) ?: [] as $position => $section) {
+            $label = $position === 0 ? null : trim(strtok($section, "\n") ?: '');
+            $found = [];
+
+            if (preg_match_all('/]\(([a-z0-9-]+)\.md(?:#[^)]*)?\)/', $section, $matches) > 0) {
+                foreach ($matches[1] as $slug) {
+                    if (isset($pages[$slug])) {
+                        $found[] = $pages[$slug];
+                        unset($pages[$slug]);
+                    }
                 }
+            }
+
+            if ($found !== []) {
+                $groups[] = ['label' => $label, 'pages' => $found];
             }
         }
 
-        ksort($pages);
+        if ($pages !== []) {
+            ksort($pages);
 
-        return array_merge($sorted, array_values($pages));
+            if ($groups === []) {
+                $groups[] = ['label' => null, 'pages' => []];
+            }
+
+            $last = array_key_last($groups);
+            $groups[$last]['pages'] = array_merge($groups[$last]['pages'], array_values($pages));
+        }
+
+        return $groups;
     }
 
     /** The file for a slug, or null when there is no such page. */

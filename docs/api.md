@@ -156,9 +156,10 @@ chooses their own password. No password material is ever returned.
 
 ## Rate limiting
 
-Per key, per minute, configurable under Settings (120 by default). Every
-response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
-`X-RateLimit-Reset`, so a client can slow down before it is refused.
+Per key, per minute, configurable under Settings, and currently set to a limit
+of {{setting:api_rate_limit}} requests a minute. Every response carries
+`X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, so a
+client can slow down before it is refused.
 
 The window is **fixed** rather than sliding: one counter on the key's own row,
 reset each minute. A burst straddling a window boundary can therefore briefly

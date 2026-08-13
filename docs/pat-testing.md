@@ -29,9 +29,9 @@ Appliance class, load rating, whether the plug is fused and the fuse rating are
 properties of the *appliance*. They are set once on the asset under **Electrical
 & PAT** and shown automatically each time a PAT test is recorded.
 
-The plug fuse rating is a four-way choice (3 A, 5 A, 10 A, 13 A) rather than
-free numeric entry. An existing non-standard value is kept and shown flagged for
-correction rather than silently discarded.
+The plug fuse rating is a four-way choice — 3 A, 5 A, 10 A or 13 A — rather
+than free numeric entry, so a rating cannot be recorded as 3.15 on one asset and
+3 on the next.
 
 Each test still stores a **snapshot** of the appliance class it was performed
 under, so correcting an asset later never rewrites its history.
@@ -90,25 +90,23 @@ they can be tuned to your own policy without a code change.
 
 ## Assets that need details filling in
 
-The migration backfills appliance class, load and fuse details from each asset's
-most recent test. Anything never tested has nothing to copy from, and the guided
-flow will not start without an appliance class — it cannot tell which tests
-apply. List the gaps with:
+The guided flow will not start without an appliance class, because it cannot
+tell which electrical tests apply. Any asset flagged as requiring PAT but
+missing one is listed on **Reports → Assets needing PAT**, and the asset's own
+page says what is missing with a link to its edit form. An administrator can
+also list them from the server — see
+[Administration](administration.md#console-tasks).
 
-```bash
-php bin/console.php pat:missing-details
-```
+**Units are explicit everywhere** — in the form labels and in the displayed
+values:
 
-**Units are explicit everywhere** — in the column names, the form labels and the
-displayed values:
-
-| Reading | Unit | Column |
-|---------|------|--------|
-| Earth continuity | Ω (ohms) | `earth_continuity_ohms` |
-| Insulation resistance | MΩ (megohms) | `insulation_resistance_mohms` |
-| Leakage current | mA (milliamps) | `leakage_current_ma` |
-| Load / power | VA (volt-amps) | `load_test_va` |
-| Fuse fitted | A (amps) | `fuse_fitted_amps` |
+| Reading | Unit |
+|---------|------|
+| Earth continuity | Ω (ohms) |
+| Insulation resistance | MΩ (megohms) |
+| Leakage current | mA (milliamps) |
+| Load / power | VA (volt-amps) |
+| Fuse fitted | A (amps) |
 
 Earth continuity is only shown — and only stored — for **Class I**; a Class II
 appliance is double-insulated and has no earth to test, so a stray reading is
@@ -140,7 +138,8 @@ The asset page carries a colour-coded banner answering "is this thing in date?":
 because its retest is not due until next year.
 
 Retest dates are suggested from the asset's own `pat_interval_months` where set,
-otherwise from **Settings → PAT testing → Default retest interval** (12 months
+otherwise from **Settings → PAT testing → Default retest interval**
+({{setting:pat_default_interval_months}} months
 out of the box). The right interval depends on the equipment and its
 environment, so it is a site decision rather than a hard-coded rule, and any
 asset can override it.

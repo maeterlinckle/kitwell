@@ -117,7 +117,8 @@ counted by the database:
 | `Unscheduled` | Active, but no date set yet |
 | `Inactive` | Closed schedule |
 
-The window is **Settings → Maintenance → "Due soon" window**, default 30 days.
+The window is **Settings → Maintenance → "Due soon" window**, currently set
+to {{setting:maintenance_due_days}} days.
 One setting drives the dashboard tiles, the maintenance list and the reports
 module, so every screen agrees on what "due soon" means.
 

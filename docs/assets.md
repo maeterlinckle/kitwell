@@ -18,11 +18,13 @@ The register itself: tagging, searching, photographs, manuals, sub-assets, copyi
 
 ## Asset tags and barcodes
 
-New assets are tagged automatically as `<prefix><number>` — `AST-0001` by
-default. Both parts are configurable under **Settings**, and the number is
-derived from the tags already in the database, so importing older records or
-changing the prefix can never strand the sequence. Overwrite the suggested tag
-to record a tag an item already carries.
+New assets are tagged automatically as `<prefix><number>`, which on this site
+means {{setting:asset_tag_prefix}} followed by a number padded to a width
+of {{setting:asset_tag_pad}} digits. Both parts are configurable under
+**Settings → Application settings**. The number is derived from the tags already
+in the register, so changing the prefix starts a new sequence and leaves
+existing tags alone. Overwrite the suggested tag to record one an item already
+carries.
 
 Each asset also has an optional second `barcode` field for a manufacturer or
 previous-system barcode. Scanning either value finds the asset.
@@ -50,51 +52,19 @@ asset, and short words are not ignored.
 
 ## Condition photos
 
-Photos can be added to any asset — including sub-assets — at any point in its
-life, building a dated visual record. A photo taken when an item goes out on
-hire and another when it comes back is the usual reason to reach for it.
-
-The gallery on the asset page shows the 12 most recent, newest first, each with
-its date, caption and who uploaded it. **Full history** opens
-`/assets/{id}/photos`, which groups everything by month and lets captions and
-dates be corrected. Tapping a photo opens a keyboard-navigable lightbox.
-
-One photo per asset is the **main** image, shown as a thumbnail in the register.
-The first upload claims it automatically; **Set as main** changes it, and if the
-main photo is deleted the next most recent takes over.
-
-On upload, each image is:
-
-1. **Straightened** using its EXIF orientation tag, so a photo taken on a phone
-   is not shown sideways.
-2. **Scaled down** to a 2400px longest edge, and a 480px thumbnail is generated,
-   which keeps galleries quick to load over a workshop 4G connection.
-3. **Dated** from the camera's EXIF capture time, unless you set the date
-   yourself. Implausible dates (a camera with a flat battery reporting 1970) are
-   ignored.
-
-Both steps need the GD extension. Without it uploads still work — the original
-is stored and served as-is, and `thumbnail_path` stays NULL. Nothing breaks on a
-host without GD.
-
-On a phone, **Take photo** opens the camera directly (`capture="environment"`)
-while **Choose files** opens the gallery; one combined input makes the phone ask
-every time. Both accept multiple files. Before uploading, the browser shows
-thumbnails of what is selected with each file's size, and flags anything over
-the server limit rather than letting you wait for a rejection.
-
-Uploads are validated by extension *and* by content sniffing, so a PHP script
-renamed `photo.jpg` is refused. Files are stored outside the document root and
-streamed through PHP.
+Every asset carries a dated photographic record — the gallery on its page, and
+a full history grouped by month. See [Photos](photos.md).
 
 ## Manuals
 
-Any number of PDFs per asset. Files are written to
-`storage/uploads/assets/{id}/manuals/` with generated names, outside the
-document root, and streamed back through PHP — so a manual is only reachable by
-someone signed in with permission to view that asset. Each is viewable in the
-browser or downloadable. Uploads are checked by extension *and* by content
-sniffing, not by the browser-supplied content type.
+Any number of PDFs per asset: a user manual, a wiring diagram, a datasheet.
+Each is viewable in the browser or downloadable, and needs
+`media.manual.upload` to add and `media.manual.delete` to remove. The upload
+limit is {{setting:upload_max_pdf_mb}} MB per file.
+
+A manual is only reachable by someone signed in with permission to view that
+asset, and every upload is checked by its actual content rather than its file
+name.
 
 ## Copying assets
 
@@ -163,4 +133,4 @@ photographs are removed with the asset.
 
 ---
 
-**See also:** [Documentation index](README.md) · [Faults](faults.md) · [Barcode scanning and labels](barcode-scanning.md) · [Maintenance](maintenance.md)
+**See also:** [Documentation index](README.md) · [Photos](photos.md) · [Faults](faults.md) · [Barcode scanning and labels](barcode-scanning.md)

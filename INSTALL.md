@@ -7,7 +7,7 @@ Two scripts sit at the top of the project:
 | `install.sh` | one command that turns a bare Linux server into a working site |
 | `manage.sh`  | everything after that: passwords, lockouts, backups, updates, checks |
 
-[Getting started](docs/getting-started.md) describes every step by hand. This
+[Installation](docs/installation.md) describes every step by hand. This
 file covers doing it with the scripts instead.
 
 ---

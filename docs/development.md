@@ -6,6 +6,7 @@ Running it locally, the shape of the front end, and the verification tooling tha
 
 - [Front end](#front-end)
 - [Running it locally](#running-it-locally)
+- [The documentation and the Help pages](#the-documentation-and-the-help-pages)
 - [Verification tooling](#verification-tooling)
 
 ---
@@ -58,6 +59,29 @@ php bin/migrate.php && php bin/seed.php
 
 ---
 
+## The documentation and the Help pages
+
+The files in `docs/` are the documentation twice over: read on disk or on
+GitHub, and served inside the application at `/help`. There is no build step and
+no second copy — `App\Controllers\HelpController` reads the same file.
+
+- **`App\Services\Markdown`** renders the subset those files use. Every piece
+  of source text is escaped before any markup is added, so only the tags the
+  renderer writes itself reach the page.
+- **The contents panel mirrors `docs/README.md`.** Each `## Heading` on the
+  index opens a group in the sidebar and the `.md` links beneath it are its
+  pages, in order. Moving a page between the user half and the Administration
+  half is one edit to the index.
+- **`App\Services\HelpSettings`** replaces `{{setting:key}}` with what the site
+  actually has configured, so Help cannot show a default an administrator has
+  changed. Only the keys on its allow-list are substituted — that is what stops
+  a documentation file printing an arbitrary settings row — and a key that is
+  not listed is left as written. Add a key there before using it in a page, and
+  keep the token away from the start of a line: a resolved number followed by a
+  full stop reads as an ordered-list marker.
+
+`tests/docs-audit.php` holds all of this to account.
+
 ## Verification tooling
 
 Everything in `tests/` is a plain PHP script — no framework, nothing to install.
@@ -68,6 +92,7 @@ system.
 |---|---|
 | `security-audit.php` | Every state-changing route carries CSRF and a permission check; no SQL is built by interpolation; uploads are validated; the security headers are set |
 | `escape-audit.php` | No template prints a variable without `e()` |
+| `docs-audit.php` | Every documentation link and anchor resolves, every page keeps the house shape, every `{{setting:…}}` token is resolvable, and no page in the user half needs a shell |
 | `permission-matrix.php` | Each of the four roles is allowed and refused exactly what it should be, driven over real HTTP |
 | `report-figures.php` | Every report's figures agree with the database, and its CSV agrees with its screen |
 | `api-contract.php` | The API matches its own generated specification, including that no response carries an undeclared field |
@@ -81,4 +106,4 @@ database.
 
 ---
 
-**See also:** [Documentation index](README.md) · [Getting started](getting-started.md) · [API](api.md)
+**See also:** [Documentation index](README.md) · [Installation](installation.md) · [Administration](administration.md) · [API](api.md)

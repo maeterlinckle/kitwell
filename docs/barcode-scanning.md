@@ -28,17 +28,10 @@ sits at the end of every field that takes an asset tag or barcode:
 Where the field is the whole question — a search or a lookup — a successful scan
 submits it rather than making you press another button.
 
-This is one partial and one shared decoder, so adding it to a new field is a
-single line and no JavaScript:
-
-```php
-<?= partial('partials/scan-button', ['target' => 'asset_tag']) ?>
-```
-
-The button is hidden until its script loads: without JavaScript there is no
-camera. Typing the tag and USB scanners work regardless. The quick-scan page
-has no such button —
-it already *is* a camera scanner, and two would fight over the camera.
+The scan button is hidden until its script loads: without JavaScript there is no
+camera. Typing the tag and USB scanners work regardless. The quick-scan page has
+no such button — it already *is* a camera scanner, and two would fight over the
+camera.
 
 Three ways in, all landing at the same lookup:
 

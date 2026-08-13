@@ -1,4 +1,4 @@
-# Getting started
+# Installation
 
 Requirements, installing the application, and the web-server configuration behind it. If you only want it running, the scripted install is three commands and everything else on this page is reference.
 
@@ -82,7 +82,7 @@ composer install --no-dev --optimize-autoloader
 ### 2. Create the database and a dedicated user
 
 Connect as an administrative user (`mariadb -u root -p`, or `mysql -u root -p`
-on older installs — same client) and run:
+on a distribution that still ships that name — same client) and run:
 
 ```sql
 CREATE DATABASE kitwell CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

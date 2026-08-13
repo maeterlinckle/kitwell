@@ -42,10 +42,10 @@ and no way to sign in — including the administrator who switched it on.
 ## Trusted devices
 
 After a successful check you can tick **"Don't ask again on this computer"**.
-That lasts for `trusted_device_days` (30 by default), and stops sooner if any of
+That lasts **{{setting:trusted_device_days}}**, and stops sooner if any of
 these happen:
 
-- the device is not used for `trusted_device_idle_days` (14 by default);
+- the device is not used for **{{setting:trusted_device_idle_days}}**;
 - the browser changes — an update to the browser counts;
 - you sign in from a noticeably different network;
 - you change your password, or an administrator deactivates the account;

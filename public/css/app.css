@@ -2728,5 +2728,47 @@ form + .section-title,
     color: var(--text-muted);
 }
 
+/* Reference tables in the documentation.
+ *
+ * Ruled on both axes, unlike the register's own lists: these are dense
+ * lookup tables — a permission against the roles that hold it, a CSV column
+ * against its heading — where the eye has to track along a row and down a
+ * column, and a row rule alone is not enough to keep a cell with its heading.
+ * `.table-wrap` draws the outer edge, so the cells only draw the inside. */
 .prose .table-wrap { margin: 0 0 var(--space-4); }
-.prose table { width: 100%; }
+
+.prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+
+.prose th,
+.prose td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    vertical-align: top;
+    border: 1px solid var(--border);
+}
+
+.prose tr > *:first-child { border-left: 0; }
+.prose tr > *:last-child { border-right: 0; }
+.prose thead tr:first-child > * { border-top: 0; }
+.prose tbody tr:last-child > * { border-bottom: 0; }
+
+.prose thead th {
+    background: var(--bg-sunken);
+    color: var(--text);
+    font-weight: 700;
+    border-bottom: 2px solid var(--border-strong);
+}
+
+/* In the dark palette `--bg-sunken` sits very close to the card it is drawn on,
+   so the header takes the page background instead and separates by the same
+   amount the light palette manages. */
+[data-theme="dark"] .prose thead th { background: var(--bg); }
+
+.prose tbody tr:hover { background: var(--bg-hover); }
+
+/* A code span in a cell should not be the thing that forces a column wide. */
+.prose td code, .prose th code { white-space: normal; }

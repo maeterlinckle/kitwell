@@ -9,10 +9,10 @@
  * @var string $title
  * @var string $slug
  * @var string $source
- * @var array<int,array{slug:string,title:string}> $contents
+ * @var array<int,array{label:?string,pages:array<int,array{slug:string,title:string}>}> $contents
  */
 
-/* Links between documents are written as `getting-started.md` so they work when
+/* Links between documents are written as `installation.md` so they work when
    the files are read on disk; here they point at the matching route. */
 $rewrite = static function (string $target): string {
     if (preg_match('#^(https?:)?//|^mailto:#i', $target) === 1) {
@@ -49,14 +49,22 @@ $rewrite = static function (string $target): string {
             <li<?= $slug === 'README' ? ' class="current"' : '' ?>>
                 <a href="<?= e(url('/help')) ?>"<?= $slug === 'README' ? ' aria-current="page"' : '' ?>>Overview</a>
             </li>
-            <?php foreach ($contents as $page): ?>
-                <li<?= $slug === $page['slug'] ? ' class="current"' : '' ?>>
-                    <a href="<?= e(url('/help/' . $page['slug'])) ?>"<?= $slug === $page['slug'] ? ' aria-current="page"' : '' ?>>
-                        <?= e($page['title']) ?>
-                    </a>
-                </li>
-            <?php endforeach; ?>
         </ul>
+
+        <?php foreach ($contents as $group): ?>
+            <?php if ($group['label'] !== null): ?>
+                <h3 class="help-contents-group"><?= e($group['label']) ?></h3>
+            <?php endif; ?>
+            <ul>
+                <?php foreach ($group['pages'] as $page): ?>
+                    <li<?= $slug === $page['slug'] ? ' class="current"' : '' ?>>
+                        <a href="<?= e(url('/help/' . $page['slug'])) ?>"<?= $slug === $page['slug'] ? ' aria-current="page"' : '' ?>>
+                            <?= e($page['title']) ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endforeach; ?>
     </nav>
 
     <article class="help-page card prose">

@@ -1,47 +1,46 @@
 # Documentation
 
-Everything about running and using Kitwell. Each page covers one topic and
+Everything about using and running Kitwell. Each page covers one topic and
 stands on its own; the root [README](../README.md) is the two-minute
 introduction.
 
 Signed in, these pages are also available from **Settings → Help**.
 
-## Setting it up
+The pages are in two halves. **Using Kitwell** is what you do in the browser,
+whatever your role. **Administration** is the server side — installing,
+backing up, scheduling, and the developer reference — and needs shell access to
+the machine the site runs on.
+
+## Using Kitwell
 
 | Page | What is on it |
 |---|---|
-| [Getting started](getting-started.md) | Requirements, the scripted install and the manual one, Apache and nginx configuration, upgrading, backups |
-| [Administration](administration.md) | The `manage.sh` wrapper, where files live on disk, troubleshooting |
-| [Security](security.md) | Passwords, sessions, CSRF, uploads, headers and the audit trail |
-
-## Using it
-
-| Page | What is on it |
-|---|---|
-| [Assets and sub-assets](assets.md) | Asset tags, sub-assets and accessories, search and filters, condition photos, manuals, copying, archiving and deleting |
+| [Assets and sub-assets](assets.md) | Asset tags, sub-assets and accessories, search and filters, manuals, copying, archiving and deleting |
+| [Photos](photos.md) | Condition photos, taking them on a phone, the dated history they build up |
 | [Faults and the responsible party](faults.md) | Naming who looks after an asset, reporting a fault with a photograph, who gets told |
 | [Maintenance](maintenance.md) | Routine, periodic and one-off schedules, recording completions with evidence, how "due" is decided |
 | [PAT testing](pat-testing.md) | The guided test flow, what belongs to the appliance and what to a test, how status is worked out |
 | [Hires and hirers](hires.md) | Checking out and booking in, hirer records, the self-service Hirer role |
-| [Barcode scanning and labels](barcode-scanning.md) | Camera and hardware scanning, printing labels and records, your logo |
-| [Reports](reports.md) | The six built-in reports, and defining your own |
-| [Import and export](import-export.md) | CSV formats for assets and PAT results, previews, exporting |
-
-## People and access
-
-| Page | What is on it |
-|---|---|
-| [Users, roles and permissions](users-roles-permissions.md) | The four roles, creating your own, invitations, password recovery |
 | [Teams](teams.md) | Groups that work can be assigned to |
+| [Reports](reports.md) | The six built-in reports, and defining your own |
+| [Import and export](import-export.md) | Uploading a CSV of assets or PAT results, previewing it, and downloading data back out |
+| [Barcode scanning and labels](barcode-scanning.md) | Camera and hardware scanning, printing labels and records, your logo |
+| [Email and notifications](email-and-notifications.md) | Reminder settings, message templates, the send log, calendar feeds |
+| [Users, roles and permissions](users-roles-permissions.md) | The four roles, creating your own, invitations, password recovery, API keys |
 | [Two-factor authentication](two-factor-authentication.md) | Authenticator apps, email codes, site-wide enforcement, trusted devices |
 
-## Integration
+## Administration
+
+Server-level work. Everything in this half assumes shell access to the machine
+Kitwell runs on.
 
 | Page | What is on it |
 |---|---|
-| [Email and notifications](email-and-notifications.md) | SMTP, the four scheduled reminders, message templates, the send log, calendar feeds |
-| [API](api.md) | The REST interface, API keys, conventions. The endpoint reference itself is generated at `/api/docs` |
-| [Development](development.md) | Running it locally, the front end, the verification tooling |
+| [Installation](installation.md) | Requirements, the scripted install and the manual one, Apache and nginx configuration, upgrading |
+| [Administration](administration.md) | `manage.sh`, backups, migrations, the reminder schedule, project layout, troubleshooting |
+| [Development](development.md) | Running it locally, the shape of the front end, the verification tooling |
+| [Security](security.md) | What is protected, how permissions are enforced, secrets and encryption, hardening the server |
+| [API](api.md) | The REST interface, keys, conventions and the endpoint reference |
 
 ---
 
@@ -82,12 +81,21 @@ constants in code, so a role can be given any combination of them.
 **Paths are as the application serves them**, without a leading host:
 `/assets/12`, `/admin/api`, `/api/v1/assets`.
 
+**Configured values appear as `{{setting:key}}` in these files** and are
+replaced with the site's current value when the page is read inside the
+application, so what you see in Help is what is actually set rather than an
+example.
+
 ## Editing these pages
 
 One page per topic, each with the same shape: a title, a one-line summary, an
 **On this page** list, the content, and a **See also** footer. Keeping to that
 is what lets somebody find the right page to change without reading the whole
 set.
+
+Keep the split: if a step needs a shell, SQL, a file path or a cron entry, it
+belongs in the Administration half, and the user-facing page should link to it
+rather than explain it.
 
 If a change touches how the application behaves, the page that documents it is
 part of the change. `PROJECT_STATE.md` at the repository root is the technical
