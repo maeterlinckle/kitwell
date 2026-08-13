@@ -54,7 +54,7 @@ Where something is *not* verified, it says so.
 
 Built by applying everything in `database/migrations/` to an empty database.
 
-**Totals:** 32 domain tables, 377 columns, 60 foreign keys, 147 indexes.
+**Totals:** 35 domain tables, 412 columns, 68 foreign keys.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
 A database migrated with `php bin/migrate.php` has a **33rd** table,
@@ -65,16 +65,20 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-Three files, applied in filename order and recorded in `migrations`. Each is
+Four files, applied in filename order and recorded in `migrations`. Each is
 written to be safe to re-run.
 
 | File | Contents |
 |---|---|
-| `001_schema.sql` | All 32 tables, in dependency order. `CREATE TABLE IF NOT EXISTS` throughout |
+| `001_schema.sql` | The base 32 tables, in dependency order. `CREATE TABLE IF NOT EXISTS` throughout |
 | `002_roles_and_permissions.sql` | The 4 built-in roles, 36 permissions and 71 grants. Role and permission definitions are refreshed on re-run; grants are only inserted where missing, so a site's own edits to a built-in role survive |
 | `003_default_settings.sql` | The 51 setting keys a fresh install starts with, grouped by area. `INSERT IGNORE`, so an existing value is kept |
+| `004_media_library_and_templates.sql` | `media_library`, `asset_media`, `asset_templates`, `template_media`; moves every row of `asset_manuals` into the library and drops that table; adds `templates.manage` for admin and manager |
 
-To change the schema, add a new numbered file — `004_…` and upward. Do not edit
+A fresh install and one upgraded through 004 produce the same schema —
+verified by migrating both and diffing `information_schema` column by column.
+
+To change the schema, add a new numbered file — `005_…` and upward. Do not edit
 one that has been applied anywhere.
 
 ### 2.2 Tables
@@ -188,10 +192,51 @@ the same trick the condition sort already used. Do not "tidy" the ENUM.
 `caption`, `is_primary` tinyint NN 0, `taken_at` datetime, `uploaded_by`, `created_at`.
 Indexes `(asset_id, created_at)`, `(asset_id, is_primary)`, `(asset_id, taken_at)`.
 
-#### `asset_manuals`
-`id`, `asset_id` NN, `title` varchar(191) NN, `file_path` NN, `original_filename`,
-`mime_type` NN default `application/pdf`, `file_size_bytes` NN 0, `page_count`,
-`notes`, `uploaded_by`, `created_at`. Index `(asset_id, created_at)`.
+#### `media_library`
+`id`, `media_type` enum('photo','document') NN, `title` varchar(191) NN,
+`description` varchar(500), `file_path` NN, `original_filename`, `mime_type` NN,
+`file_size_bytes` NN 0, `file_hash` char(64) **unique**, `thumbnail_path`,
+`width_px`, `height_px`, `uploaded_by`, timestamps.
+Indexes `(media_type, title)`, `(created_at)`.
+
+The shared half of the media model: one row per file, held once however many
+assets use it. `file_hash` is a SHA-256 of the contents, and the unique index on
+it is what makes a re-upload of the same bytes an attachment rather than a
+second copy. NULLs are allowed and repeatable there, so a row whose hash has not
+been computed does not block anything — `php bin/console.php media:rehash`
+fills them in.
+
+#### `asset_media`
+`asset_id` NN, `media_id` NN, `sort_order` NN 0, `attached_by`, `created_at`.
+PRIMARY KEY `(asset_id, media_id)`, index `(media_id)`.
+
+The join. Attaching writes one row with `INSERT IGNORE`, so attaching something
+already attached is a no-op — which is what makes copy, bulk-apply and
+template-driven creation safe to run twice.
+
+**`asset_photos` is deliberately not part of this.** A condition photo records
+what one physical item looked like on one day; sharing it would make that claim
+false about a different item. The same goes for the evidence on `pat_records`,
+`fault_reports` and `maintenance_logs`. `tests/security-audit.php` asserts that
+none of those four models references `MediaLibrary` or `asset_media`.
+
+#### `asset_templates`
+`id`, `name` varchar(120) NN **unique**, `description`, then the pre-fill
+columns: `asset_name`, `asset_description`, `category_id`, `location_id`,
+`manufacturer`, `model`, `manufacturer_url`, `supplier`, `condition_rating`,
+`appliance_class`, `load_rating_va`, `has_fuse`, `plug_fuse_rating_amps`,
+`cable_csa_mm2`, `requires_pat`, `pat_interval_months`, `is_hireable`, `notes`;
+then `is_active` NN 1, `created_by`, `updated_by`, timestamps.
+
+Every pre-fill column is nullable, including the three flags — NULL means the
+template says nothing about that field, which is a different instruction from
+"no". **There is no `asset_tag`, `barcode`, `serial_number` or `status` column,
+and there must never be one**: those identify one physical item.
+`tests/media-library.php` reads the schema to check it.
+
+#### `template_media`
+`template_id` NN, `media_id` NN, `sort_order` NN 0, `created_at`.
+PRIMARY KEY `(template_id, media_id)`.
 
 #### `maintenance_schedules`
 `id`, `asset_id` NN, `title` varchar(191) NN,

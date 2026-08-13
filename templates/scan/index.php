@@ -2,7 +2,8 @@
 /**
  * Quick scan.
  *
- * @var string $mode  view | checkout | return | maintenance
+ * @var string $mode  view | checkout | return | maintenance | pat | new
+ * @var array<string,mixed>|null $taken  The asset a New asset scan collided with
  */
 $titles = [
     'view'        => 'Scan an asset',
@@ -10,6 +11,7 @@ $titles = [
     'return'      => 'Scan to book in',
     'maintenance' => 'Scan to record maintenance',
     'pat'         => 'Scan to record a PAT test',
+    'new'         => 'Scan a tag for a new asset',
 ];
 
 $blurbs = [
@@ -18,7 +20,10 @@ $blurbs = [
     'return'      => 'Scan the item coming back. You will be taken straight to its return form.',
     'maintenance' => 'Scan the item you have worked on. You will be taken straight to the record form.',
     'pat'         => 'Scan the appliance you are testing. You will be taken straight to the test form.',
+    'new'         => 'Scan the label you are about to put on something. If nothing is using that tag yet, the Add asset form opens with it filled in.',
 ];
+
+$taken = $taken ?? null;
 ?>
 <div class="page-head">
     <div>
@@ -26,7 +31,7 @@ $blurbs = [
         <p class="muted"><?= e($blurbs[$mode]) ?></p>
     </div>
     <div class="head-actions">
-        <?php foreach (['view' => 'Look up', 'checkout' => 'Check out', 'return' => 'Book in', 'maintenance' => 'Record work', 'pat' => 'PAT test'] as $option => $label): ?>
+        <?php foreach (['view' => 'Look up', 'checkout' => 'Check out', 'return' => 'Book in', 'maintenance' => 'Record work', 'pat' => 'PAT test', 'new' => 'New asset'] as $option => $label): ?>
             <?php
             if ($option === 'checkout' && !can('hires.create')) {
                 continue;
@@ -40,12 +45,37 @@ $blurbs = [
             if ($option === 'pat' && !can('pat.manage')) {
                 continue;
             }
+            if ($option === 'new' && !can('assets.create')) {
+                continue;
+            }
             ?>
             <a class="btn btn-sm <?= $mode === $option ? 'btn-primary' : '' ?>"
                href="<?= e(url('/scan?mode=' . $option)) ?>"><?= e($label) ?></a>
         <?php endforeach; ?>
     </div>
 </div>
+
+<?php if ($taken !== null): ?>
+    <?php /* The tag was already on something. Say which, and offer the way to
+             it — a refusal with no next step is where somebody gives up and
+             invents a second tag for the same machine. */ ?>
+    <div class="card danger-card">
+        <h2>That tag is already in use</h2>
+        <p>
+            <strong class="mono"><?= e((string) $taken['asset_tag']) ?></strong>
+            is <?= e((string) $taken['name']) ?>, registered
+            <?= e(format_date($taken['created_at'])) ?>.
+        </p>
+        <p class="muted">
+            An asset tag identifies one physical item, so it cannot be reused.
+            Edit the existing asset, or scan a different label.
+        </p>
+        <div class="head-actions">
+            <a class="btn btn-primary" href="<?= e(url('/assets/' . (int) $taken['id'] . '/edit')) ?>">Edit <?= e((string) $taken['asset_tag']) ?></a>
+            <a class="btn" href="<?= e(url('/assets/' . (int) $taken['id'])) ?>">Open it</a>
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="scan-page" data-scanner data-scan-mode="<?= e($mode) ?>" data-lookup-url="<?= e(url('/scan/lookup')) ?>">
     <div class="card scan-entry">

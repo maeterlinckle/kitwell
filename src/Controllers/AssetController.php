@@ -11,18 +11,20 @@ use App\Core\Response;
 use App\Core\Validator;
 use App\Models\ActivityLog;
 use App\Models\Asset;
-use App\Models\AssetManual;
 use App\Models\AssetPhoto;
+use App\Models\AssetTemplate;
 use App\Models\Category;
 use App\Models\FaultReport;
 use App\Models\Hire;
 use App\Models\Location;
 use App\Models\MaintenanceLog;
 use App\Models\MaintenanceSchedule;
+use App\Models\MediaLibrary;
 use App\Models\PatRecord;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\AssetTagger;
+use App\Services\MediaIntake;
 
 final class AssetController extends Controller
 {
@@ -120,7 +122,11 @@ final class AssetController extends Controller
             'currentFaultPhotos' => $currentFault === null ? [] : FaultReport::photos((int) $currentFault['id']),
             'faultCount'         => FaultReport::countForAsset($assetId),
             'children'   => Asset::children($assetId),
-            'manuals'    => AssetManual::forAsset($assetId),
+            'libraryPhotos'    => MediaLibrary::forAsset($assetId, 'photo'),
+            'libraryDocuments' => MediaLibrary::forAsset($assetId, 'document'),
+            // What the "attach from the library" picker shows before a search.
+            'libraryPickerDocuments' => Auth::can('assets.edit') ? MediaLibrary::search('document', '', 1, 12)['rows'] : [],
+            'libraryPickerPhotos'    => Auth::can('assets.edit') ? MediaLibrary::search('photo', '', 1, 12)['rows'] : [],
             // The 12 most recent photos inline; the rest on the history page.
             'photos'     => AssetPhoto::forAsset($assetId, 12),
             'photoCount' => AssetPhoto::countForAsset($assetId),
@@ -140,16 +146,33 @@ final class AssetController extends Controller
         $parentId = (int) Request::query('parent', 0);
         $parent   = $parentId > 0 ? Asset::find($parentId) : null;
 
+        // Starting from a template fills the form in and pre-selects its media.
+        // Everything it supplies is a default the person can change before the
+        // asset exists, so this is form state and nothing more.
+        $templateId = (int) Request::query('template', 0);
+        $assetTemplate   = $templateId > 0 ? AssetTemplate::find($templateId) : null;
+
+        // A tag scanned on the way in, from the New asset button on /scan.
+        $scanned = trim((string) Request::query('tag', ''));
+
         $this->view('assets/form', [
             'pageTitle'   => $parent !== null ? 'Add item to ' . $parent['asset_tag'] : 'Add asset',
             'asset'       => null,
             'parent'      => $parent,
-            'suggestedTag'=> AssetTagger::next(),
+            'suggestedTag'=> $scanned !== '' ? mb_substr($scanned, 0, 64) : AssetTagger::next(),
+            'scannedTag'  => $scanned !== '',
             'categories'  => Category::all(true),
             'locations'   => Location::forSelect(),
             'parents'     => Asset::parentOptions(),
             'responsibleUsers' => Asset::responsibleUsers(),
             'responsibleTeams' => Asset::responsibleTeams(),
+            'templates'    => AssetTemplate::all(true),
+            'assetTemplate'     => $assetTemplate,
+            'prefill'      => $assetTemplate === null ? [] : AssetTemplate::prefill($assetTemplate),
+            'templateMedia'=> $assetTemplate === null ? [] : MediaLibrary::forTemplate($templateId),
+            // What the library picker shows before anybody searches.
+            'libraryDocuments' => MediaLibrary::search('document', '', 1, 12)['rows'],
+            'libraryPhotos'    => MediaLibrary::search('photo', '', 1, 12)['rows'],
         ]);
     }
 
@@ -162,8 +185,15 @@ final class AssetController extends Controller
 
         $id = Asset::create($data);
 
+        // Library items chosen on the form — from a template, from the picker,
+        // or uploaded here — are attached by reference. Ten assets built from
+        // one template share one manual.
+        $attached = MediaLibrary::attachMany($id, array_map('intval', (array) Request::post('media_ids', [])));
+        $attached += self::intakeNewMedia($id);
+
         ActivityLog::record('created', 'asset', $id, sprintf('Registered %s — %s', $data['asset_tag'], $data['name']));
-        Flash::success($data['asset_tag'] . ' has been registered.');
+        Flash::success($data['asset_tag'] . ' has been registered.'
+            . ($attached > 0 ? sprintf(' %d file%s attached.', $attached, $attached === 1 ? '' : 's') : ''));
 
         // "Save and add another" keeps the workflow going when tagging a batch.
         if (Request::post('save_and_new') !== null) {
@@ -181,16 +211,26 @@ final class AssetController extends Controller
             $this->notFound();
         }
 
+        // Templates and the media picker belong to registering something new.
+        // Editing an existing asset manages its files from the asset page,
+        // where they can be seen alongside everything else it has.
         $this->view('assets/form', [
             'pageTitle'  => 'Edit ' . $asset['asset_tag'],
             'asset'      => $asset,
             'parent'     => $asset['parent_asset_id'] !== null ? Asset::find((int) $asset['parent_asset_id']) : null,
             'suggestedTag' => null,
+            'scannedTag' => false,
             'categories' => Category::all(true),
             'locations'  => Location::forSelect(),
             'parents'    => Asset::parentOptions((int) $asset['id']),
             'responsibleUsers' => Asset::responsibleUsers(),
             'responsibleTeams' => Asset::responsibleTeams(),
+            'templates'    => [],
+            'assetTemplate' => null,
+            'prefill'      => [],
+            'templateMedia'=> [],
+            'libraryDocuments' => [],
+            'libraryPhotos'    => [],
         ]);
     }
 
@@ -292,9 +332,10 @@ final class AssetController extends Controller
 
         // Remove the files too — the database rows go with the asset via the
         // foreign key, but the uploads would otherwise be orphaned on disk.
-        foreach (AssetManual::forAsset($assetId) as $manual) {
-            \App\Core\Upload::delete((string) $manual['file_path']);
-        }
+        //
+        // Library items are the exception: the join rows go, and each file is
+        // only deleted if this asset was the last thing pointing at it.
+        $libraryIds = MediaLibrary::assetMediaIds($assetId);
 
         foreach (AssetPhoto::forAsset($assetId) as $photo) {
             \App\Core\Upload::delete((string) $photo['file_path']);
@@ -305,10 +346,74 @@ final class AssetController extends Controller
         }
 
         Asset::delete($assetId);
+
+        // The join rows went with the asset; anything now referenced by nothing
+        // at all is the asset's own file and can go too. MediaIntake::forget()
+        // refuses while something still points at it.
+        foreach ($libraryIds as $mediaId) {
+            MediaIntake::forget($mediaId);
+        }
+
         ActivityLog::record('deleted', 'asset', $assetId, sprintf('Deleted %s — %s', $asset['asset_tag'], $asset['name']));
 
         Flash::success($asset['asset_tag'] . ' has been deleted.');
         Response::redirect('/assets');
+    }
+
+    /**
+     * Files uploaded on the Add asset form itself.
+     *
+     * The form asks which of two things each upload is, and they are genuinely
+     * different: a stock photo or a manual describes the *model* and goes to
+     * the shared library, where a second asset can attach the same file. A
+     * condition photo records what this one item looked like today and belongs
+     * to it alone, so it goes down the ordinary photo path untouched by any of
+     * this. See App\Controllers\PhotoController.
+     *
+     * @return int How many library items were attached.
+     */
+    private static function intakeNewMedia(int $assetId): int
+    {
+        $attached = 0;
+
+        foreach (['photo' => 'library_photos', 'document' => 'library_documents'] as $type => $field) {
+            $files = \App\Core\Upload::files($field);
+
+            if ($files === [] || !Auth::can($type === 'photo' ? 'media.photo.upload' : 'media.manual.upload')) {
+                continue;
+            }
+
+            foreach ($files as $file) {
+                $result = MediaIntake::store($file, $type);
+
+                if (is_string($result)) {
+                    Flash::error($result);
+                    continue;
+                }
+
+                if (MediaLibrary::attach($assetId, (int) $result['media']['id'])) {
+                    $attached++;
+                }
+            }
+        }
+
+        // The other half of the choice: photos of this particular item, stored
+        // exactly as they would be from the asset's own Photos card.
+        $conditionPhotos = \App\Core\Upload::files('condition_photos');
+
+        if ($conditionPhotos !== [] && Auth::can('media.photo.upload')) {
+            [$stored, $errors] = PhotoController::intake($assetId, $conditionPhotos);
+
+            foreach ($errors as $error) {
+                Flash::error($error);
+            }
+
+            if ($stored > 0) {
+                Flash::success(sprintf('%d condition photo%s added.', $stored, $stored === 1 ? '' : 's'));
+            }
+        }
+
+        return $attached;
     }
 
     /**

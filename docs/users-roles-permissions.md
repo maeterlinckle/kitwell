@@ -56,6 +56,17 @@ without being allowed to rewrite purchase costs. It is still a change to the
 register, since it moves the asset's status, so Read-only does not hold it.
 Reading the fault history needs only `assets.view`.
 
+Templates have their own:
+
+| Permission | Held by | Allows |
+|---|---|---|
+| `templates.manage` | Administrator, Manager / Staff | Settings → Asset templates: creating and editing the starting points the Add asset form offers |
+
+It sits with `categories.manage` rather than with the administrative
+permissions: a template is reference data an operation maintains for itself.
+Browsing the media library needs only `assets.view`, since what it holds is
+descriptions of the things in the register.
+
 Reports and the API have one each:
 
 | Permission | Held by | Allows |

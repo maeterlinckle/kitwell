@@ -776,3 +776,157 @@
         if (summary) summary.focus();
     });
 })();
+
+/* Media library picker.
+ *
+ * Types into /media/search and redraws the grid. Everything it draws is the
+ * same markup the server renders, so the two agree; without JavaScript the
+ * server-rendered recent items are still tickable, which is enough to attach
+ * something.
+ *
+ * A box the user has already ticked survives a search — otherwise searching for
+ * the second file you wanted would silently drop the first. */
+(function () {
+    var pickers = document.querySelectorAll('[data-media-picker]');
+    if (!pickers.length) return;
+
+    pickers.forEach(function (picker) {
+        var input   = picker.querySelector('[data-media-search]');
+        var results = picker.querySelector('[data-media-results]');
+        var status  = picker.querySelector('[data-media-status]');
+        var url     = picker.getAttribute('data-search');
+        var type    = picker.getAttribute('data-type');
+        var timer   = null;
+
+        if (!input || !results || !url) return;
+
+        /** Ids ticked right now, so a redraw can put them back. */
+        function ticked() {
+            return Array.prototype.map.call(
+                results.querySelectorAll('input[type="checkbox"]:checked'),
+                function (box) { return box.value; }
+            );
+        }
+
+        function say(message) {
+            if (!status) return;
+            status.textContent = message || '';
+            status.hidden = !message;
+        }
+
+        function card(item, checked) {
+            var label = document.createElement('label');
+            label.className = 'media-card' + (checked ? ' is-selected' : '');
+
+            var box = document.createElement('input');
+            box.type = 'checkbox';
+            box.name = 'media_ids[]';
+            box.value = String(item.id);
+            box.checked = checked;
+            label.appendChild(box);
+
+            if (item.thumbnail) {
+                var img = document.createElement('img');
+                img.className = 'media-thumb';
+                img.src = item.thumbnail;
+                img.alt = '';
+                img.loading = 'lazy';
+                label.appendChild(img);
+            } else {
+                var mark = document.createElement('span');
+                mark.className = 'media-thumb media-thumb-doc';
+                mark.setAttribute('aria-hidden', 'true');
+                mark.textContent = 'PDF';
+                label.appendChild(mark);
+            }
+
+            var meta = document.createElement('span');
+            meta.className = 'media-meta';
+
+            var title = document.createElement('span');
+            title.className = 'media-title';
+            title.textContent = item.title;
+            meta.appendChild(title);
+
+            var sub = document.createElement('span');
+            sub.className = 'muted media-sub';
+            sub.textContent = (item.filename || '')
+                + (item.assets ? ' · on ' + item.assets + ' asset' + (item.assets === 1 ? '' : 's') : '');
+            meta.appendChild(sub);
+
+            label.appendChild(meta);
+
+            return label;
+        }
+
+        function search() {
+            var keep = ticked();
+            var query = input.value.trim();
+
+            say('Searching…');
+
+            fetch(url + '?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(query), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    results.textContent = '';
+
+                    if (!data.items.length) {
+                        var empty = document.createElement('p');
+                        empty.className = 'muted media-empty';
+                        empty.textContent = query
+                            ? 'Nothing in the library matches that.'
+                            : 'The library has nothing of this kind yet.';
+                        results.appendChild(empty);
+                    } else {
+                        data.items.forEach(function (item) {
+                            results.appendChild(card(item, keep.indexOf(String(item.id)) !== -1));
+                        });
+                    }
+
+                    // Anything ticked but not in these results would otherwise
+                    // be dropped from the post, so it rides along hidden.
+                    keep.forEach(function (id) {
+                        if (results.querySelector('input[value="' + id + '"]')) return;
+
+                        var hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'media_ids[]';
+                        hidden.value = id;
+                        results.appendChild(hidden);
+                    });
+
+                    say(data.total > data.items.length
+                        ? 'Showing ' + data.items.length + ' of ' + data.total + ' — narrow the search to see the rest.'
+                        : '');
+                })
+                .catch(function () {
+                    say('Could not reach the library. The list above is still usable.');
+                });
+        }
+
+        input.addEventListener('input', function () {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(search, 250);
+        });
+
+        // Enter in a search box would submit the form it sits in, which is the
+        // "attach these" button. Search instead.
+        input.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            window.clearTimeout(timer);
+            search();
+        });
+
+        results.addEventListener('change', function (event) {
+            var box = event.target.closest('input[type="checkbox"]');
+            if (!box) return;
+
+            var label = box.closest('.media-card');
+            if (label) label.classList.toggle('is-selected', box.checked);
+        });
+    });
+})();

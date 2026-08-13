@@ -1,6 +1,6 @@
 # Verification tooling
 
-Nine checks that can be re-run after any change. Eight are plain PHP scripts
+Ten checks that can be re-run after any change. Nine are plain PHP scripts
 with no test-framework dependency — run them with the same PHP binary the site
 uses. The ninth is a web page, because the thing it tests is JavaScript.
 
@@ -16,6 +16,7 @@ uses. The ninth is a web page, because the thing it tests is JavaScript.
 | `permission-matrix.php` | A running site + seeded database | **Yes** |
 | `api-contract.php` | A running site + seeded database | **Yes** |
 | `fault-flow.php` | A running site + seeded database + an SMTP catcher | **Yes** |
+| `media-library.php` | A running site + seeded database | **Yes** |
 
 ## Static checks (safe anywhere, including production)
 
@@ -106,6 +107,29 @@ rather than one per asset.
 > it and `mail_encryption` set to `none`; without one they are skipped and say
 > so rather than passing quietly. It pins the settings it depends on and puts
 > them back at the end.
+
+```bash
+php tests/media-library.php
+```
+
+`media-library.php` drives the shared media library and asset templates over
+real HTTP: creating a template, uploading a document into the library and
+attaching it, re-uploading the identical bytes under a different name,
+registering three assets from the template, detaching one, copying an asset, and
+scanning a tag towards a new asset both when it is free and when it is already
+in use.
+
+The claim it exists to hold up is that one file is stored once however many
+assets use it, so **every count is taken from the database and from the
+filesystem**. A library that quietly wrote a second copy would satisfy one and
+fail the other. It also asserts what a template cannot do: there is no
+`asset_tag`, `barcode`, `serial_number` or `status` column on `asset_templates`,
+and the check reads the schema rather than trusting the form.
+
+> **This one writes too.** It creates a template, uploads files, registers
+> assets and copies them. Its fixtures carry a per-run nonce so a second run is
+> not deduplicated against the first — which would be the library working, but
+> would make the assertions meaningless.
 
 ## The barcode decoder
 

@@ -8,7 +8,7 @@ use App\Core\Auth;
 use App\Core\Request;
 use App\Core\Upload;
 use App\Models\Asset;
-use App\Models\AssetManual;
+use App\Models\MediaLibrary;
 use App\Models\AssetPhoto;
 use App\Models\Hirer;
 use App\Models\Hire;
@@ -102,7 +102,7 @@ final class MyHiresController extends Controller
             'hirer'  => $hirer,
             'hire'      => $hire,
             'asset'     => self::visibleAsset($asset),
-            'manuals'   => AssetManual::forAsset($assetId),
+            'manuals'   => MediaLibrary::forAsset($assetId, 'document'),
             'photo'     => AssetPhoto::primaryFor($assetId),
             'pat'       => $pat,
         ]);
@@ -149,9 +149,14 @@ final class MyHiresController extends Controller
     {
         [, $hire] = $this->requireOwnHire((int) $hireId);
 
-        $manual = AssetManual::find((int) $manualId);
+        // Scoped to the asset they actually hold, not to the library at large:
+        // a library item is shared, so "does this document exist" and "may this
+        // hirer read it" are different questions.
+        $manual = MediaLibrary::find((int) $manualId);
 
-        if ($manual === null || (int) $manual['asset_id'] !== (int) $hire['asset_id']) {
+        if ($manual === null
+            || $manual['media_type'] !== 'document'
+            || !in_array((int) $manualId, MediaLibrary::assetMediaIds((int) $hire['asset_id']), true)) {
             $this->notFound('That document is not available for this item.');
         }
 

@@ -507,6 +507,10 @@ echo "\n== File uploads ==\n";
 $uploadCallers = [];
 $unvalidated   = [];
 
+// A file may validate for itself, or hand each upload to one of the two
+// intakes that do it — which is why both are held to it just below.
+$delegates = ['MediaIntake::store(', 'PhotoController::intake('];
+
 foreach ($sourceFiles as $file) {
     $code = (string) file_get_contents($file);
 
@@ -516,13 +520,57 @@ foreach ($sourceFiles as $file) {
 
     $uploadCallers[] = basename($file);
 
-    if (!str_contains($code, 'Upload::validate(')) {
+    $validates = str_contains($code, 'Upload::validate(');
+
+    foreach ($delegates as $delegate) {
+        $validates = $validates || str_contains($code, $delegate);
+    }
+
+    if (!$validates) {
         $unvalidated[] = basename($file);
     }
 }
 
 check('every upload entry point validates', $unvalidated === [], implode(', ', $unvalidated));
 check('uploads are handled in the expected places', count($uploadCallers) >= 4, implode(', ', $uploadCallers));
+
+// The delegation above is only safe if the things delegated to really do
+// validate, so that is asserted rather than assumed.
+$intake = (string) @file_get_contents($root . '/src/Services/MediaIntake.php');
+check(
+    'MediaIntake validates every file it stores',
+    str_contains($intake, 'Upload::validate(')
+        && preg_match('/public static function store\([^)]*\).*?self::validate\(/s', $intake) === 1,
+    'src/Services/MediaIntake.php'
+);
+
+$photos = (string) @file_get_contents($root . '/src/Controllers/PhotoController.php');
+check(
+    'PhotoController::intake validates every photo it stores',
+    preg_match('/public static function intake\([^)]*\).*?Upload::validate\(/s', $photos) === 1,
+    'src/Controllers/PhotoController.php'
+);
+
+// Condition photos and the evidence on PAT, fault and maintenance records are
+// owned by one asset or one record. Routing any of them through the shared
+// library would silently make one item's history describe another's.
+$exclusive = [
+    'AssetPhoto'     => 'condition photos',
+    'FaultReport'    => 'fault report photos',
+    'MaintenanceLog' => 'maintenance evidence',
+    'PatRecord'      => 'PAT records',
+];
+$leaked = [];
+
+foreach ($exclusive as $model => $what) {
+    $code = (string) @file_get_contents($root . '/src/Models/' . $model . '.php');
+
+    if (str_contains($code, 'MediaLibrary') || str_contains($code, 'asset_media')) {
+        $leaked[] = $what;
+    }
+}
+
+check('exclusive media never routes through the shared library', $leaked === [], implode(', ', $leaked));
 
 // Files must never be written to the document root.
 $publicWrites = [];

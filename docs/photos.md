@@ -67,6 +67,7 @@ The same camera control appears wherever evidence is worth attaching:
 | Where | What it records |
 |---|---|
 | An asset | Its condition over time. See [Assets](assets.md) |
+| The media library | A manufacturer's product shot, shared across every unit of a model. See [Media library](media-library.md) |
 | A maintenance record | What was found and what was done. See [Maintenance](maintenance.md) |
 | A fault report | What is wrong. At least one photo is required. See [Faults](faults.md) |
 | A hire | Condition at checkout and at return. See [Hires](hires.md) |

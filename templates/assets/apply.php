@@ -8,7 +8,7 @@
  * @var array{rows:array<int,array<string,mixed>>,total:int,page:int,pages:int,per_page:int} $result
  * @var array<string,mixed> $filters
  * @var array<int,array<string,mixed>> $categories
- * @var int  $manualCount
+ * @var int  $mediaCount
  * @var bool $suggestOnly
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
@@ -84,14 +84,14 @@ $display = static function (string $field) use ($source): string {
                 <tr>
                     <td class="col-check">
                         <label class="checkbox checkbox-bare">
-                            <input type="checkbox" name="copy_manuals" value="1" <?= $manualCount === 0 ? 'disabled' : '' ?>>
-                            <span class="sr-only">Copy manuals</span>
+                            <input type="checkbox" name="copy_media" value="1" <?= $mediaCount === 0 ? 'disabled' : '' ?>>
+                            <span class="sr-only">Attach the shared photos and documents</span>
                         </label>
                     </td>
-                    <th scope="row">Manuals (PDF)</th>
+                    <th scope="row">Shared photos &amp; documents</th>
                     <td class="muted">
-                        <?= $manualCount > 0
-                            ? (int) $manualCount . ' document' . ($manualCount === 1 ? '' : 's') . ' — added to each selected asset, skipping any it already has'
+                        <?= $mediaCount > 0
+                            ? (int) $mediaCount . ' file' . ($mediaCount === 1 ? '' : 's') . ' — attached to each selected asset by reference, not copied'
                             : 'None attached' ?>
                     </td>
                 </tr>

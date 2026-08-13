@@ -13,14 +13,32 @@ use App\Models\Asset;
  * @var array<int,array<string,mixed>> $parents
  * @var array<int,array<string,mixed>> $responsibleUsers
  * @var array<int,array<string,mixed>> $responsibleTeams
+ * @var array<int,array<string,mixed>> $templates
+ * @var array<string,mixed>|null      $assetTemplate
+ * @var array<string,mixed>           $prefill
+ * @var array<int,array<string,mixed>> $templateMedia
+ * @var bool $scannedTag
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
 $isEdit = $asset !== null;
 $action = $isEdit ? url('/assets/' . $asset['id']) : url('/assets');
 
-/** Current value for a field: old input first, then the record, then a default. */
-$value = static function (string $field, mixed $default = '') use ($old, $asset): string {
+$templates     = $templates ?? [];
+$assetTemplate      = $assetTemplate ?? null;
+$prefill       = $prefill ?? [];
+$templateMedia = $templateMedia ?? [];
+$scannedTag    = (bool) ($scannedTag ?? false);
+
+/**
+ * Current value for a field: old input first, then the record, then whatever a
+ * chosen template supplies, then the default.
+ *
+ * A template is only ever consulted on a new asset, and only for a field the
+ * template actually sets — see App\Models\AssetTemplate::prefill(). Everything
+ * it fills in is editable here before anything is created.
+ */
+$value = static function (string $field, mixed $default = '') use ($old, $asset, $prefill): string {
     if (array_key_exists($field, $old)) {
         return (string) $old[$field];
     }
@@ -29,16 +47,24 @@ $value = static function (string $field, mixed $default = '') use ($old, $asset)
         return (string) $asset[$field];
     }
 
+    if ($asset === null && array_key_exists($field, $prefill)) {
+        return (string) $prefill[$field];
+    }
+
     return (string) $default;
 };
 
-$checked = static function (string $field, bool $default) use ($old, $asset): bool {
+$checked = static function (string $field, bool $default) use ($old, $asset, $prefill): bool {
     if ($old !== []) {
         return isset($old[$field]);
     }
 
     if ($asset !== null) {
         return (int) ($asset[$field] ?? 0) === 1;
+    }
+
+    if (array_key_exists($field, $prefill)) {
+        return (int) $prefill[$field] === 1;
     }
 
     return $default;
@@ -64,7 +90,55 @@ $responsible = array_key_exists('responsible', $old)
     <a class="btn btn-ghost" href="<?= e($isEdit ? url('/assets/' . $asset['id']) : url('/assets')) ?>">Cancel</a>
 </div>
 
-<form method="post" action="<?= e($action) ?>" class="form form-wide" novalidate>
+<?php if (!$isEdit && $templates !== []): ?>
+    <?php /* Its own little form, and a GET: picking a template reloads this
+             page with the fields filled in, so nothing has been created and
+             every value is still an ordinary editable form field. */ ?>
+    <div class="card template-picker">
+        <form method="get" action="<?= e(url('/assets/create')) ?>" class="field-row">
+            <?php if ($parent !== null): ?>
+                <input type="hidden" name="parent" value="<?= (int) $parent['id'] ?>">
+            <?php endif; ?>
+            <?php if ($scannedTag): ?>
+                <input type="hidden" name="tag" value="<?= e((string) ($suggestedTag ?? '')) ?>">
+            <?php endif; ?>
+
+            <div class="field">
+                <label class="label" for="template">Start from a template</label>
+                <select class="input" id="template" name="template" onchange="this.form.submit()">
+                    <option value="">Start from scratch</option>
+                    <?php foreach ($templates as $option): ?>
+                        <option value="<?= (int) $option['id'] ?>" <?= $assetTemplate !== null && (int) $assetTemplate['id'] === (int) $option['id'] ? 'selected' : '' ?>>
+                            <?= e((string) $option['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="field-hint">
+                    A template fills in the details below and brings its photos
+                    and documents with it. Everything stays editable, and the
+                    asset tag is always this item's own.
+                </p>
+            </div>
+
+            <div class="field">
+                <button class="btn" type="submit">Apply</button>
+            </div>
+        </form>
+
+        <?php if ($assetTemplate !== null): ?>
+            <p class="muted">
+                Started from <strong><?= e((string) $assetTemplate['name']) ?></strong>.
+                <?php if ($templateMedia !== []): ?>
+                    <?= count($templateMedia) ?> file<?= count($templateMedia) === 1 ? '' : 's' ?>
+                    will be attached — untick any below.
+                <?php endif; ?>
+            </p>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
+
+<form method="post" action="<?= e($action) ?>" class="form form-wide" enctype="multipart/form-data"
+      data-photo-form data-max-bytes="<?= (int) config('uploads.max_photo_bytes') ?>" novalidate>
     <?= csrf_field() ?>
 
     <div class="card">
@@ -429,6 +503,88 @@ $responsible = array_key_exists('responsible', $old)
                       placeholder="Anything worth knowing: quirks, service history, where the key lives…"><?= e($value('notes')) ?></textarea>
         </div>
     </div>
+
+    <?php if (!$isEdit): ?>
+        <div class="card" id="asset-media">
+            <h2>Photos &amp; documents</h2>
+
+            <?php /* Two genuinely different things, said plainly rather than
+                     left to the user to work out. A stock photo or a manual
+                     describes the *model* and is shared; a condition photo
+                     describes this one item on this one day and is not. */ ?>
+            <p class="field-hint">
+                <strong>Shared</strong> files describe the model — a
+                manufacturer's photo, a manual — and are stored once for every
+                asset that uses them. <strong>Condition photos</strong> record
+                what <em>this</em> item looks like now and belong to it alone.
+            </p>
+
+            <?php if ($templateMedia !== []): ?>
+                <h3>From the template</h3>
+                <div class="media-grid">
+                    <?php foreach ($templateMedia as $item): ?>
+                        <?php $mediaId = (int) $item['id']; ?>
+                        <label class="media-card is-selected">
+                            <input type="checkbox" name="media_ids[]" value="<?= (int) $mediaId ?>" checked>
+                            <?php if ($item['media_type'] === 'photo'): ?>
+                                <img class="media-thumb" src="<?= e(url('/media/' . $mediaId . '/thumbnail')) ?>" alt="" loading="lazy">
+                            <?php else: ?>
+                                <span class="media-thumb media-thumb-doc" aria-hidden="true">PDF</span>
+                            <?php endif; ?>
+                            <span class="media-meta">
+                                <span class="media-title"><?= e((string) $item['title']) ?></span>
+                                <span class="muted media-sub">Shared · untick to leave it off</span>
+                            </span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <h3>Attach something already in the library</h3>
+            <?= partial('partials/media-picker', [
+                'type'     => 'document',
+                'recent'   => $libraryDocuments ?? [],
+                'selected' => array_map('intval', (array) ($old['media_ids'] ?? [])),
+                'label'    => 'Documents',
+            ]) ?>
+            <?= partial('partials/media-picker', [
+                'type'     => 'photo',
+                'recent'   => $libraryPhotos ?? [],
+                'selected' => array_map('intval', (array) ($old['media_ids'] ?? [])),
+                'label'    => 'Photos',
+            ]) ?>
+
+            <h3>Upload something new</h3>
+            <div class="field-row">
+                <?php if (can('media.manual.upload')): ?>
+                    <div class="field">
+                        <label class="label" for="library_documents">Shared document (PDF)</label>
+                        <input class="input" type="file" id="library_documents" name="library_documents[]"
+                               accept="application/pdf" multiple>
+                        <p class="field-hint">Goes into the library — a manual or datasheet every unit of this model shares.</p>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (can('media.photo.upload')): ?>
+                    <div class="field">
+                        <label class="label" for="library_photos">Shared photo</label>
+                        <input class="input" type="file" id="library_photos" name="library_photos[]"
+                               accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple>
+                        <p class="field-hint">Goes into the library — a manufacturer's product shot, not this item.</p>
+                    </div>
+
+                    <div class="field field-full">
+                        <label class="label">Condition photos of this item</label>
+                        <?= partial('partials/photo-inputs', ['name' => 'condition_photos[]', 'primary' => false]) ?>
+                        <p class="field-hint">
+                            Kept on this asset only, as the start of its
+                            photographic history. Never added to the library.
+                        </p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <div class="form-actions sticky-actions">
         <button type="submit" class="btn btn-primary btn-lg"><?= $isEdit ? 'Save changes' : 'Register asset' ?></button>

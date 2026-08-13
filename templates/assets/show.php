@@ -8,7 +8,8 @@ use App\Core\Upload;
  *
  * @var array<string,mixed> $asset
  * @var array<int,array<string,mixed>> $children
- * @var array<int,array<string,mixed>> $manuals
+ * @var array<int,array<string,mixed>> $libraryDocuments
+ * @var array<int,array<string,mixed>> $libraryPhotos
  * @var array<int,array<string,mixed>> $photos
  * @var int $photoCount
  * @var array<int,array<string,mixed>> $schedules
@@ -369,65 +370,132 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <?php endif; ?>
         </div>
 
-        <!-- Manuals -->
-        <div class="card" id="manuals">
+        <!-- Shared photos and documents from the media library -->
+        <div class="card" id="documents">
             <div class="card-head">
-                <h2>Manuals &amp; documents <span class="count-pill"><?= count($manuals) ?></span></h2>
+                <h2>
+                    Shared photos &amp; documents
+                    <span class="count-pill"><?= count($libraryDocuments) + count($libraryPhotos) ?></span>
+                </h2>
             </div>
 
-            <?php if ($manuals === []): ?>
-                <p class="muted">No documents attached yet.</p>
+            <p class="field-hint">
+                Files that describe the model rather than this item, held once
+                in the library and attached wherever they apply. Removing one
+                here takes it off this asset; anything else using it keeps it.
+                This asset's own photographic history is in
+                <a href="#photos">Photos</a>.
+            </p>
+
+            <?php if ($libraryDocuments === [] && $libraryPhotos === []): ?>
+                <p class="muted">Nothing attached yet.</p>
             <?php else: ?>
-                <ul class="file-list">
-                    <?php foreach ($manuals as $manual): ?>
-                        <li class="file-item">
-                            <span class="file-icon" aria-hidden="true">PDF</span>
-                            <span class="file-body">
-                                <a class="file-title" href="<?= e(url('/assets/' . $id . '/manuals/' . $manual['id'])) ?>" target="_blank" rel="noopener">
-                                    <?= e($manual['title']) ?>
+                <?php if ($libraryPhotos !== []): ?>
+                    <div class="media-grid">
+                        <?php foreach ($libraryPhotos as $item): ?>
+                            <div class="media-card media-card-static">
+                                <a href="<?= e(url('/media/' . (int) $item['id'])) ?>" target="_blank" rel="noopener">
+                                    <img class="media-thumb" src="<?= e(url('/media/' . (int) $item['id'] . '/thumbnail')) ?>" alt="" loading="lazy">
                                 </a>
-                                <span class="file-meta muted">
-                                    <?= e(Upload::formatBytes((int) $manual['file_size_bytes'])) ?>
-                                    · uploaded <?= e(format_date($manual['created_at'])) ?>
-                                    <?php if (!empty($manual['uploaded_by_name'])): ?>by <?= e($manual['uploaded_by_name']) ?><?php endif; ?>
+                                <span class="media-meta">
+                                    <span class="media-title"><?= e((string) $item['title']) ?></span>
+                                    <?php if (can('assets.edit')): ?>
+                                        <form method="post" action="<?= e(url('/assets/' . $id . '/media/' . (int) $item['id'] . '/detach')) ?>" class="inline-form">
+                                            <?= csrf_field() ?>
+                                            <button type="submit" class="btn btn-sm btn-ghost">Remove</button>
+                                        </form>
+                                    <?php endif; ?>
                                 </span>
-                                <?php if (!empty($manual['notes'])): ?>
-                                    <span class="file-meta muted"><?= e($manual['notes']) ?></span>
-                                <?php endif; ?>
-                            </span>
-                            <span class="file-actions">
-                                <a class="btn btn-sm" href="<?= e(url('/assets/' . $id . '/manuals/' . $manual['id'] . '?download=1')) ?>">Download</a>
-                                <?php if (can('media.manual.delete')): ?>
-                                    <form method="post" action="<?= e(url('/assets/' . $id . '/manuals/' . $manual['id'] . '/delete')) ?>" class="inline-form">
-                                        <?= csrf_field() ?>
-                                        <button type="submit" class="btn btn-sm btn-ghost" data-confirm="Remove “<?= e($manual['title']) ?>”? The file is deleted from the server.">Remove</button>
-                                    </form>
-                                <?php endif; ?>
-                            </span>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($libraryDocuments !== []): ?>
+                    <ul class="file-list">
+                        <?php foreach ($libraryDocuments as $item): ?>
+                            <?php $mediaId = (int) $item['id']; ?>
+                            <li class="file-item">
+                                <span class="file-icon" aria-hidden="true">PDF</span>
+                                <span class="file-body">
+                                    <a class="file-title" href="<?= e(url('/media/' . $mediaId)) ?>" target="_blank" rel="noopener">
+                                        <?= e((string) $item['title']) ?>
+                                    </a>
+                                    <span class="file-meta muted">
+                                        <?= e(Upload::formatBytes((int) $item['file_size_bytes'])) ?>
+                                        · added <?= e(format_date($item['created_at'])) ?>
+                                        <?php if (!empty($item['uploaded_by_name'])): ?>by <?= e((string) $item['uploaded_by_name']) ?><?php endif; ?>
+                                    </span>
+                                    <?php if (!empty($item['description'])): ?>
+                                        <span class="file-meta muted"><?= e((string) $item['description']) ?></span>
+                                    <?php endif; ?>
+                                </span>
+                                <span class="file-actions">
+                                    <a class="btn btn-sm" href="<?= e(url('/media/' . $mediaId . '?download=1')) ?>">Download</a>
+                                    <?php if (can('assets.edit')): ?>
+                                        <form method="post" action="<?= e(url('/assets/' . $id . '/media/' . $mediaId . '/detach')) ?>" class="inline-form">
+                                            <?= csrf_field() ?>
+                                            <button type="submit" class="btn btn-sm btn-ghost" data-confirm="Remove “<?= e((string) $item['title']) ?>” from this asset? It stays in the library.">Remove</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </span>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
             <?php endif; ?>
 
-            <?php if (can('media.manual.upload')): ?>
-                <form method="post" action="<?= e(url('/assets/' . $id . '/manuals')) ?>" enctype="multipart/form-data" class="upload-form">
+            <?php if (can('assets.edit')): ?>
+                <details class="disclosure">
+                    <summary class="btn btn-sm">Attach from the library</summary>
+                    <form method="post" action="<?= e(url('/assets/' . $id . '/media')) ?>">
+                        <?= csrf_field() ?>
+                        <?= partial('partials/media-picker', [
+                            'type'     => 'document',
+                            'recent'   => $libraryPickerDocuments,
+                            'selected' => [],
+                            'label'    => 'Documents',
+                        ]) ?>
+                        <?= partial('partials/media-picker', [
+                            'type'     => 'photo',
+                            'recent'   => $libraryPickerPhotos,
+                            'selected' => [],
+                            'label'    => 'Photos',
+                        ]) ?>
+                        <button type="submit" class="btn btn-primary">Attach the ticked files</button>
+                    </form>
+                </details>
+            <?php endif; ?>
+
+            <?php if (can('assets.edit') && (can('media.manual.upload') || can('media.photo.upload'))): ?>
+                <form method="post" action="<?= e(url('/assets/' . $id . '/media/upload')) ?>" enctype="multipart/form-data" class="upload-form">
                     <?= csrf_field() ?>
                     <div class="field-row">
                         <div class="field">
-                            <label class="label" for="title">Title <span class="optional">(optional)</span></label>
-                            <input class="input" type="text" id="title" name="title" maxlength="191" placeholder="e.g. User Manual">
+                            <label class="label" for="media_type">Kind</label>
+                            <select class="input" id="media_type" name="media_type">
+                                <?php if (can('media.manual.upload')): ?><option value="document">Document (PDF)</option><?php endif; ?>
+                                <?php if (can('media.photo.upload')): ?><option value="photo">Photo</option><?php endif; ?>
+                            </select>
                         </div>
                         <div class="field">
-                            <label class="label" for="manuals">PDF file(s)</label>
-                            <input class="input" type="file" id="manuals" name="manuals[]" accept="application/pdf,.pdf" multiple required>
-                            <p class="field-hint">PDF only, up to <?= (int) (config('uploads.max_pdf_bytes') / 1048576) ?> MB each.</p>
+                            <label class="label" for="media_title">Title <span class="optional">(optional)</span></label>
+                            <input class="input" type="text" id="media_title" name="title" maxlength="191" placeholder="e.g. User manual">
+                        </div>
+                        <div class="field">
+                            <label class="label" for="media_files">File(s)</label>
+                            <input class="input" type="file" id="media_files" name="files[]" multiple required
+                                   accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif">
+                            <p class="field-hint">
+                                Shared with every asset that attaches it. For a photo of
+                                <em>this</em> item's condition, use the Photos card instead.
+                            </p>
                         </div>
                     </div>
                     <button type="submit" class="btn btn-primary">Upload</button>
                 </form>
             <?php endif; ?>
         </div>
-
         <?php if (can('hires.view') && $hireHistory !== []): ?>
             <div class="card" id="hires">
                 <div class="card-head">

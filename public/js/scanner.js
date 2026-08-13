@@ -144,6 +144,7 @@
         var resultEl  = page.querySelector('[data-scan-result]');
         var input     = page.querySelector('[data-scan-input]');
         var lookupUrl = page.getAttribute('data-lookup-url');
+        var mode      = page.getAttribute('data-scan-mode') || 'view';
 
         var stream = null;
         var scanning = false;
@@ -212,6 +213,29 @@
         }
 
         function reportMiss(data, code) {
+            // In "new asset" mode a tag nothing answers to is the good outcome,
+            // so it is handed to the same form the other modes use rather than
+            // reported as a failure. The server decides where that leads.
+            if (mode === 'new' && data.can && data.can.create) {
+                stop();
+                setStatus(statusEl, code + ' is free — opening the form…', 'ok');
+
+                if (input && input.form) {
+                    input.value = code;
+
+                    if (typeof input.form.requestSubmit === 'function') {
+                        input.form.requestSubmit();
+                    } else {
+                        input.form.submit();
+                    }
+
+                    return;
+                }
+
+                window.location.href = data.create_url;
+                return;
+            }
+
             setStatus(statusEl, data.message || ('No asset matches ' + code), 'error');
 
             if (!resultEl) return;

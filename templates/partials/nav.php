@@ -53,6 +53,8 @@ $links = [
         ['label' => 'Roles',        'href' => '/admin/roles',      'permission' => 'roles.manage'],
         ['label' => 'Teams',        'href' => '/admin/teams',      'permission' => 'teams.manage'],
         ['label' => 'Categories',   'href' => '/admin/categories', 'permission' => 'categories.manage'],
+        ['label' => 'Asset templates', 'href' => '/admin/templates', 'permission' => 'templates.manage'],
+        ['label' => 'Media library',   'href' => '/media',           'permission' => 'assets.view'],
         ['label' => 'Locations',    'href' => '/admin/locations',  'permission' => 'locations.manage'],
         ['label' => 'Email',        'href' => '/admin/email',      'permission' => 'email.manage'],
         ['label' => 'API keys',     'href' => '/admin/api',        'permission' => 'api.manage'],

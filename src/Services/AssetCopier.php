@@ -6,9 +6,8 @@ namespace App\Services;
 
 use App\Core\Auth;
 use App\Core\Database;
-use App\Core\Upload;
 use App\Models\Asset;
-use App\Models\AssetManual;
+use App\Models\MediaLibrary;
 
 /**
  * The two copy workflows:
@@ -71,7 +70,7 @@ final class AssetCopier
      * @param array<int,string>   $fields     Which fields to take from the form.
      * @return array<int,int> The new asset ids.
      */
-    public static function duplicate(array $source, array $values, array $fields, int $quantity, bool $copyManuals): array
+    public static function duplicate(array $source, array $values, array $fields, int $quantity, bool $copyMedia): array
     {
         $quantity = max(1, min(50, $quantity));
         $fields   = array_values(array_intersect($fields, array_keys(self::COPYABLE_FIELDS)));
@@ -115,8 +114,8 @@ final class AssetCopier
                 $newId    = Asset::create($data);
                 $newIds[] = $newId;
 
-                if ($copyManuals) {
-                    self::copyManuals((int) $source['id'], $newId);
+                if ($copyMedia) {
+                    self::copyMedia((int) $source['id'], $newId);
                 }
             }
 
@@ -135,19 +134,19 @@ final class AssetCopier
      * @param array<string,mixed> $source
      * @param array<int,int>      $targetIds
      * @param array<int,string>   $fields
-     * @return array{updated:int,manuals:int,skipped:int}
+     * @return array{updated:int,media:int,skipped:int}
      */
-    public static function applyTo(array $source, array $targetIds, array $fields, bool $copyManuals): array
+    public static function applyTo(array $source, array $targetIds, array $fields, bool $copyMedia): array
     {
         $fields    = array_values(array_intersect($fields, array_keys(self::COPYABLE_FIELDS)));
         $targetIds = array_values(array_unique(array_filter(array_map('intval', $targetIds))));
 
         $updated = 0;
-        $manuals = 0;
+        $media = 0;
         $skipped = 0;
 
-        if ($targetIds === [] || ($fields === [] && !$copyManuals)) {
-            return ['updated' => 0, 'manuals' => 0, 'skipped' => count($targetIds)];
+        if ($targetIds === [] || ($fields === [] && !$copyMedia)) {
+            return ['updated' => 0, 'media' => 0, 'skipped' => count($targetIds)];
         }
 
         $data = [];
@@ -175,8 +174,8 @@ final class AssetCopier
                     $updated++;
                 }
 
-                if ($copyManuals) {
-                    $manuals += self::copyManuals((int) $source['id'], $targetId);
+                if ($copyMedia) {
+                    $media += self::copyMedia((int) $source['id'], $targetId);
                 }
             }
 
@@ -186,52 +185,24 @@ final class AssetCopier
             throw $e;
         }
 
-        return ['updated' => $updated, 'manuals' => $manuals, 'skipped' => $skipped];
+        return ['updated' => $updated, 'media' => $media, 'skipped' => $skipped];
     }
 
     /**
-     * Copy every manual from one asset to another, skipping any the target
-     * already has (matched on title and file size) so repeat runs do not pile
-     * up duplicates.
+     * Give the target asset everything in the source's library.
+     *
+     * Nothing is copied: each item gains one more join row. Ten assets built
+     * from one drill share one manual, one file on disk, one library record.
+     * Anything already attached is left alone, so this is safe to run twice.
+     *
+     * Condition photos are not here and never will be — they record what one
+     * physical item looked like on one day, so copying them onto a different
+     * item would be a false history.
+     *
+     * @return int How many attachments were new.
      */
-    public static function copyManuals(int $fromAssetId, int $toAssetId): int
+    public static function copyMedia(int $fromAssetId, int $toAssetId): int
     {
-        $existing = [];
-        foreach (AssetManual::forAsset($toAssetId) as $manual) {
-            $existing[mb_strtolower((string) $manual['title']) . '|' . (int) $manual['file_size_bytes']] = true;
-        }
-
-        $copied = 0;
-
-        foreach (AssetManual::forAsset($fromAssetId) as $manual) {
-            $key = mb_strtolower((string) $manual['title']) . '|' . (int) $manual['file_size_bytes'];
-
-            if (isset($existing[$key])) {
-                continue;
-            }
-
-            $absolute = Upload::absolutePath((string) $manual['file_path']);
-            if ($absolute === null) {
-                continue; // the file has gone missing; skip rather than fail the batch
-            }
-
-            $newPath = Upload::copy((string) $manual['file_path'], 'assets/' . $toAssetId . '/manuals');
-
-            AssetManual::create([
-                'asset_id'          => $toAssetId,
-                'title'             => $manual['title'],
-                'file_path'         => $newPath,
-                'original_filename' => $manual['original_filename'],
-                'mime_type'         => $manual['mime_type'],
-                'file_size_bytes'   => $manual['file_size_bytes'],
-                'notes'             => $manual['notes'],
-                'uploaded_by'       => Auth::id(),
-            ]);
-
-            $existing[$key] = true;
-            $copied++;
-        }
-
-        return $copied;
+        return MediaLibrary::attachMany($toAssetId, MediaLibrary::assetMediaIds($fromAssetId));
     }
 }

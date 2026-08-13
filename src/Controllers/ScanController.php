@@ -26,7 +26,7 @@ use App\Models\Hire;
  */
 final class ScanController extends Controller
 {
-    private const MODES = ['view', 'checkout', 'return', 'maintenance', 'pat'];
+    private const MODES = ['view', 'checkout', 'return', 'maintenance', 'pat', 'new'];
 
     public function index(): void
     {
@@ -36,9 +36,14 @@ final class ScanController extends Controller
             $mode = 'view';
         }
 
+        // The asset a New-asset scan collided with, so the page can offer a
+        // way straight to it rather than just saying no.
+        $takenId = (int) Request::query('taken', 0);
+
         $this->view('scan/index', [
             'pageTitle' => 'Scan',
             'mode'      => $mode,
+            'taken'     => $takenId > 0 ? Asset::find($takenId) : null,
         ]);
     }
 
@@ -63,10 +68,14 @@ final class ScanController extends Controller
         $asset = Asset::findByTag($code);
 
         if ($asset === null) {
+            // A tag nothing answers to is the good case when the errand is
+            // registering something, so the page is told where that goes.
             Response::json([
                 'found'   => false,
                 'code'    => $code,
                 'message' => 'No asset matches ' . $code . '.',
+                'can'     => ['create' => Auth::can('assets.create')],
+                'create_url' => url('/assets/create?tag=' . rawurlencode($code)),
             ]);
         }
 
@@ -101,6 +110,7 @@ final class ScanController extends Controller
                 'pat'         => Auth::can('pat.manage'),
             ],
             'blocked'         => $blocked,
+            'edit_url'        => url('/assets/' . $assetId . '/edit'),
             'checkout_url'    => url('/hires/checkout?asset=' . $assetId),
             'maintenance_url' => url('/assets/' . $assetId . '/maintenance/log'),
             'pat_url'         => url('/pat/create?asset=' . $assetId),
@@ -126,6 +136,27 @@ final class ScanController extends Controller
         }
 
         $asset = Asset::findByTag($code);
+
+        // Registering something new: an unused tag is what we want, and a tag
+        // already on the shelf has to be refused rather than quietly creating a
+        // second asset claiming to be the same item.
+        if ($mode === 'new') {
+            if (!Auth::can('assets.create')) {
+                Flash::error('You do not have permission to add assets.');
+                Response::redirect('/scan');
+            }
+
+            if ($asset !== null) {
+                Flash::error(sprintf(
+                    'Asset tag “%s” is already in use by %s. Edit that asset instead of registering it again.',
+                    $code,
+                    $asset['name']
+                ));
+                Response::redirect('/scan?mode=new&taken=' . (int) $asset['id']);
+            }
+
+            Response::redirect('/assets/create?tag=' . rawurlencode($code));
+        }
 
         if ($asset === null) {
             Flash::error('No asset matches “' . $code . '”. Check the tag and try again.');

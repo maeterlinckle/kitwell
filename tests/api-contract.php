@@ -391,9 +391,17 @@ $r = call('GET', API . '/assets?per_page=100000', $key);
 check('an absurd per_page is clamped, not refused',
     $r['status'] === 200 && ($r['body']['meta']['per_page'] ?? 0) <= (int) Setting::int('api_max_per_page', 100));
 
-$asc  = array_column(call('GET', API . '/assets?sort=asset_tag', $key)['body']['data'] ?? [], 'asset_tag');
-$desc = array_column(call('GET', API . '/assets?sort=-asset_tag', $key)['body']['data'] ?? [], 'asset_tag');
-check('sort ascending and descending are opposites', $asc !== [] && $asc === array_reverse($desc), json_encode([$asc, $desc]));
+// Both directions over the same window, so this stays a statement about
+// sorting rather than about how many assets happen to fit on a page.
+$perPage = (int) Setting::int('api_max_per_page', 100);
+$asc  = array_column(call('GET', API . '/assets?sort=asset_tag&per_page=' . $perPage, $key)['body']['data'] ?? [], 'asset_tag');
+$desc = array_column(call('GET', API . '/assets?sort=-asset_tag&per_page=' . $perPage, $key)['body']['data'] ?? [], 'asset_tag');
+
+check(
+    'sort ascending and descending are opposites',
+    $asc !== [] && count($asc) === count($desc) && $asc === array_reverse($desc),
+    json_encode([array_slice($asc, 0, 5), array_slice($desc, 0, 5)])
+);
 
 $r = call('GET', API . '/assets?sort=nonsense', $key);
 check('an unsortable field is 400', $r['status'] === 400);

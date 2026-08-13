@@ -187,6 +187,15 @@ php bin/console.php pat:missing-details   # assets that need an appliance class
 php bin/console.php key:generate          # print a fresh APP_KEY line
 ```
 
+The media library matches an upload against what it already holds by hashing
+the contents. Anything stored before that hash was recorded — files carried in
+from an earlier version — can be filled in afterwards, at which point a
+re-upload of one of them is recognised as a duplicate rather than stored again:
+
+```bash
+php bin/console.php media:rehash
+```
+
 ## Project layout
 
 ```

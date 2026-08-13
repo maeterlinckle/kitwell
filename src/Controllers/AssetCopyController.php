@@ -9,7 +9,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Models\ActivityLog;
 use App\Models\Asset;
-use App\Models\AssetManual;
+use App\Models\MediaLibrary;
 use App\Models\Category;
 use App\Models\Location;
 use App\Services\AssetCopier;
@@ -37,7 +37,7 @@ final class AssetCopyController extends Controller
             'defaults'     => AssetCopier::DUPLICATE_DEFAULTS,
             'categories'   => Category::all(true),
             'locations'    => Location::forSelect(),
-            'manualCount'  => AssetManual::countForAsset((int) $source['id']),
+            'mediaCount'   => MediaLibrary::countForAsset((int) $source['id']),
             'nextTags'     => AssetTagger::nextBatch(3),
             'parents'      => Asset::parentOptions((int) $source['id']),
         ]);
@@ -90,7 +90,7 @@ final class AssetCopyController extends Controller
             $values,
             $fields,
             $quantity,
-            Request::boolean('copy_manuals')
+            Request::boolean('copy_media')
         );
 
         $created = Asset::byIds($newIds);
@@ -154,7 +154,7 @@ final class AssetCopyController extends Controller
             'result'      => $result,
             'filters'     => $filters,
             'categories'  => Category::all(true),
-            'manualCount' => AssetManual::countForAsset((int) $source['id']),
+            'mediaCount'  => MediaLibrary::countForAsset((int) $source['id']),
             'suggestOnly' => $suggestOnly,
         ]);
     }
@@ -174,22 +174,22 @@ final class AssetCopyController extends Controller
         $fields = (array) ($_POST['fields'] ?? []);
         $fields = array_values(array_intersect(array_map('strval', $fields), array_keys(AssetCopier::COPYABLE_FIELDS)));
 
-        $targets     = array_map('intval', (array) ($_POST['ids'] ?? []));
-        $copyManuals = Request::boolean('copy_manuals');
+        $targets   = array_map('intval', (array) ($_POST['ids'] ?? []));
+        $copyMedia = Request::boolean('copy_media');
 
         if ($targets === []) {
             $this->failValidation(['ids' => 'Choose at least one asset to copy the details to.'], $redirect);
         }
 
-        if ($fields === [] && !$copyManuals) {
-            $this->failValidation(['fields' => 'Choose at least one field (or the manuals) to copy.'], $redirect);
+        if ($fields === [] && !$copyMedia) {
+            $this->failValidation(['fields' => 'Choose at least one field (or the photos and documents) to copy.'], $redirect);
         }
 
-        $result = AssetCopier::applyTo($source, $targets, $fields, $copyManuals);
+        $result = AssetCopier::applyTo($source, $targets, $fields, $copyMedia);
 
         $labels = array_map(static fn (string $f): string => AssetCopier::COPYABLE_FIELDS[$f], $fields);
-        if ($copyManuals) {
-            $labels[] = 'manuals';
+        if ($copyMedia) {
+            $labels[] = 'photos and documents';
         }
 
         ActivityLog::record(
@@ -202,7 +202,7 @@ final class AssetCopyController extends Controller
                 $source['asset_tag'],
                 $result['updated']
             ),
-            ['fields' => $fields, 'targets' => $targets, 'manuals_copied' => $result['manuals']]
+            ['fields' => $fields, 'targets' => $targets, 'media_attached' => $result['media']]
         );
 
         foreach ($targets as $targetId) {
@@ -212,8 +212,8 @@ final class AssetCopyController extends Controller
         }
 
         $message = sprintf('Updated %d asset%s', $result['updated'], $result['updated'] === 1 ? '' : 's');
-        if ($result['manuals'] > 0) {
-            $message .= sprintf(' and copied %d manual%s', $result['manuals'], $result['manuals'] === 1 ? '' : 's');
+        if ($result['media'] > 0) {
+            $message .= sprintf(' and attached %d file%s', $result['media'], $result['media'] === 1 ? '' : 's');
         }
         if ($result['skipped'] > 0) {
             $message .= sprintf(' (%d skipped)', $result['skipped']);

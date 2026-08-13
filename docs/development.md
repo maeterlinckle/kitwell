@@ -97,6 +97,7 @@ system.
 | `report-figures.php` | Every report's figures agree with the database, and its CSV agrees with its screen |
 | `api-contract.php` | The API matches its own generated specification, including that no response carries an undeclared field |
 | `fault-flow.php` | The whole fault feature end to end, with a local SMTP catcher |
+| `media-library.php` | One file is stored once however many assets use it — counted in the database *and* on disk — plus templates, deduplication and the scan-to-new-asset route |
 | `totp-vectors.php` | TOTP against RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `qr-encode.php` | The QR encoder against the ISO/IEC 18004 worked example, then round-tripped through the project's own independent decoder |
 

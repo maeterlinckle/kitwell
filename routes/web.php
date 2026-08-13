@@ -17,6 +17,7 @@ use App\Controllers\Admin\EmailController;
 use App\Controllers\Admin\SettingsController;
 use App\Controllers\Admin\TeamController;
 use App\Controllers\Admin\ApiKeyController;
+use App\Controllers\Admin\AssetTemplateController;
 use App\Controllers\Admin\UserController;
 use App\Controllers\Api\MetaController;
 use App\Controllers\Api\ResourceController;
@@ -28,6 +29,7 @@ use App\Controllers\ExportController;
 use App\Controllers\FaultController;
 use App\Controllers\HelpController;
 use App\Controllers\ImportController;
+use App\Controllers\MediaController;
 use App\Controllers\AccountController;
 use App\Controllers\AuthController;
 use App\Controllers\CustomReportController;
@@ -41,7 +43,6 @@ use App\Controllers\ScanController;
 use App\Controllers\SecurityController;
 use App\Controllers\TwoFactorController;
 use App\Controllers\MaintenanceController;
-use App\Controllers\ManualController;
 use App\Controllers\PatController;
 use App\Controllers\PhotoController;
 use App\Controllers\ProfileController;
@@ -155,9 +156,19 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/assets/{id:\d+}/apply', [AssetCopyController::class, 'applyStore'],  ['can:assets.edit', 'csrf']);
 
     // Manuals (PDF).
-    $router->post('/assets/{id:\d+}/manuals', [ManualController::class, 'store'], ['can:media.manual.upload', 'csrf']);
-    $router->get('/assets/{id:\d+}/manuals/{manualId:\d+}', [ManualController::class, 'show'], ['can:assets.view']);
-    $router->post('/assets/{id:\d+}/manuals/{manualId:\d+}/delete', [ManualController::class, 'destroy'], ['can:media.manual.delete', 'csrf']);
+    // The shared media library. A photo or document held once and attached to
+    // as many assets as need it — see App\Models\MediaLibrary. Condition
+    // photos are not library items and keep their own routes above.
+    $router->get('/media',            [MediaController::class, 'index'],  ['can:assets.view'], 'media');
+    $router->get('/media/search',     [MediaController::class, 'search'], ['can:assets.view']);
+    $router->post('/media',           [MediaController::class, 'store'],  ['canany:media.photo.upload,media.manual.upload', 'csrf']);
+    $router->get('/media/{id:\d+}',   [MediaController::class, 'show'],   ['can:assets.view']);
+    $router->get('/media/{id:\d+}/thumbnail', [MediaController::class, 'thumbnail'], ['can:assets.view']);
+    $router->post('/media/{id:\d+}/delete',   [MediaController::class, 'destroy'],   ['can:media.manual.delete', 'csrf']);
+
+    $router->post('/assets/{id:\d+}/media',        [MediaController::class, 'attach'], ['can:assets.edit', 'csrf']);
+    $router->post('/assets/{id:\d+}/media/upload', [MediaController::class, 'upload'], ['can:assets.edit', 'csrf']);
+    $router->post('/assets/{id:\d+}/media/{mediaId:\d+}/detach', [MediaController::class, 'detach'], ['can:assets.edit', 'csrf']);
 
     // Faults. Reporting one is its own permission, not assets.edit: saying
     // "this is broken" is something the person holding the broken thing does,
@@ -422,6 +433,19 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/admin/api/keys',                [ApiKeyController::class, 'store'],          ['can:api.manage', 'csrf']);
     $router->post('/admin/api/keys/{id:\d+}/revoke',[ApiKeyController::class, 'revoke'],         ['can:api.manage', 'csrf']);
     $router->post('/admin/api/keys/{id:\d+}/delete',[ApiKeyController::class, 'destroy'],        ['can:api.manage', 'csrf']);
+
+    // Asset templates: the starting points the Add asset form can offer.
+    // Reference data an operation maintains for itself, like categories, so
+    // Administrator and Manager / Staff both hold `templates.manage`.
+    $router->get('/admin/templates',            [AssetTemplateController::class, 'index'],  ['can:templates.manage'], 'admin.templates');
+    $router->get('/admin/templates/create',     [AssetTemplateController::class, 'create'], ['can:templates.manage']);
+    $router->post('/admin/templates',           [AssetTemplateController::class, 'store'],  ['can:templates.manage', 'csrf']);
+    $router->get('/admin/templates/{id:\d+}/edit', [AssetTemplateController::class, 'edit'],   ['can:templates.manage']);
+    $router->post('/admin/templates/{id:\d+}',     [AssetTemplateController::class, 'update'], ['can:templates.manage', 'csrf']);
+    $router->post('/admin/templates/{id:\d+}/delete', [AssetTemplateController::class, 'destroy'], ['can:templates.manage', 'csrf']);
+    $router->post('/admin/templates/{id:\d+}/media',        [AssetTemplateController::class, 'attach'], ['can:templates.manage', 'csrf']);
+    $router->post('/admin/templates/{id:\d+}/media/upload', [AssetTemplateController::class, 'upload'], ['can:templates.manage', 'csrf']);
+    $router->post('/admin/templates/{id:\d+}/media/{mediaId:\d+}/detach', [AssetTemplateController::class, 'detach'], ['can:templates.manage', 'csrf']);
 
     // Audit trail
     $router->get('/admin/activity', [ActivityController::class, 'index'], ['can:audit.view'], 'admin.activity');

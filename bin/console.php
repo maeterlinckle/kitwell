@@ -787,6 +787,36 @@ function cmdPatMissingDetails(array $argv): int
     return $rows === [] ? 0 : 1;
 }
 
+/**
+ * Fill in the hash of any library file stored before one was recorded.
+ *
+ * The library matches an upload against what it holds by hashing the contents,
+ * so a file with no hash can never be recognised as a duplicate. Nothing is
+ * moved or merged: a hash is only written where it does not collide with one
+ * already recorded.
+ *
+ * @param array<int,string> $argv
+ */
+function cmdMediaRehash(array $argv): int
+{
+    $pending = count(App\Models\MediaLibrary::withoutHash());
+
+    if ($pending === 0) {
+        line('Every library file already has a content hash.');
+
+        return 0;
+    }
+
+    line(sprintf('%d file(s) without a hash. Reading them…', $pending));
+
+    $filled = App\Services\MediaIntake::backfillHashes();
+
+    line(sprintf('  hashed:  %d', $filled));
+    line(sprintf('  skipped: %d (file missing, or an identical file is already recorded)', $pending - $filled));
+
+    return 0;
+}
+
 /** @param array<int,string> $argv */
 function cmdRefreshOverdue(array $argv): int
 {
@@ -814,7 +844,7 @@ function cmdStats(array $argv): int
     $retired    = (int) Database::scalar("SELECT COUNT(*) FROM assets WHERE status = 'Retired'");
     $subAssets  = (int) Database::scalar('SELECT COUNT(*) FROM assets WHERE parent_asset_id IS NOT NULL');
     $photos     = (int) Database::scalar('SELECT COUNT(*) FROM asset_photos');
-    $manuals    = (int) Database::scalar('SELECT COUNT(*) FROM asset_manuals');
+    $manuals    = (int) Database::scalar("SELECT COUNT(*) FROM media_library WHERE media_type = 'document'");
 
     heading('Register');
     table(['Metric', 'Count'], [
@@ -823,7 +853,7 @@ function cmdStats(array $argv): int
         ['Assets retired', (string) $retired],
         ['Sub-assets / accessories', (string) $subAssets],
         ['Photos', (string) $photos],
-        ['Manuals', (string) $manuals],
+        ['Library documents', (string) $manuals],
     ], false);
 
     heading('Attention');
@@ -1114,6 +1144,7 @@ $commands = [
     'activity:prune'        => ['Delete old audit rows  --days=365 [--dry-run] [--force]', 'cmdActivityPrune'],
     'pat:missing-details'   => ['Assets needing an appliance class or fuse rating', 'cmdPatMissingDetails'],
     'hires:refresh-overdue' => ['Recompute the stored overdue flag on hires', 'cmdRefreshOverdue'],
+    'media:rehash'          => ['Fill in the content hash of any library file missing one', 'cmdMediaRehash'],
     'key:generate'          => ['Generate the APP_KEY that encrypts the SMTP password', 'cmdKeyGenerate'],
     'mail:status'           => ['Show the mail configuration, reminders and log summary', 'cmdMailStatus'],
     'mail:test'             => ['Send a test message  --to=you@example.com', 'cmdMailTest'],

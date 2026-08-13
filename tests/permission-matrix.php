@@ -79,6 +79,13 @@ $matrix = [
     // API keys: issuing a credential that acts as somebody is administrator-only.
     '/admin/api'                 => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny',  'hirer' => 'deny'],
 
+    // The shared media library is readable by anyone who may see assets, since
+    // that is what its contents describe. Maintaining the templates that draw
+    // on it is `templates.manage` — admin and manager, like the categories.
+    '/media'                     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/admin/templates'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+    '/admin/templates/create'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+
     // The API documentation page is readable by anyone signed in — it describes
     // an interface whose every endpoint enforces its own permissions, and it
     // reads no data itself.
@@ -164,7 +171,8 @@ $writeMatrix = [
     '/assets/1/faults'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/reports/custom'         => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/api/keys'         => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
-    '/assets/1/manuals'       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/assets/1/media'         => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
+    '/assets/1/media/upload'  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/maintenance'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/pat'                    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/hires/checkout'         => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],

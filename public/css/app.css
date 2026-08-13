@@ -2772,3 +2772,78 @@ form + .section-title,
 
 /* A code span in a cell should not be the thing that forces a column wide. */
 .prose td code, .prose th code { white-space: normal; }
+
+/* --- Shared media library -------------------------------------------------- */
+
+/* A grid of cards, each either a picker checkbox or a plain tile. The whole
+   card is the label, so the target is the card rather than the 16px box. */
+.media-grid {
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    margin: 0 0 var(--space-4);
+}
+
+.media-grid-wide { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+.media-card {
+    display: flex;
+    gap: var(--space-3);
+    align-items: flex-start;
+    padding: var(--space-3);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.media-card:hover { border-color: var(--border-strong); }
+.media-card-static { cursor: default; }
+
+.media-card.is-selected,
+.media-card:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.media-card:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.media-card input[type="checkbox"] { margin-top: 3px; flex: none; }
+
+.media-thumb {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    background: var(--bg-sunken);
+}
+
+/* A document has no picture, so it gets a labelled block of the same size —
+   the grid stays even whether a row is photos, documents or both. */
+.media-thumb-doc {
+    display: grid;
+    place-items: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
+.media-meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.media-title { font-weight: 600; overflow-wrap: anywhere; }
+.media-sub { font-size: 0.85rem; overflow-wrap: anywhere; }
+.media-empty { grid-column: 1 / -1; margin: 0; }
+
+.media-picker { margin: 0 0 var(--space-5); }
+.media-picker-head { margin-bottom: var(--space-2); }
+.media-picker-status { margin: 0; font-size: 0.9rem; }
+
+.template-picker .field-row { align-items: end; }

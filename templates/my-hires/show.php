@@ -103,7 +103,7 @@ $days    = (int) $hire['days_until_due'];
                             <span class="file-icon" aria-hidden="true">PDF</span>
                             <span class="file-body">
                                 <a class="file-title" href="<?= e(url('/my-hires/' . $hire['id'] . '/manuals/' . $manual['id'])) ?>"
-                                   target="_blank" rel="noopener"><?= e($manual['title']) ?></a>
+                                   target="_blank" rel="noopener"><?= e((string) $manual['title']) ?></a>
                                 <span class="file-meta muted"><?= e(Upload::formatBytes((int) $manual['file_size_bytes'])) ?></span>
                             </span>
                             <span class="file-actions">

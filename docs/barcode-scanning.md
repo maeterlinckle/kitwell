@@ -33,6 +33,12 @@ camera. Typing the tag and USB scanners work regardless. The quick-scan page has
 no such button — it already *is* a camera scanner, and two would fight over the
 camera.
 
+**Scan → New asset** turns a scan into a registration. Scan the label you are
+about to put on something: if no asset is using that tag, the Add asset form
+opens with it filled in. If one is, the page says which asset holds it and links
+straight to editing that one, because a tag identifies one physical item and
+cannot be reused.
+
 Three ways in, all landing at the same lookup:
 
 | Input | Notes |

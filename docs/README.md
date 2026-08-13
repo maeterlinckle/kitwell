@@ -15,8 +15,9 @@ the machine the site runs on.
 
 | Page | What is on it |
 |---|---|
-| [Assets and sub-assets](assets.md) | Asset tags, sub-assets and accessories, search and filters, manuals, copying, archiving and deleting |
+| [Assets and sub-assets](assets.md) | Asset tags, sub-assets and accessories, search and filters, copying, archiving and deleting |
 | [Photos](photos.md) | Condition photos, taking them on a phone, the dated history they build up |
+| [Media library and templates](media-library.md) | Photos and documents shared across assets, and the templates that bring them along |
 | [Faults and the responsible party](faults.md) | Naming who looks after an asset, reporting a fault with a photograph, who gets told |
 | [Maintenance](maintenance.md) | Routine, periodic and one-off schedules, recording completions with evidence, how "due" is decided |
 | [PAT testing](pat-testing.md) | The guided test flow, what belongs to the appliance and what to a test, how status is worked out |
@@ -57,7 +58,7 @@ menu.
 | **Hires** | Current hires | Check out · Current & history · Hirers |
 | **My hires** | A hirer's own equipment — shown *instead of* Hires to somebody who can only see their own | — |
 | **Reports** | The report index, built-in and saved | — |
-| **Settings** | Application settings | Users · Roles · Teams · Categories · Locations · Email · API keys · Activity log · Import data · Export data · Application settings · Help |
+| **Settings** | Application settings | Users · Roles · Teams · Categories · Asset templates · Media library · Locations · Email · API keys · Activity log · Import data · Export data · Application settings · Help |
 
 **Help** sits at the bottom of the Settings menu and opens this documentation
 inside the application. Every signed-in user can reach it, whatever their role.

@@ -44,28 +44,23 @@ final class PhotoController extends Controller
         ]);
     }
 
-    public function store(string $assetId): void
+    /**
+     * Store condition photos against one asset.
+     *
+     * Static and public because the Add asset form needs exactly this, not
+     * something almost like it: a photo taken while registering an item is the
+     * same kind of record as one taken next week. It never touches the shared
+     * media library — a condition photo describes one physical unit at one
+     * moment and belongs to that asset alone.
+     *
+     * @param array<int,array{name:string,tmp_name:string,error:int,size:int}> $files
+     * @return array{0:int,1:array<int,string>} stored, errors
+     */
+    public static function intake(int $assetId, array $files, string $caption = '', string $takenOn = ''): array
     {
-        $id    = (int) $assetId;
-        $asset = Asset::find($id);
-
-        if ($asset === null) {
-            $this->notFound();
-        }
-
-        $files = Upload::files('photos');
-
-        if ($files === []) {
-            Flash::error('No photo was selected.');
-            Response::redirect('/assets/' . $id . '#photos');
-        }
-
         $maxBytes   = (int) Config::get('uploads.max_photo_bytes');
         $mimes      = (array) Config::get('uploads.photo_mimes');
         $extensions = (array) Config::get('uploads.photo_extensions');
-
-        $caption = trim((string) Request::post('caption', ''));
-        $takenOn = trim((string) Request::post('taken_on', ''));
 
         $stored = 0;
         $errors = [];
@@ -82,7 +77,7 @@ final class PhotoController extends Controller
             $mime        = (string) Upload::detectMime($file['tmp_name']);
             $extension   = self::extensionFor($mime, $displayName);
 
-            $path = Upload::store($file, 'assets/' . $id . '/photos', $extension);
+            $path = Upload::store($file, 'assets/' . $assetId . '/photos', $extension);
 
             // Straighten and shrink, then make a thumbnail. Both steps are
             // no-ops without GD, and the photo still uploads.
@@ -103,7 +98,7 @@ final class PhotoController extends Controller
             }
 
             AssetPhoto::create([
-                'asset_id'          => $id,
+                'asset_id'          => $assetId,
                 'file_path'         => $path,
                 'thumbnail_path'    => $thumbnail,
                 'original_filename' => $displayName,
@@ -113,12 +108,38 @@ final class PhotoController extends Controller
                 'height_px'         => $meta['height'],
                 'caption'           => $caption !== '' ? mb_substr($caption, 0, 255) : null,
                 'taken_at'          => $takenAt,
-                'is_primary'        => AssetPhoto::countForAsset($id) === 0 ? 1 : 0,
+                'is_primary'        => AssetPhoto::countForAsset($assetId) === 0 ? 1 : 0,
                 'uploaded_by'       => Auth::id(),
             ]);
 
             $stored++;
         }
+
+        return [$stored, $errors];
+    }
+
+    public function store(string $assetId): void
+    {
+        $id    = (int) $assetId;
+        $asset = Asset::find($id);
+
+        if ($asset === null) {
+            $this->notFound();
+        }
+
+        $files = Upload::files('photos');
+
+        if ($files === []) {
+            Flash::error('No photo was selected.');
+            Response::redirect('/assets/' . $id . '#photos');
+        }
+
+        [$stored, $errors] = self::intake(
+            $id,
+            $files,
+            trim((string) Request::post('caption', '')),
+            trim((string) Request::post('taken_on', ''))
+        );
 
         if ($stored > 0) {
             ActivityLog::record(

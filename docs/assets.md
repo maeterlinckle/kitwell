@@ -1,6 +1,6 @@
 # Assets and sub-assets
 
-The register itself: tagging, searching, photographs, manuals, sub-assets, copying, and the difference between archiving and deleting.
+The register itself: tagging, searching, sub-assets, the files attached to an asset, copying, and the difference between archiving and deleting.
 
 **On this page**
 
@@ -8,7 +8,7 @@ The register itself: tagging, searching, photographs, manuals, sub-assets, copyi
 - [Sub-assets, accessories and related items](#sub-assets-accessories-and-related-items)
 - [Search and filters](#search-and-filters)
 - [Condition photos](#condition-photos)
-- [Manuals](#manuals)
+- [Manuals and shared photos](#manuals-and-shared-photos)
 - [Copying assets](#copying-assets)
 - [Categories, locations and settings](#categories-locations-and-settings)
 - [The asset page](#the-asset-page)
@@ -55,20 +55,27 @@ asset, and short words are not ignored.
 Every asset carries a dated photographic record — the gallery on its page, and
 a full history grouped by month. See [Photos](photos.md).
 
-## Manuals
+## Manuals and shared photos
 
-Any number of PDFs per asset: a user manual, a wiring diagram, a datasheet.
-Each is viewable in the browser or downloadable, and needs
-`media.manual.upload` to add and `media.manual.delete` to remove. The upload
-limit is {{setting:upload_max_pdf_mb}} MB per file.
+An asset's **Shared photos & documents** card holds the files that describe the
+model: a manual, a wiring diagram, a manufacturer's product shot. Each is held
+once in the media library and attached to every asset that needs it, so a
+workshop with ten identical drills stores one manual rather than ten. See
+[Media library and templates](media-library.md).
 
-A manual is only reachable by someone signed in with permission to view that
-asset, and every upload is checked by its actual content rather than its file
-name.
+Documents are viewable in the browser or downloadable, up to a limit
+of {{setting:upload_max_pdf_mb}} MB each. Adding one needs `media.manual.upload`,
+and attaching or removing one needs `assets.edit`. Every file is only reachable
+by someone signed in with permission to view the asset, and every upload is
+checked by its actual content rather than its file name.
 
 ## Copying assets
 
 Two distinct workflows, both driven by explicit tick-boxes:
+
+An asset can also be started from a template, which fills the form in and
+brings its photos and documents with it — see
+[Media library and templates](media-library.md).
 
 **Copy asset** (`assets.create`) creates 1–50 new assets from an existing one.
 Pick which details carry over; each copy gets its own generated tag. Asset tag,
@@ -81,8 +88,9 @@ lands on the label sheet, ready to print.
 other existing assets — for example applying a manual and manufacturer URL
 across every unit of the same model already in the register. The candidate list
 defaults to assets matching the source's make and model. Only the ticked fields
-are written; everything else on the targets is untouched. Manuals are added,
-skipping any the target already has, so repeat runs do not pile up duplicates.
+are written; everything else on the targets is untouched. Shared files are
+attached by reference rather than copied, so running it twice changes nothing
+the second time.
 
 Both workflows write to the activity log, on the source and on every asset
 touched.
@@ -133,4 +141,4 @@ photographs are removed with the asset.
 
 ---
 
-**See also:** [Documentation index](README.md) · [Photos](photos.md) · [Faults](faults.md) · [Barcode scanning and labels](barcode-scanning.md)
+**See also:** [Documentation index](README.md) · [Photos](photos.md) · [Media library and templates](media-library.md) · [Barcode scanning and labels](barcode-scanning.md)

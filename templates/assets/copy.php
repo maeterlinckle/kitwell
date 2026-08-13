@@ -11,7 +11,7 @@ use App\Models\Asset;
  * @var array<int,array<string,mixed>> $categories
  * @var array<int,array<string,mixed>> $locations
  * @var array<int,array<string,mixed>> $parents
- * @var int $manualCount
+ * @var int $mediaCount
  * @var array<int,string> $nextTags
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
@@ -129,12 +129,12 @@ $display = static function (string $field) use ($source): string {
                 <tr>
                     <td class="col-check">
                         <label class="checkbox checkbox-bare">
-                            <input type="checkbox" name="copy_manuals" value="1" <?= $manualCount > 0 ? 'checked' : '' ?> <?= $manualCount === 0 ? 'disabled' : '' ?>>
-                            <span class="sr-only">Copy manuals</span>
+                            <input type="checkbox" name="copy_media" value="1" <?= $mediaCount > 0 ? 'checked' : '' ?> <?= $mediaCount === 0 ? 'disabled' : '' ?>>
+                            <span class="sr-only">Attach the shared photos and documents</span>
                         </label>
                     </td>
-                    <th scope="row">Manuals (PDF)</th>
-                    <td class="muted"><?= $manualCount > 0 ? (int) $manualCount . ' document' . ($manualCount === 1 ? '' : 's') . ' — copied to each new asset' : 'None attached' ?></td>
+                    <th scope="row">Shared photos &amp; documents</th>
+                    <td class="muted"><?= $mediaCount > 0 ? (int) $mediaCount . ' file' . ($mediaCount === 1 ? '' : 's') . ' — attached to each new asset by reference, so one copy is stored' : 'None attached' ?></td>
                 </tr>
                 </tbody>
             </table>
