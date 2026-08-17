@@ -41,7 +41,9 @@ use App\Core\Database;
 use App\Mail\Reminders;
 use App\Models\Setting;
 
-const BASE    = 'http://127.0.0.1:8321';
+// Where the site under test is being served, the same way
+// permission-matrix.php and report-figures.php take it.
+define('BASE', rtrim($argv[1] ?? 'http://127.0.0.1:8321', '/'));
 const MAILBOX = __DIR__ . '/../storage/test-mailbox';
 
 // The seeder's administrator. Keep in step with bin/seed.php and

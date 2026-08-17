@@ -99,6 +99,14 @@ $matrix = [
     '/maintenance/1/edit'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
     '/maintenance/1/complete'    => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
+    // Routines. The separation this feature exists for: reading what a
+    // procedure asks and carrying it out are ordinary maintenance rights,
+    // while changing what it asks is `routines.manage` — administrator only
+    // out of the box, and addable to any role from Settings → Roles.
+    '/maintenance/routines'        => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/maintenance/routines/create' => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny',  'hirer' => 'deny'],
+    '/assets/1/routines'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
+
     // PAT
     '/pat'                       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/pat/create'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],

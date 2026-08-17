@@ -21,6 +21,7 @@ use App\Models\MaintenanceLog;
 use App\Models\MaintenanceSchedule;
 use App\Models\MediaLibrary;
 use App\Models\PatRecord;
+use App\Models\RoutineCompletion;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\AssetTagger;
@@ -115,6 +116,8 @@ final class AssetController extends Controller
         // reason for the query, and an asset that is not faulty has no banner.
         $currentFault = $asset['status'] === 'Faulty' ? FaultReport::latestForAsset($assetId) : null;
 
+        $maintenanceLogs = Auth::can('maintenance.view') ? MaintenanceLog::forAsset($assetId, 5) : [];
+
         $this->view('assets/show', [
             'pageTitle'  => $asset['asset_tag'] . ' · ' . $asset['name'],
             'asset'      => $asset,
@@ -131,7 +134,10 @@ final class AssetController extends Controller
             'photos'     => AssetPhoto::forAsset($assetId, 12),
             'photoCount' => AssetPhoto::countForAsset($assetId),
             'schedules'  => Auth::can('maintenance.view') ? MaintenanceSchedule::forAsset($assetId) : [],
-            'maintenanceLogs' => Auth::can('maintenance.view') ? MaintenanceLog::forAsset($assetId, 5) : [],
+            'maintenanceLogs' => $maintenanceLogs,
+            // Which of those entries were routines, so each links through to
+            // what was asked and answered.
+            'routineCompletions' => RoutineCompletion::forLogs(array_map('intval', array_column($maintenanceLogs, 'id'))),
             'patStatus'  => Auth::can('pat.view') ? PatRecord::statusForAsset($assetId) : null,
             'patRecords' => Auth::can('pat.view') ? PatRecord::forAsset($assetId, 3) : [],
             'openHire'   => Hire::openForAsset($assetId),

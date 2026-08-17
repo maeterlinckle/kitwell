@@ -7,6 +7,8 @@ use App\Models\MaintenanceSchedule;
  *
  * @var array<string,mixed> $schedule
  * @var array<int,array<string,mixed>> $logs
+ * @var array<string,mixed>|null $routine
+ * @var array<int,array<string,mixed>> $completions keyed by maintenance log id
  * @var string|null $nextDue
  */
 $id = (int) $schedule['id'];
@@ -56,6 +58,21 @@ $id = (int) $schedule['id'];
             </div>
         <?php endif; ?>
 
+        <?php if ($routine !== null): ?>
+            <div class="card notice-card">
+                <h2>This job follows a routine</h2>
+                <p>
+                    Completing it steps through
+                    <a href="<?= e(url('/maintenance/routines/' . (int) $routine['id'])) ?>"><?= e($routine['name']) ?></a>
+                    <?php if ($routine['current_version_id'] !== null): ?>
+                        — currently version <?= (int) $routine['current_version_number'] ?>.
+                    <?php else: ?>
+                        , which has nothing published yet, so the free-text form is used until it does.
+                    <?php endif; ?>
+                </p>
+            </div>
+        <?php endif; ?>
+
         <div class="card">
             <div class="card-head">
                 <h2>Completion history <span class="count-pill"><?= count($logs) ?></span></h2>
@@ -71,6 +88,12 @@ $id = (int) $schedule['id'];
                                 <span class="log-date"><?= e(format_date($log['performed_on'])) ?></span>
                                 <span class="badge result-<?= e(strtolower((string) $log['result'])) ?>"><?= e($log['result']) ?></span>
                                 <span class="badge badge-muted"><?= e($log['maintenance_type']) ?></span>
+                                <?php if (isset($completions[(int) $log['id']])): ?>
+                                    <?php $completion = $completions[(int) $log['id']]; ?>
+                                    <a class="badge badge-link" href="<?= e(url('/maintenance/completions/' . (int) $completion['id'])) ?>">
+                                        <?= e($completion['routine_name']) ?> v<?= (int) $completion['version_number'] ?>
+                                    </a>
+                                <?php endif; ?>
                             </div>
 
                             <p class="prewrap log-work"><?= e($log['work_done']) ?></p>

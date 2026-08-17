@@ -2847,3 +2847,158 @@ form + .section-title,
 .media-picker-status { margin: 0; font-size: 0.9rem; }
 
 .template-picker .field-row { align-items: end; }
+
+/* --- Maintenance routines -------------------------------------------------- */
+
+/* A badge that is also a link. The badge rules already fix the shape; this
+   only stops the anchor colour and underline fighting them. */
+.badge-link { color: inherit; text-decoration: none; }
+.badge-link:hover { text-decoration: underline; }
+
+/* Picking a routine to run. Rows rather than a table: this is met on a phone
+   at arm's length, and the whole row has to be the target. */
+.pick-list { list-style: none; margin: 0; padding: 0; }
+
+.pick-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+.pick-item:last-child { border-bottom: 0; }
+
+.pick-link {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-3) 0;
+    color: inherit;
+    text-decoration: none;
+}
+.pick-link:hover .pick-title { text-decoration: underline; }
+.pick-title { font-weight: 600; }
+.pick-sub { font-size: 0.9rem; }
+
+/* --- One step, as it is filled in ------------------------------------------ */
+
+.routine-step {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+}
+.routine-step:last-child { border-bottom: 0; }
+.routine-step.has-error { background: var(--danger-soft); border-radius: var(--radius-sm); }
+
+.routine-step-label { margin-bottom: 2px; }
+.routine-step-help { margin-top: 0; margin-bottom: var(--space-2); }
+.req { color: var(--danger); font-weight: 700; }
+
+/* Choices as pills. Big enough for a gloved hand, and the whole pill is the
+   label, so the tap target is the visible shape rather than the radio inside
+   it. */
+.routine-choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.choice-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-raised, transparent);
+    cursor: pointer;
+}
+.choice-pill:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    font-weight: 600;
+}
+.choice-pill:has(input:disabled) { opacity: 0.6; cursor: default; }
+
+/* --- The editor ------------------------------------------------------------ */
+
+.card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.form-actions-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    align-items: center;
+}
+
+/* A button sitting on the same line as the input beside it, with the label
+   above accounted for. */
+.field-aligned { display: flex; align-items: flex-end; }
+
+.routine-step-editor { list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+
+.routine-step-row {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-sunken);
+}
+
+.routine-step-main { flex: 1; min-width: 0; }
+
+.routine-step-tools {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+@media (max-width: 620px) {
+    .routine-step-row { flex-direction: column; }
+    .routine-step-tools { flex-direction: row; }
+}
+
+/* --- What a routine asks, summarised --------------------------------------- */
+
+.routine-summary-page + .routine-summary-page { margin-top: var(--space-4); }
+.routine-summary-steps { list-style: none; margin: var(--space-2) 0 0; padding: 0; }
+
+.routine-summary-steps li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+}
+.routine-summary-steps li:last-child { border-bottom: 0; }
+.routine-summary-label { flex: 1; min-width: 12rem; }
+
+/* --- A completed routine, read back ---------------------------------------- */
+
+.answer-list { margin: 0; }
+
+.answer-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+}
+.answer-row:last-child { border-bottom: 0; }
+
+/* Two columns once there is room, so the answers line up down the page and can
+   be scanned without reading every question again. */
+@media (min-width: 700px) {
+    .answer-row { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-4); }
+}
+
+.answer-question { font-weight: 600; margin: 0; }
+.answer-help { display: block; font-weight: 400; font-size: 0.88rem; margin-top: 2px; }
+.answer-value { margin: 0; min-width: 0; }
+.answer-choices { margin: 0; padding-left: 1.1rem; }
+
+/* A file control that is only there to be looked at. */
+.btn-file.is-disabled { opacity: 0.6; cursor: default; }

@@ -26,6 +26,12 @@ application.
 - **Maintenance** — routine, periodic and one-off schedules; completions with
   parts, cost, photos and the contractor's paperwork; a clear view of what is
   overdue. Assign a job to a person or a team. → [Maintenance](docs/maintenance.md)
+- **Maintenance routines** — build a procedure once and have it filled in every
+  time: pages of checks, readings, choices and photographs, run against an asset
+  or from a scheduled job. Editing one that has been used publishes a new
+  version, so a record from two years ago still shows what it was actually
+  asked, and every completion downloads as a document.
+  → [Maintenance routines](docs/routines.md)
 - **PAT testing** — a guided test that records every reading with its unit, and
   a status that treats a failure as a failure. → [PAT testing](docs/pat-testing.md)
 - **Faults** — mark an item faulty with a photograph, an urgency and the date it

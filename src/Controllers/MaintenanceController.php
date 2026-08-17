@@ -16,7 +16,9 @@ use App\Models\Asset;
 use App\Models\Category;
 use App\Models\Location;
 use App\Models\MaintenanceLog;
+use App\Models\MaintenanceRoutine;
 use App\Models\MaintenanceSchedule;
+use App\Models\RoutineCompletion;
 use App\Models\Team;
 use App\Models\User;
 
@@ -64,10 +66,15 @@ final class MaintenanceController extends Controller
             'to'           => (string) Request::query('to', ''),
         ];
 
+        $result = MaintenanceLog::search($filters, max(1, (int) Request::query('page', 1)), 25);
+
         $this->view('maintenance/history', [
-            'pageTitle' => 'Maintenance history',
-            'result'    => MaintenanceLog::search($filters, max(1, (int) Request::query('page', 1)), 25),
-            'filters'   => $filters,
+            'pageTitle'   => 'Maintenance history',
+            'result'      => $result,
+            'filters'     => $filters,
+            // Which of these entries came from a routine, in one query rather
+            // than one per row.
+            'completions' => RoutineCompletion::forLogs(array_map('intval', array_column($result['rows'], 'id'))),
             'users'     => MaintenanceSchedule::assignableUsers(),
             'totalCost' => MaintenanceLog::totalCost(
                 $filters['from'] !== '' ? $filters['from'] : null,
@@ -84,11 +91,17 @@ final class MaintenanceController extends Controller
             $this->notFound();
         }
 
+        $logs = MaintenanceLog::forSchedule((int) $schedule['id']);
+
         $this->view('maintenance/show', [
-            'pageTitle' => $schedule['title'] . ' · ' . $schedule['asset_tag'],
-            'schedule'  => $schedule,
-            'logs'      => MaintenanceLog::forSchedule((int) $schedule['id']),
-            'nextDue'   => MaintenanceSchedule::nextDueAfter($schedule, date('Y-m-d')),
+            'pageTitle'   => $schedule['title'] . ' · ' . $schedule['asset_tag'],
+            'schedule'    => $schedule,
+            'logs'        => $logs,
+            'routine'     => $schedule['routine_id'] === null
+                ? null
+                : MaintenanceRoutine::find((int) $schedule['routine_id']),
+            'completions' => RoutineCompletion::forLogs(array_map('intval', array_column($logs, 'id'))),
+            'nextDue'     => MaintenanceSchedule::nextDueAfter($schedule, date('Y-m-d')),
         ]);
     }
 
@@ -104,6 +117,7 @@ final class MaintenanceController extends Controller
             'assets'    => $asset === null ? Asset::search(['type' => ''], 1, 500)['rows'] : [],
             'users'     => MaintenanceSchedule::assignableUsers(),
             'teams'     => MaintenanceSchedule::assignableTeams(),
+            'routines'  => MaintenanceRoutine::runnable(),
         ]);
     }
 
@@ -142,6 +156,7 @@ final class MaintenanceController extends Controller
             'assets'    => [],
             'users'     => MaintenanceSchedule::assignableUsers(),
             'teams'     => MaintenanceSchedule::assignableTeams(),
+            'routines'  => MaintenanceRoutine::runnable(),
         ]);
     }
 
@@ -205,6 +220,21 @@ final class MaintenanceController extends Controller
 
         if ($schedule === null) {
             $this->notFound();
+        }
+
+        // A job that calls for a routine is completed by carrying the routine
+        // out. The wizard writes the same maintenance log and rolls the
+        // schedule forward through the same code, so nothing downstream can
+        // tell which door was used.
+        $routineId = (int) ($schedule['routine_id'] ?? 0);
+
+        if ($routineId > 0 && MaintenanceRoutine::currentVersion($routineId) !== null) {
+            Response::redirect(sprintf(
+                '/assets/%d/routines/%d/run?schedule=%d',
+                (int) $schedule['asset_id'],
+                $routineId,
+                (int) $schedule['id']
+            ));
         }
 
         $this->view('maintenance/complete', [
@@ -830,6 +860,7 @@ final class MaintenanceController extends Controller
             'assigned_to'         => 'max:20',
             'estimated_minutes'   => 'integer|min_value:1|max_value:65535',
             'instructions'        => 'max:5000',
+            'routine_id'          => 'integer',
         ], [
             'asset_id'            => 'Asset',
             'title'               => 'Title',
@@ -889,6 +920,18 @@ final class MaintenanceController extends Controller
             $this->failValidation(['assigned_to' => 'That team no longer exists.'], $redirect);
         }
 
+        // A routine can only be attached once it has something published: a
+        // schedule pointing at a draft would send whoever picked the job up to
+        // a form that does not exist yet.
+        $routineId = (int) $data['routine_id'];
+
+        if ($routineId > 0 && MaintenanceRoutine::currentVersion($routineId) === null) {
+            $this->failValidation(
+                ['routine_id' => 'That routine has no published version, so it cannot be attached to a job yet.'],
+                $redirect
+            );
+        }
+
         return [
             'asset_id'            => (int) $data['asset_id'],
             'title'               => $data['title'],
@@ -903,6 +946,7 @@ final class MaintenanceController extends Controller
             'assigned_to_team_id' => $assigneeKind === 'team' ? $assigneeId : null,
             'estimated_minutes'   => $data['estimated_minutes'] !== '' ? (int) $data['estimated_minutes'] : null,
             'instructions'        => $data['instructions'] !== '' ? $data['instructions'] : null,
+            'routine_id'          => $routineId > 0 ? $routineId : null,
         ];
     }
 

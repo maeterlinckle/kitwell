@@ -15,21 +15,23 @@
  *
  * @var string $name        Field name, e.g. 'photos[]'
  * @var bool   $primary     Style the camera button as the primary action
+ * @var bool   $disabled    Show the control without letting it be used (preview)
  */
-$name    = (string) ($name ?? 'photos[]');
-$primary = (bool) ($primary ?? true);
+$name     = (string) ($name ?? 'photos[]');
+$primary  = (bool) ($primary ?? true);
+$disabled = (bool) ($disabled ?? false);
 ?>
 <div class="photo-inputs">
-    <label class="btn btn-file<?= $primary ? ' btn-primary' : '' ?>">
+    <label class="btn btn-file<?= $primary ? ' btn-primary' : '' ?><?= $disabled ? ' is-disabled' : '' ?>">
         <span>Take photo</span>
         <input type="file" name="<?= e($name) ?>" accept="image/*" capture="environment" multiple
-               data-photo-input hidden>
+               data-photo-input hidden<?= $disabled ? " disabled" : "" ?>>
     </label>
 
-    <label class="btn btn-file">
+    <label class="btn btn-file<?= $disabled ? ' is-disabled' : '' ?>">
         <span>Choose files</span>
         <input type="file" name="<?= e($name) ?>"
                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
-               multiple data-photo-input hidden>
+               multiple data-photo-input hidden<?= $disabled ? " disabled" : "" ?>>
     </label>
 </div>

@@ -26,6 +26,12 @@ The fourth is the important distinction: it is **recorded, not scheduled**.
 There is no schedule behind it, because there never was one. It goes straight
 into the asset's history and into Maintenance → History.
 
+A schedule can also name a **routine** — a set procedure with its own questions,
+readings and photographs, which the person doing the job steps through and fills
+in. Completing such a job opens the routine instead of the free-text form and
+satisfies the schedule in exactly the same way. See
+[Maintenance routines](routines.md).
+
 Completing a job records the date, who did it (a user *or* a named external
 contractor), the work done, parts, cost, downtime, result and optional photos.
 Two side effects, both opt-in and visible on the form: setting **condition
@@ -130,4 +136,4 @@ excluded from the summary by default.
 
 ---
 
-**See also:** [Documentation index](README.md) · [Assets](assets.md) · [Teams](teams.md) · [Email and notifications](email-and-notifications.md)
+**See also:** [Documentation index](README.md) · [Maintenance routines](routines.md) · [Assets](assets.md) · [Teams](teams.md) · [Email and notifications](email-and-notifications.md)

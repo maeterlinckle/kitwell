@@ -47,6 +47,8 @@ use App\Controllers\PatController;
 use App\Controllers\PhotoController;
 use App\Controllers\ProfileController;
 use App\Controllers\ReportController;
+use App\Controllers\RoutineController;
+use App\Controllers\RoutineRunController;
 use App\Core\Router;
 
 $router = new Router();
@@ -203,6 +205,36 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/maintenance/create',  [MaintenanceController::class, 'create'],  ['can:maintenance.manage']);
     $router->post('/maintenance',        [MaintenanceController::class, 'store'],   ['can:maintenance.manage', 'csrf']);
 
+    // Routines: the structured procedures a technician fills in.
+    //
+    // Reading one needs only `maintenance.view`; changing one needs
+    // `routines.manage`, which by default only an Administrator holds.
+    // Designing a procedure and following it are different jobs, and a
+    // technician who can record work must not thereby be able to rewrite what
+    // the work asks. Registered before the {id} routes, as everywhere.
+    $router->get('/maintenance/routines',        [RoutineController::class, 'index'],  ['can:maintenance.view'], 'routines');
+    $router->get('/maintenance/routines/create', [RoutineController::class, 'create'], ['can:routines.manage']);
+    $router->post('/maintenance/routines',       [RoutineController::class, 'store'],  ['can:routines.manage', 'csrf']);
+
+    $router->get('/maintenance/routines/{id:\d+}',         [RoutineController::class, 'show'],    ['can:maintenance.view']);
+    $router->get('/maintenance/routines/{id:\d+}/preview', [RoutineController::class, 'preview'], ['can:maintenance.view']);
+    $router->get('/maintenance/routines/{id:\d+}/edit',    [RoutineController::class, 'edit'],    ['can:routines.manage']);
+
+    $router->post('/maintenance/routines/{id:\d+}',             [RoutineController::class, 'update'],     ['can:routines.manage', 'csrf']);
+    $router->post('/maintenance/routines/{id:\d+}/status',      [RoutineController::class, 'setStatus'],  ['can:routines.manage', 'csrf']);
+    $router->post('/maintenance/routines/{id:\d+}/new-version', [RoutineController::class, 'newVersion'], ['can:routines.manage', 'csrf']);
+    $router->post('/maintenance/routines/{id:\d+}/publish',     [RoutineController::class, 'publish'],    ['can:routines.manage', 'csrf']);
+    $router->post('/maintenance/routines/{id:\d+}/discard',     [RoutineController::class, 'discard'],    ['can:routines.manage', 'csrf']);
+
+    $router->post('/maintenance/routines/{id:\d+}/pages',                 [RoutineController::class, 'addPage'],  ['can:routines.manage', 'csrf']);
+    $router->post('/maintenance/routines/{id:\d+}/pages/{pageId:\d+}',    [RoutineController::class, 'savePage'], ['can:routines.manage', 'csrf']);
+
+    // A routine that was carried out. Reading one is part of reading the
+    // maintenance history, so it needs no permission of its own.
+    $router->get('/maintenance/completions/{id:\d+}',                    [RoutineRunController::class, 'show'], ['can:maintenance.view']);
+    $router->get('/maintenance/completions/{id:\d+}/pdf',                [RoutineRunController::class, 'pdf'],  ['can:maintenance.view']);
+    $router->get('/maintenance/completions/{id:\d+}/files/{fileId:\d+}', [RoutineRunController::class, 'file'], ['can:maintenance.view']);
+
     $router->get('/maintenance/{id:\d+}',             [MaintenanceController::class, 'show'],    ['can:maintenance.view']);
     $router->get('/maintenance/{id:\d+}/edit',        [MaintenanceController::class, 'edit'],    ['can:maintenance.manage']);
     $router->post('/maintenance/{id:\d+}',            [MaintenanceController::class, 'update'],  ['can:maintenance.manage', 'csrf']);
@@ -215,6 +247,13 @@ $router->group(['auth'], static function (Router $router): void {
     // Unplanned work, logged straight onto an asset.
     $router->get('/assets/{assetId:\d+}/maintenance/log',  [MaintenanceController::class, 'logForm'], ['can:maintenance.complete']);
     $router->post('/assets/{assetId:\d+}/maintenance/log', [MaintenanceController::class, 'log'],     ['can:maintenance.complete', 'csrf']);
+
+    // Running a routine against an asset, with or without a schedule behind
+    // it. Carrying one out is `maintenance.complete`, the same permission as
+    // logging any other work.
+    $router->get('/assets/{assetId:\d+}/routines', [RoutineRunController::class, 'choose'], ['can:maintenance.complete']);
+    $router->get('/assets/{assetId:\d+}/routines/{routineId:\d+}/run',  [RoutineRunController::class, 'run'],   ['can:maintenance.complete']);
+    $router->post('/assets/{assetId:\d+}/routines/{routineId:\d+}/run', [RoutineRunController::class, 'store'], ['can:maintenance.complete', 'csrf']);
 
     // Correcting a record after the fact. Recording work needs
     // `maintenance.complete`; rewriting what a record says is a bigger thing,

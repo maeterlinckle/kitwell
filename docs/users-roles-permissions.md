@@ -56,6 +56,18 @@ without being allowed to rewrite purchase costs. It is still a change to the
 register, since it moves the asset's status, so Read-only does not hold it.
 Reading the fault history needs only `assets.view`.
 
+Maintenance routines have their own:
+
+| Permission | Held by | Allows |
+|---|---|---|
+| `routines.manage` | Administrator | Maintenance → Routines: creating, editing, publishing and archiving the procedures technicians fill in |
+
+Carrying a routine out needs only `maintenance.complete`, which Manager / Staff
+already hold. The split is the point: most staff should be able to work through
+a procedure without being able to redesign what it asks. Add `routines.manage`
+to any role, or make a role of its own, where that is not the right split for a
+site. See [Maintenance routines](routines.md).
+
 Templates have their own:
 
 | Permission | Held by | Allows |
@@ -153,4 +165,4 @@ The two link expiry windows are on **Settings → Email**, under "Account links"
 
 ---
 
-**See also:** [Documentation index](README.md) · [Two-factor authentication](two-factor-authentication.md) · [Teams](teams.md) · [Security](security.md)
+**See also:** [Documentation index](README.md) · [Two-factor authentication](two-factor-authentication.md) · [Teams](teams.md) · [Maintenance routines](routines.md) · [Security](security.md)

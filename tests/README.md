@@ -17,6 +17,7 @@ uses. The ninth is a web page, because the thing it tests is JavaScript.
 | `api-contract.php` | A running site + seeded database | **Yes** |
 | `fault-flow.php` | A running site + seeded database + an SMTP catcher | **Yes** |
 | `media-library.php` | A running site + seeded database | **Yes** |
+| `routines.php` | A running site + seeded database | **Yes** |
 
 ## Static checks (safe anywhere, including production)
 
@@ -130,6 +131,34 @@ and the check reads the schema rather than trusting the form.
 > assets and copies them. Its fixtures carry a per-run nonce so a second run is
 > not deduplicated against the first — which would be the library working, but
 > would make the assertions meaningless.
+
+```bash
+php tests/routines.php
+```
+
+`routines.php` builds a maintenance routine using one step of every field type,
+publishes it, runs it against an asset, and then runs it again through a
+scheduled job — checking on the way that the schedule rolls forward exactly as
+the free-text form makes it, and that a team-assigned job can be picked up by
+anybody with `maintenance.complete`.
+
+Three claims it exists to hold up:
+
+- **Designing and doing are different rights.** A Manager / Staff account can
+  run any published routine and is refused the builder, the editor and the
+  publish button with a 403 each time.
+- **A used version never changes.** After the routine is edited and republished,
+  the earlier completion is fetched again and asserted to still carry version 1
+  and version 1's wording — and *not* the wording that replaced it.
+- **The PDF is a real document.** Every cross-reference offset is checked
+  against the object it claims to point at, the content streams are inflated and
+  searched for the questions and the answers, and the embedded photograph is
+  found as a DCT-encoded image XObject. A file that opens in one viewer and not
+  another is exactly what a bad xref table produces.
+
+> **This one writes too.** It creates routines, completions, schedules and
+> maintenance log entries. Its routine names carry a per-run nonce, since a
+> routine name is unique.
 
 ## The barcode decoder
 

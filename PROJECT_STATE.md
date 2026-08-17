@@ -54,7 +54,7 @@ Where something is *not* verified, it says so.
 
 Built by applying everything in `database/migrations/` to an empty database.
 
-**Totals:** 35 domain tables, 412 columns, 68 foreign keys.
+**Totals:** 42 domain tables, 473 columns, 85 foreign keys.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
 A database migrated with `php bin/migrate.php` has a **33rd** table,
@@ -65,7 +65,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-Four files, applied in filename order and recorded in `migrations`. Each is
+Five files, applied in filename order and recorded in `migrations`. Each is
 written to be safe to re-run.
 
 | File | Contents |
@@ -74,11 +74,12 @@ written to be safe to re-run.
 | `002_roles_and_permissions.sql` | The 4 built-in roles, 36 permissions and 71 grants. Role and permission definitions are refreshed on re-run; grants are only inserted where missing, so a site's own edits to a built-in role survive |
 | `003_default_settings.sql` | The 51 setting keys a fresh install starts with, grouped by area. `INSERT IGNORE`, so an existing value is kept |
 | `004_media_library_and_templates.sql` | `media_library`, `asset_media`, `asset_templates`, `template_media`; moves every row of `asset_manuals` into the library and drops that table; adds `templates.manage` for admin and manager |
+| `005_maintenance_routines.sql` | `maintenance_routines`, `routine_versions`, `routine_pages`, `routine_steps`, `routine_completions`, `routine_responses`, `routine_response_files`; adds `maintenance_schedules.routine_id`; adds `routines.manage` for admin |
 
-A fresh install and one upgraded through 004 produce the same schema —
+A fresh install and one upgraded through 005 produce the same schema —
 verified by migrating both and diffing `information_schema` column by column.
 
-To change the schema, add a new numbered file — `005_…` and upward. Do not edit
+To change the schema, add a new numbered file — `006_…` and upward. Do not edit
 one that has been applied anywhere.
 
 ### 2.2 Tables
@@ -476,12 +477,88 @@ purpose: an item crossing from "due soon" to "overdue" is a *different*
 reminder and goes out at once rather than waiting out the earlier one's repeat
 window.
 
-### 2.3 Foreign keys (60)
+#### `maintenance_routines`
+`id` int, `name` varchar(191) NN **unique**, `description` varchar(1000),
+`status` enum('active','archived') NN 'active', `created_by` (SET NULL),
+`created_at`, `updated_at`. Index `(status, name)`.
+
+The procedure itself. Archived keeps its history but is not offered for new
+work; there is no delete, because the records that followed it have to keep
+working.
+
+#### `routine_versions`
+`id` int, `routine_id` NN (**CASCADE**), `version_number` smallint NN,
+`is_current` tinyint NN 0, `published_at` datetime (**NULL means draft**),
+`published_by` (SET NULL), `created_at`, `updated_at`.
+Unique `(routine_id, version_number)`. Index `(routine_id, is_current)`.
+
+One edition. At most one version of a routine is current, and only a published
+one ever is. At most one draft is open at a time — enforced by the application,
+since MariaDB has no partial unique index.
+
+#### `routine_pages`
+`id` int, `version_id` NN (**CASCADE**), `position` smallint NN 1,
+`title` varchar(191) NN, `description` varchar(1000), `created_at`.
+Index `(version_id, position)`.
+
+#### `routine_steps`
+`id` int, `page_id` NN (**CASCADE**), `position` smallint NN 1,
+`label` varchar(255) NN, `help_text` varchar(1000),
+`field_type` enum('short_text','long_text','number','date','boolean','single_choice','multi_choice','photo','document') NN 'short_text',
+`is_required` tinyint NN 0, `unit` varchar(30) (number fields only),
+`options` JSON (choice fields only — an array of labels), `created_at`.
+Index `(page_id, position)`.
+
+#### `routine_completions`
+`id` bigint, `routine_id` NN (**RESTRICT**), `version_id` NN (**RESTRICT**),
+`asset_id` NN (CASCADE), `schedule_id` (SET NULL),
+`maintenance_log_id` (**CASCADE**), `completed_by` (SET NULL),
+`started_at` datetime, `completed_at` datetime NN, `created_at`, `updated_at`.
+Indexes `(routine_id, completed_at)`, `version_id`, `(asset_id, completed_at)`,
+`schedule_id`, `maintenance_log_id`.
+
+The two RESTRICTs are the versioning guarantee made structural: a version that
+has been used cannot be deleted, so a completion can never end up pointing at
+questions that no longer exist. The CASCADE to the maintenance log is the other
+side of the same idea — the completion is the detail behind that entry, not a
+record beside it.
+
+#### `routine_responses`
+`id` bigint, `completion_id` NN (CASCADE), `step_id` NN (**RESTRICT**),
+`value_text` text, `value_number` decimal(14,4), `value_date` date,
+`value_boolean` tinyint, `created_at`.
+Unique `(completion_id, step_id)`. Index `step_id`.
+
+One row per answered step, with the value in whichever column its type calls
+for. A **multi-choice answer is the chosen labels one per line in
+`value_text`** — which is also why a choice label may not contain a line break.
+A step left blank has no row at all, so "unanswered" and "answered with
+nothing" cannot be confused.
+
+#### `routine_response_files`
+`id` bigint, `completion_id` NN (CASCADE), `step_id` NN (RESTRICT),
+`file_kind` enum('photo','document') NN, `file_path` varchar(255) NN,
+`original_filename` varchar(255), `mime_type` varchar(100) NN,
+`file_size_bytes` int NN 0, `uploaded_by` (SET NULL), `created_at`.
+Index `(completion_id, step_id)`.
+
+Exclusive to the completion that produced them, for the same reason a condition
+photo is: they are a claim about one item on one day. Stored under
+`routines/{completionId}` and **never** in the shared media library —
+`tests/security-audit.php` asserts it.
+
+#### `maintenance_schedules.routine_id`
+Added by 005: `int` NULL, FK to `maintenance_routines` (SET NULL), index
+`idx_maint_sched_routine`. Completing a job that names one opens the routine
+instead of the free-text form. It sits *beside* `instructions` rather than
+instead of it.
+
+### 2.3 Foreign keys (85)
 
 | Delete rule | Where it is used |
 |---|---|
 | **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
-| **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id` |
+| **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id`, **`routine_completions.routine_id`**, **`routine_completions.version_id`**, **`routine_responses.step_id`**, **`routine_response_files.step_id`** |
 | **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
 
 `maintenance_schedules.assigned_to_team_id` is SET NULL on purpose: archiving is
@@ -494,6 +571,12 @@ ledger, and a row that outlives the record it refers to is harmless.
 The shape is deliberate: deleting an asset takes its own media and records with
 it, but you cannot delete an asset or a hirer that has hire history, and
 deleting a user never destroys the records they touched.
+
+The four routine RESTRICTs are the versioning promise expressed as a
+constraint rather than as a convention: once a version has been carried out,
+the database itself refuses to let it, its pages or its steps be deleted. A
+draft has no completions and so deletes freely, which is what makes "discard
+this draft" safe.
 
 ### 2.4 Seeded reference data (verified from a fresh migrate)
 
@@ -523,6 +606,15 @@ deleting a user never destroys the records they touched.
     broken" is something the person holding the broken thing does, and need not
     come with the right to rewrite purchase costs. It is still a change to the
     register — it moves the status — so read-only does not get it
+  - `templates.manage` (004) is **admin and manager**, granted like
+    `categories.manage`: a template is reference data an operation maintains
+    for itself
+  - `routines.manage` (005) is **admin only**, and that is the point of it.
+    Carrying a routine out needs `maintenance.complete`, which manager already
+    holds; rewriting what it asks is a different job. It is an ordinary
+    permission, so a site that wants a senior technician to own the procedures
+    adds it to a role from Settings → Roles
+- Totals after 005: **38 permissions, 74 role_permissions rows**.
 - **51 settings** on a fresh install (55 once both logo variants have been
   uploaded — the four `logo_*` keys are written on upload, never seeded).
   Stage 16 added `flash_auto_hide_seconds` (6, 0 = never), `two_factor_required`
@@ -627,7 +719,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── .gitignore
 ├── .gitattributes           forces LF on *.sh — a CRLF shebang breaks the installer
 ├── README.md                short introduction; the detail lives in docs/
-├── docs/                    17 pages, one per topic, plus the index (docs/README.md)
+├── docs/                    20 pages, one per topic, plus the index (docs/README.md)
 ├── INSTALL.md               the scripted install, unattended runs, failure modes
 ├── PROJECT_STATE.md         this file
 ├── composer.json            autoload only; no runtime packages
@@ -646,17 +738,18 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── config/
 │   └── config.php           every value from Env::get(); nothing hardcoded
 │
-├── database/migrations/     001…018, plain .sql, applied in filename order
+├── database/migrations/     001…005, plain .sql, applied in filename order
 ├── vendor/                  gitignored; created by `composer install` (PHPMailer)
 │
 ├── public/                  ← the only directory the web server should serve
 │   ├── index.php            front controller
 │   ├── favicon.svg
 │   ├── css/  app.css, print.css
-│   └── js/   app.js, barcode.js, scanner.js, pat-wizard.js
+│   └── js/   app.js, barcode.js, scanner.js, pat-wizard.js, routine-wizard.js,
+│              routine-editor.js, api-docs.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 151 routes
+│   └── web.php              the whole route table, 228 routes
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -666,25 +759,28 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        format_datetime(), format_money(), config(), str_limit()
 │   ├── Core/                Auth, Barcode, Config, Crypto, Csrf, Csv, CsvReader,
 │   │                        Database, Env, Flash, Image, LoginThrottle, Migrator,
-│   │                        QrCode, Request, Response, Router, Session, Totp,
-│   │                        Upload, Validator, View
+│   │                        Pdf, QrCode, Request, Response, Router, Session,
+│   │                        Totp, Upload, Validator, View
 │   ├── Api/                 Gate, Problem, Resource, ResourceRegistry, OpenApi
 │   ├── Controllers/         Controller (base) + Account, Asset, AssetCopy,
 │   │                        AssetExport, Auth, Branding, Calendar, CustomReport,
 │   │                        Hirer, Dashboard, Export, Fault, Import, Label, Hire,
-│   │                        Maintenance, Manual, MyHires, Pat, Photo, Profile,
-│   │                        Report, Scan, Security, TwoFactor
+│   │                        Maintenance, Media, MyHires, Pat, Photo, Profile,
+│   │                        Report, Routine, RoutineRun, Scan, Security,
+│   │                        TwoFactor
 │   │   └── Api/             ApiController (base), ResourceController, MetaController
-│   │   └── Admin/           Activity, ApiKey, Category, Email, Location, Role,
-│   │                        Settings, Team, User
+│   │   └── Admin/           Activity, ApiKey, AssetTemplate, Category, Email,
+│   │                        Location, Role, Settings, Team, User
 │   ├── Mail/                Mailer, EmailTemplate, EmailLog, EmailReminder,
 │   │                        Reminders, Merge, Layout, AccountMail
 │   ├── Middleware/          Auth, Csrf, Guest, Permission, MiddlewareRunner
-│   ├── Models/              ActivityLog, Asset, AssetManual, AssetPhoto,
+│   ├── Models/              ActivityLog, Asset, AssetPhoto, AssetTemplate,
 │   │                        Assignment, Category, FaultReport, Hire, Hirer,
-│   │                        Location, MaintenanceLog, MaintenanceSchedule,
-│   │                        ApiKey, CustomReport, PatRecord, Permission, Role,
-│   │                        Setting, Team, Tree, TrustedDevice, User, UserToken
+│   │                        Location, MaintenanceLog, MaintenanceRoutine,
+│   │                        MaintenanceSchedule, MediaLibrary, ApiKey,
+│   │                        CustomReport, PatRecord, Permission, Role,
+│   │                        RoutineCompletion, Setting, Team, Tree,
+│   │                        TrustedDevice, User, UserToken
 │   ├── Reports/             Report (base), ReportRegistry, AllAssets,
 │   │                        FaultyAssets, MaintenanceDue, PatDue, AssetsOnHire,
 │   │                        HiresDueBack; StoredReport, DataSource,
@@ -692,17 +788,20 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── Imports/             Importer (base), ImportRegistry, AssetImporter,
 │   │                        PatImporter
 │   └── Services/            AssetTagger, AssetCopier, Branding, CalendarFeed,
-│                            FaultNotifier, TwoFactor
+│                            FaultNotifier, HelpSettings, Markdown, MediaIntake,
+│                            RoutineDocument, TwoFactor
 │
 ├── storage/                 ← outside the docroot
 │   ├── logs/                app.log
 │   └── uploads/             assets/{id}/photos, .../photos/thumbs,
-│                            assets/{id}/manuals, maintenance/{logId},
+│                            media/ (the shared library),
+│                            maintenance/{logId},
 │                            maintenance/{logId}/documents,
+│                            routines/{completionId},
 │                            faults/{faultReportId},
 │                            hires/{hireId}, branding/, imports/
 │
-├── templates/               99 .php templates
+├── templates/               113 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, brand, footer, print-header, flash,
 │   │                        photo-gallery, photo-upload, photo-inputs,
@@ -719,6 +818,8 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── profile/             edit, calendar, security, two-factor-setup
 │   ├── maintenance/         index, show, form, complete, edit-log, history,
 │   │                        choose-asset
+│   ├── routines/            index, show, form, edit, preview, choose, run,
+│   │                        completion
 │   ├── pat/                 index, show, form, history, wizard, choose-asset
 │   ├── hires/               index, show, checkout, return
 │   ├── hirers/              index, show, form
@@ -1291,6 +1392,77 @@ scripts — a CDN Swagger UI simply would not load. It requests same-origin path
 rather than the spec's absolute server URL, so it works behind any hostname or
 subdirectory.
 
+### 4.15 Maintenance routines
+
+- **A routine is a definition; a version is what anyone ever runs.** Nothing
+  outside `MaintenanceRoutine` resolves a version: the runner asks for
+  `currentVersion()`, the editor asks for the draft or an unused current one,
+  and a completion stores the id it was given. The database refuses to delete a
+  used version (§2.3), so the guarantee does not rest on any of that being
+  right.
+- **Editing forks when it has to and not before.** `editableVersion()` returns
+  the open draft if there is one; otherwise the current version if nobody has
+  used it — there is no history to protect and a version number nobody has seen
+  is not worth spending — and otherwise a copy at the next number. The fork is
+  never done on a `GET`: `/edit` renders a page explaining that v*n* is in use
+  and offering a `POST` that starts v*n+1*, so the person doing it can see what
+  is about to happen.
+- **The editor is one form per page of the routine.** Its fields, all of its
+  steps' fields, and the button that was pressed post together to
+  `/maintenance/routines/{id}/pages/{pageId}`; the controller saves everything
+  before acting on the `do` value, so "Add a step" never discards an edit made
+  further up. The verb is checked against a list before it reaches the switch.
+  It needs no JavaScript at all — `routine-editor.js` only hides the settings a
+  chosen field type has no use for.
+- **The runner is the PAT wizard's shape** (§5.1 item 10): stacked sections with
+  `data-wizard-step`, one shown at a time by `routine-wizard.js`, and every page
+  simply visible with the script off. **The gating is not the control** —
+  `RoutineRunController::readAnswers()` re-checks every required step, and the
+  test posts a deliberately incomplete form to prove it.
+- **A completion always writes a maintenance log entry**, so routine work lands
+  in the asset's existing history rather than in a second history beside it.
+  The log and the completion are written in one transaction; the *files* are
+  stored after it commits, because a rolled-back write leaves nothing behind
+  but a rolled-back file does not delete itself.
+- **A schedule that names a routine is completed by running it.**
+  `MaintenanceController::completeForm()` redirects to the wizard, which then
+  rolls the schedule forward through `MaintenanceSchedule::applyCompletion()` —
+  the same call the free-text form makes, so nothing downstream can tell which
+  door was used. Team assignment is untouched: it decides who is reminded, never
+  who may complete.
+- **Routine evidence is exclusive**, like condition photos and PAT, fault and
+  maintenance evidence. `routine_response_files` never touches `media_library`,
+  and `tests/security-audit.php` asserts it alongside the other four.
+
+### 4.16 PDF
+
+- **`src/Core/Pdf.php` is a first-party PDF writer**, for the reasons the
+  Code 128 and QR encoders are (§4.5): one runtime dependency, an application
+  that still runs from a plain file copy, and a bounded problem. It does the
+  three Helvetica faces, wrapped text, rules, boxes and images — nothing else.
+- **Co-ordinates are given from the top of the page.** `point()` is the only
+  place the PDF's own bottom-left origin appears.
+- **The standard fourteen fonts need no embedding**, so a document carries no
+  font data and every reader already has the metrics. The width tables in
+  `widthsRegular()` / `widthsBold()` *are* those metrics — they are what makes
+  wrapping land in the right place, and accented Latin letters are mapped to
+  their base letter's advance rather than listed, which is exact in this family.
+- Text is converted to **WinAnsi** before it is written, because that is what
+  the fonts are declared with.
+- **JPEG data goes in untouched** (`/DCTDecode`); anything else is re-encoded
+  through GD, which is optional here as everywhere — without it a PNG simply
+  does not appear, and losing a photograph beats losing the record.
+- **Footers are drawn at `output()` time**, once the page count is known, by
+  replaying a callback over the held content streams. `setOnPage()` covers the
+  other half: `ensure()` starts pages of its own accord halfway through a
+  paragraph, so a masthead the caller has to remember is a masthead that will be
+  missing from page four.
+- `App\Services\RoutineDocument` is the only caller today, and holds all of the
+  layout. `tests/routines.php` checks the result structurally — every
+  cross-reference offset against the object it claims to point at — because a
+  bad xref is exactly what produces a file that opens in one viewer and not
+  another.
+
 ---
 
 ## 5. Build-prompt status
@@ -1451,6 +1623,44 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
     first-party browsable viewer (§4.14). The README went from 2,015 lines to
     87, with the detail moved into `docs/` as seventeen focused pages and an
     index.
+19. **Named Kitwell, and shipped as a finished product.** "Kitwell", or
+    "Kitwell by Junction" where a fuller form fits; every remaining
+    `asset-register` install path, config default and service name renamed. The
+    25 incremental migrations were replaced by a **current-state baseline**
+    (§2.1), proved equivalent by migrating both chains and diffing
+    `information_schema`. Comments and in-app copy were swept of narration about
+    what a superseded approach used to do. `README.md` and `docs/` were
+    rewritten for somebody meeting the application for the first time, and
+    **Help** was added at the bottom of the Settings menu for every signed-in
+    user.
+20. **Help restructured user-first, with live values.** Everything needing a
+    shell, SQL, a file path or a cron entry moved into a single Administration
+    half at the end of the contents panel; the front of the panel is what a
+    standard user can do in the browser. Documentation stopped assuming data
+    from a previous version. Tables in the in-app Help gained ruled cells and a
+    distinct header row in both themes. `App\Services\HelpSettings` resolves
+    `{{setting:key}}` from an allow-list at render time, so Help shows what a
+    site actually has configured.
+21. **A shared media library and asset templates.** A photo or document is held
+    once in `media_library` and attached to as many assets as need it; the
+    manuals that were per-asset were migrated into it. Deduplication is by
+    SHA-256 of the contents. **Asset templates** under Settings pre-fill the Add
+    asset form and bring their library media by reference — never an asset tag,
+    barcode or serial number. Copy and bulk-apply attach by reference too.
+    Condition photos and PAT, fault and maintenance evidence stay exclusive, and
+    the security audit asserts it.
+22. **Maintenance routines.** A routine is pages of typed steps a technician
+    steps through and fills in, versioned so that a completion always shows what
+    it was actually asked (§4.15). Nine field types including camera capture and
+    PDF upload. Designing one needs the new `routines.manage`, administrator-only
+    by default; carrying one out needs only `maintenance.complete`, which
+    Manager / Staff already hold — that separation is the feature's point.
+    Routines run from an asset directly, or from a maintenance schedule that
+    names one, in which case completing the job runs the wizard and rolls the
+    schedule forward through exactly the existing code. Every completion writes
+    an ordinary maintenance log entry, has a page of its own laid out as it was
+    filled in, and downloads as a PDF built by the new first-party
+    `App\Core\Pdf` (§4.16).
 
 ### 5.2 What has been verified, and how
 
@@ -1458,19 +1668,29 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 238 PHP files | 0 failures |
-| `tests/security-audit.php` | **42 passed, 0 failed** |
-| `tests/escape-audit.php` | **2433 output expressions across 99 templates, 0 unescaped** |
-| All 25 migrations against an empty database | applied cleanly; 32 tables, 377 columns, 60 FKs, 147 indexes, all InnoDB |
-| Seed data counts | 4 roles / 36 permissions / 71 grants / 51 settings / 0 template overrides |
-| `tests/permission-matrix.php` | **380 checks, 0 mismatches** |
+| `php -l` on all 142 PHP files under `src/`, `bin/` and `routes/`, and all 113 templates | 0 failures |
+| `tests/security-audit.php` | **45 passed, 0 failed** |
+| `tests/escape-audit.php` | **2896 output expressions across 113 templates, 0 unescaped** |
+| All 5 migrations against an empty database | applied cleanly; 42 tables, 473 columns, 85 FKs, all InnoDB |
+| A fresh install vs one upgraded through 005 | **identical** — 473 columns, 239 index rows and 85 foreign keys diffed one by one from `information_schema`, and a schedule that existed before the upgrade survives with `routine_id` NULL |
+| Seed data counts | 4 roles / 38 permissions / 74 grants / 51 settings / 0 template overrides |
+| `tests/permission-matrix.php` | **408 checks, 0 mismatches** |
+| `tests/routines.php` | **72 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, and the PDF checked object by object |
+| `tests/media-library.php` | **49 checks, 0 failed** — counted from the database *and* the filesystem |
 | `tests/fault-flow.php` | **68 checks, 0 failed** — end to end over HTTP, with a mail catcher |
 | `tests/api-contract.php` | **84 checks, 0 failed** — the API against its own generated specification |
+| `tests/docs-audit.php` | **47 checks, 0 failed** |
 | Documentation links | every anchor and file link in `docs/` and `README.md` resolves |
 | `tests/totp-vectors.php` | **52 checks, 0 failed** — RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `tests/qr-encode.php` | **21 checks, 0 failed** — ISO/IEC 18004 Annex I error-correction codewords, and the geometry |
 | `tests/report-figures.php` | every figure agrees with the database |
-| Migrations 019–023 on the **populated** dev database | applied cleanly; existing rows untouched — in particular every `assets.status` value survived the ENUM change unchanged |
+
+**The generated PDF was looked at, not only asserted about.** A throwaway
+renderer parsed the content stream of a finished document back into a PNG —
+independent of the writer, so a mistake in the layout code could not agree with
+itself — and it caught a real one: the closing note of the sign-off block was
+spilling onto a page of its own. The reserved height and the summary spacing
+were both adjusted until a single-section record lands on one page.
 
 **Stage 12 specifically, verified on this machine:**
 
@@ -2087,6 +2307,28 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   enforces it; a CRLF shebang fails with a misleading "not found".
 - **Adding a required field to the settings form** breaks every test that POSTs a
   partial settings payload.
+- **cURL silently stringifies a nested array in a multipart body.** With
+  `CURLOPT_POSTFIELDS` and a file attached, `['step' => [12 => 'x']]` arrives at
+  PHP as the literal word `Array` — which reads as a validation bug in the code
+  under test rather than a bug in the test. `tests/routines.php` flattens to
+  `step[12]` keys itself. Only multipart is affected; `http_build_query()`
+  handles nesting perfectly well.
+- **A `?` in a printed expression is what satisfies the escape audit, not a
+  variable holding the same string.** `<?= $off ?>` where `$off` is `' disabled'`
+  is flagged; `<?= $disabled ? ' disabled' : '' ?>` is not, because the audit
+  treats everything before a ternary `?` as a condition that is never printed.
+  Write the ternary inline, or cast: `(int) $index + 1` passes where
+  `$index + 1` does not.
+- **A block that ends a document needs its whole height reserved, not its first
+  line's.** `Pdf::ensure()` was called for the rule and the signature lines but
+  not the sentence under them, so a document ended with a page carrying one
+  italic line and nothing else. Reserve the block; and when it still will not
+  fit, tighten what comes before rather than raising the reservation past what
+  a page can hold.
+- **Two dev servers can bind the same port on Windows.** A second `php -S` on a
+  port already in use starts, logs that it started, and serves nothing — every
+  request goes to the first one. If a page 404s with another project's branding
+  on it, that is what has happened. Use a different port.
 
 ### Local development notes (Windows box)
 
@@ -2126,7 +2368,9 @@ php tests/security-audit.php && php tests/escape-audit.php
    `manage.sh doctor` checks for it.
 8. The four kinds of maintenance are set out in §5.1 item 4. If a change makes
    *unplanned work* harder to reach, it is a regression — that is the one that
-   has already been reported as missing once.
+   has already been reported as missing once. A fifth way of recording work
+   arrived with routines (§4.15), but it is not a fifth kind: a routine always
+   produces an ordinary maintenance log entry, and the history has one shape.
 9. Email now does more than remind people: **new users are invited by email and
    anyone can reset their own password** (§4.10). Both fall back sensibly with
    no SMTP, and both stop working the moment somebody switches email off — which

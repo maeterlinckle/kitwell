@@ -30,9 +30,10 @@ $links = [
     // out are the errands people arrive with, so each group leads with its
     // action rather than with its list.
     ['label' => 'Maintenance', 'href' => '/maintenance', 'permission' => null, 'children' => [
-        ['label' => 'Add maintenance', 'href' => '/maintenance/log', 'permission' => 'maintenance.complete'],
-        ['label' => 'Schedules',       'href' => '/maintenance',     'permission' => 'maintenance.view'],
-        ['label' => 'PAT records',     'href' => '/pat',             'permission' => 'pat.view'],
+        ['label' => 'Add maintenance', 'href' => '/maintenance/log',      'permission' => 'maintenance.complete'],
+        ['label' => 'Schedules',       'href' => '/maintenance',          'permission' => 'maintenance.view'],
+        ['label' => 'Routines',        'href' => '/maintenance/routines', 'permission' => 'maintenance.view'],
+        ['label' => 'PAT records',     'href' => '/pat',                  'permission' => 'pat.view'],
     ]],
 
     ['label' => 'Hires', 'href' => '/hires', 'permission' => null, 'children' => [

@@ -98,12 +98,19 @@ system.
 | `api-contract.php` | The API matches its own generated specification, including that no response carries an undeclared field |
 | `fault-flow.php` | The whole fault feature end to end, with a local SMTP catcher |
 | `media-library.php` | One file is stored once however many assets use it — counted in the database *and* on disk — plus templates, deduplication and the scan-to-new-asset route |
+| `routines.php` | A routine built from every field type, run ad-hoc and from a schedule, with the design/run permissions separated, versioning holding old records still, and the generated PDF checked object by object |
 | `totp-vectors.php` | TOTP against RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `qr-encode.php` | The QR encoder against the ISO/IEC 18004 worked example, then round-tripped through the project's own independent decoder |
 
-The two that write (`permission-matrix.php` and `fault-flow.php`, plus
-`api-contract.php`) say so at the top and should be pointed at a scratch
-database.
+The ones that write (`permission-matrix.php`, `fault-flow.php`,
+`api-contract.php` and `routines.php`) say so at the top and should be pointed
+at a scratch database. Each takes the address of the site under test as its
+first argument, defaulting to `http://127.0.0.1:8321`.
+
+`src/Core/Pdf.php` is the other piece worth knowing about: a small PDF writer
+using the standard fourteen fonts, so a generated document carries no embedded
+font data and needs nothing installed. `App\Services\RoutineDocument` is its
+only caller today.
 
 ---
 

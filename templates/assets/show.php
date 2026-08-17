@@ -14,6 +14,7 @@ use App\Core\Upload;
  * @var int $photoCount
  * @var array<int,array<string,mixed>> $schedules
  * @var array<int,array<string,mixed>> $maintenanceLogs
+ * @var array<int,array<string,mixed>> $routineCompletions keyed by maintenance log id
  * @var array<int,array<string,mixed>> $patRecords
  * @var array<string,mixed>|null $patStatus
  * @var array<string,mixed>|null $openHire
@@ -276,6 +277,7 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                     <div class="head-actions">
                         <?php if (can('maintenance.complete')): ?>
                             <a class="btn btn-sm" href="<?= e(url('/assets/' . $id . '/maintenance/log')) ?>">Record work</a>
+                            <a class="btn btn-sm" href="<?= e(url('/assets/' . $id . '/routines')) ?>">Run a routine</a>
                         <?php endif; ?>
                         <?php if (can('maintenance.manage')): ?>
                             <a class="btn btn-sm" href="<?= e(url('/maintenance/create?asset=' . $id)) ?>">Add schedule</a>
@@ -321,6 +323,12 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                                     <span class="log-date"><?= e(format_date($log['performed_on'])) ?></span>
                                     <span class="badge result-<?= e(strtolower((string) $log['result'])) ?>"><?= e($log['result']) ?></span>
                                     <span class="badge badge-muted"><?= e($log['maintenance_type']) ?></span>
+                                    <?php if (isset($routineCompletions[(int) $log['id']])): ?>
+                                        <?php $completion = $routineCompletions[(int) $log['id']]; ?>
+                                        <a class="badge badge-link" href="<?= e(url('/maintenance/completions/' . (int) $completion['id'])) ?>">
+                                            Routine v<?= (int) $completion['version_number'] ?>
+                                        </a>
+                                    <?php endif; ?>
                                 </div>
                                 <p class="log-work"><?= e(str_limit((string) $log['work_done'], 160)) ?></p>
                                 <p class="cell-sub muted">

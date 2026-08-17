@@ -10,6 +10,7 @@ use App\Models\MaintenanceSchedule;
  * @var array<int,array<string,mixed>> $assets
  * @var array<int,array<string,mixed>> $users
  * @var array<int,array<string,mixed>> $teams
+ * @var array<int,array<string,mixed>> $routines
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
@@ -84,6 +85,29 @@ $assignedTo = array_key_exists('assigned_to', $old)
             <label class="label" for="instructions">Instructions <span class="optional">(optional)</span></label>
             <textarea class="input" id="instructions" name="instructions" rows="4" maxlength="5000"
                       placeholder="What needs doing, and anything the person doing it should know."><?= e($value('instructions')) ?></textarea>
+        </div>
+
+        <?php /* A routine sits beside the instructions rather than instead of
+                 them: a job can have a procedure to follow and a line of
+                 context about this particular machine. */ ?>
+        <div class="field">
+            <label class="label" for="routine_id">Routine to fill in <span class="optional">(optional)</span></label>
+            <select class="input<?= isset($errors['routine_id']) ? ' has-error' : '' ?>" id="routine_id" name="routine_id">
+                <option value="">No routine — record the work as free text</option>
+                <?php foreach ($routines as $routine): ?>
+                    <option value="<?= (int) $routine['id'] ?>" <?= $value('routine_id') === (string) $routine['id'] ? 'selected' : '' ?>>
+                        <?= e($routine['name']) ?> (v<?= (int) $routine['current_version_number'] ?>)
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <p class="field-hint">
+                Completing this job then steps through the routine instead of the free-text form, and
+                follows whichever version is live at the time.
+                <?php if ($routines === []): ?>
+                    No routine has been published yet.
+                <?php endif; ?>
+            </p>
+            <?php if (isset($errors['routine_id'])): ?><p class="field-error"><?= e($errors['routine_id']) ?></p><?php endif; ?>
         </div>
     </div>
 

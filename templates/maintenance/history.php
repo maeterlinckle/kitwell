@@ -8,6 +8,7 @@ use App\Models\MaintenanceLog;
  * @var array{rows:array<int,array<string,mixed>>,total:int,page:int,pages:int,per_page:int} $result
  * @var array<string,mixed> $filters
  * @var array<int,array<string,mixed>> $users
+ * @var array<int,array<string,mixed>> $completions keyed by maintenance log id
  * @var float $totalCost
  */
 $rows = $result['rows'];
@@ -121,6 +122,12 @@ $rows = $result['rows'];
                             <span class="badge badge-muted"><?= e($log['maintenance_type']) ?></span>
                             <?php if ((int) $log['photo_count'] > 0): ?>
                                 <span class="badge"><?= (int) $log['photo_count'] ?> photo<?= (int) $log['photo_count'] === 1 ? '' : 's' ?></span>
+                            <?php endif; ?>
+                            <?php if (isset($completions[(int) $log['id']])): ?>
+                                <?php $completion = $completions[(int) $log['id']]; ?>
+                                <a class="badge badge-link" href="<?= e(url('/maintenance/completions/' . (int) $completion['id'])) ?>">
+                                    Routine v<?= (int) $completion['version_number'] ?>
+                                </a>
                             <?php endif; ?>
                         </div>
                     </td>
