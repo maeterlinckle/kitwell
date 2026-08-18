@@ -52,6 +52,7 @@ $archived = array_values(array_filter($routines, static fn (array $r): bool => $
                     <thead>
                         <tr>
                             <th>Routine</th>
+                            <th>Applies to</th>
                             <th>Live version</th>
                             <th>Draft</th>
                             <th class="num">Times run</th>
@@ -68,6 +69,14 @@ $archived = array_values(array_filter($routines, static fn (array $r): bool => $
                                     </a>
                                     <?php if (!empty($routine['description'])): ?>
                                         <div class="cell-sub"><?= e(str_limit((string) $routine['description'], 90)) ?></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if ($routine['category_id'] !== null): ?>
+                                        <?= e((string) $routine['category_name']) ?>
+                                        <div class="cell-sub">and anything nested under it</div>
+                                    <?php else: ?>
+                                        <span class="muted">Any asset</span>
                                     <?php endif; ?>
                                 </td>
                                 <td>

@@ -142,7 +142,7 @@ scheduled job — checking on the way that the schedule rolls forward exactly as
 the free-text form makes it, and that a team-assigned job can be picked up by
 anybody with `maintenance.complete`.
 
-Three claims it exists to hold up:
+Six claims it exists to hold up:
 
 - **Designing and doing are different rights.** A Manager / Staff account can
   run any published routine and is refused the builder, the editor and the
@@ -155,10 +155,20 @@ Three claims it exists to hold up:
   searched for the questions and the answers, and the embedded photograph is
   found as a DCT-encoded image XObject. A file that opens in one viewer and not
   another is exactly what a bad xref table produces.
+- **A category covers its subtree.** A routine restricted to a parent category
+  is offered for an asset in a child category, hidden for one outside it, and
+  refused with a 404 when its address is requested directly — `GET` and `POST`
+  alike.
+- **A checklist run belongs to whoever gets to it.** Two accounts answer two
+  steps in the wrong order; the run refuses a sign-off while a required step is
+  blank, and the finished record carries both names plus who signed it off.
+- **The Routine scan target branches correctly.** All three cases are staged in
+  turn — an open run, a completion from today, and an asset with neither — and
+  the JSON lookup is checked to agree with the form post.
 
-> **This one writes too.** It creates routines, completions, schedules and
-> maintenance log entries. Its routine names carry a per-run nonce, since a
-> routine name is unique.
+> **This one writes too.** It creates categories, assets, routines, completions,
+> schedules and maintenance log entries. Its names carry a per-run nonce, since
+> a routine name is unique.
 
 ## The barcode decoder
 

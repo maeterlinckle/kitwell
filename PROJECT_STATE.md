@@ -54,7 +54,7 @@ Where something is *not* verified, it says so.
 
 Built by applying everything in `database/migrations/` to an empty database.
 
-**Totals:** 42 domain tables, 473 columns, 85 foreign keys.
+**Totals:** 42 domain tables, 479 columns, 88 foreign keys.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
 A database migrated with `php bin/migrate.php` has a **33rd** table,
@@ -65,7 +65,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-Five files, applied in filename order and recorded in `migrations`. Each is
+Six files, applied in filename order and recorded in `migrations`. Each is
 written to be safe to re-run.
 
 | File | Contents |
@@ -75,11 +75,14 @@ written to be safe to re-run.
 | `003_default_settings.sql` | The 51 setting keys a fresh install starts with, grouped by area. `INSERT IGNORE`, so an existing value is kept |
 | `004_media_library_and_templates.sql` | `media_library`, `asset_media`, `asset_templates`, `template_media`; moves every row of `asset_manuals` into the library and drops that table; adds `templates.manage` for admin and manager |
 | `005_maintenance_routines.sql` | `maintenance_routines`, `routine_versions`, `routine_pages`, `routine_steps`, `routine_completions`, `routine_responses`, `routine_response_files`; adds `maintenance_schedules.routine_id`; adds `routines.manage` for admin |
+| `006_routine_scope_and_open_runs.sql` | `maintenance_routines.category_id`; `routine_versions.allow_out_of_order`; `routine_completions.status` / `.started_by` and a nullable `completed_at`; `routine_responses.answered_by` / `.answered_at` |
 
-A fresh install and one upgraded through 005 produce the same schema —
-verified by migrating both and diffing `information_schema` column by column.
+A fresh install and one upgraded through 006 produce the same schema —
+verified by migrating both and diffing `information_schema` column by column,
+with rows in place on the upgraded one so an `ALTER` cannot be checked only
+against an empty table.
 
-To change the schema, add a new numbered file — `006_…` and upward. Do not edit
+To change the schema, add a new numbered file — `007_…` and upward. Do not edit
 one that has been applied anywhere.
 
 ### 2.2 Tables
@@ -479,8 +482,14 @@ window.
 
 #### `maintenance_routines`
 `id` int, `name` varchar(191) NN **unique**, `description` varchar(1000),
-`status` enum('active','archived') NN 'active', `created_by` (SET NULL),
-`created_at`, `updated_at`. Index `(status, name)`.
+**`category_id`** (SET NULL), `status` enum('active','archived') NN 'active',
+`created_by` (SET NULL), `created_at`, `updated_at`.
+Indexes `(status, name)`, `category_id`.
+
+`category_id` restricts the routine to that category **and everything nested
+beneath it**; NULL is unrestricted, and is the default. The match is made by
+walking *up* from the asset's own category (`Category::ancestorIds()`) rather
+than by expanding each candidate's subtree, so the picker is one query.
 
 The procedure itself. Archived keeps its history but is not offered for new
 work; there is no delete, because the records that followed it have to keep
@@ -488,7 +497,8 @@ working.
 
 #### `routine_versions`
 `id` int, `routine_id` NN (**CASCADE**), `version_number` smallint NN,
-`is_current` tinyint NN 0, `published_at` datetime (**NULL means draft**),
+`is_current` tinyint NN 0, **`allow_out_of_order` tinyint NN 0**,
+`published_at` datetime (**NULL means draft**),
 `published_by` (SET NULL), `created_at`, `updated_at`.
 Unique `(routine_id, version_number)`. Index `(routine_id, is_current)`.
 
@@ -512,10 +522,19 @@ Index `(page_id, position)`.
 #### `routine_completions`
 `id` bigint, `routine_id` NN (**RESTRICT**), `version_id` NN (**RESTRICT**),
 `asset_id` NN (CASCADE), `schedule_id` (SET NULL),
+**`status` enum('open','submitted') NN 'submitted'**,
 `maintenance_log_id` (**CASCADE**), `completed_by` (SET NULL),
-`started_at` datetime, `completed_at` datetime NN, `created_at`, `updated_at`.
+`started_at` datetime, **`started_by`** (SET NULL),
+`completed_at` datetime **NULL**, `created_at`, `updated_at`.
 Indexes `(routine_id, completed_at)`, `version_id`, `(asset_id, completed_at)`,
-`schedule_id`, `maintenance_log_id`.
+`schedule_id`, `maintenance_log_id`, `(asset_id, status)`.
+
+An **open** run is being worked through: no maintenance log yet, and no
+`completed_at`. `completed_by` / `completed_at` are the person who signed it
+off and when — deliberately not the same thing as who answered each step,
+which is on the response. **At most one open run per asset**, enforced by the
+application so that a second station scanning the item joins the run in
+progress rather than starting a rival to it.
 
 The two RESTRICTs are the versioning guarantee made structural: a version that
 has been used cannot be deleted, so a completion can never end up pointing at
@@ -526,7 +545,8 @@ record beside it.
 #### `routine_responses`
 `id` bigint, `completion_id` NN (CASCADE), `step_id` NN (**RESTRICT**),
 `value_text` text, `value_number` decimal(14,4), `value_date` date,
-`value_boolean` tinyint, `created_at`.
+`value_boolean` tinyint, **`answered_by`** (SET NULL),
+**`answered_at`** datetime, `created_at`.
 Unique `(completion_id, step_id)`. Index `step_id`.
 
 One row per answered step, with the value in whichever column its type calls
@@ -553,7 +573,7 @@ Added by 005: `int` NULL, FK to `maintenance_routines` (SET NULL), index
 instead of the free-text form. It sits *beside* `instructions` rather than
 instead of it.
 
-### 2.3 Foreign keys (85)
+### 2.3 Foreign keys (88)
 
 | Delete rule | Where it is used |
 |---|---|
@@ -719,7 +739,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── .gitignore
 ├── .gitattributes           forces LF on *.sh — a CRLF shebang breaks the installer
 ├── README.md                short introduction; the detail lives in docs/
-├── docs/                    20 pages, one per topic, plus the index (docs/README.md)
+├── docs/                    21 pages, one per topic, plus the index (docs/README.md)
 ├── INSTALL.md               the scripted install, unattended runs, failure modes
 ├── PROJECT_STATE.md         this file
 ├── composer.json            autoload only; no runtime packages
@@ -738,7 +758,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── config/
 │   └── config.php           every value from Env::get(); nothing hardcoded
 │
-├── database/migrations/     001…005, plain .sql, applied in filename order
+├── database/migrations/     001…006, plain .sql, applied in filename order
 ├── vendor/                  gitignored; created by `composer install` (PHPMailer)
 │
 ├── public/                  ← the only directory the web server should serve
@@ -749,7 +769,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │              routine-editor.js, api-docs.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 228 routes
+│   └── web.php              the whole route table, 235 routes
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -801,7 +821,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            faults/{faultReportId},
 │                            hires/{hireId}, branding/, imports/
 │
-├── templates/               113 .php templates
+├── templates/               117 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, brand, footer, print-header, flash,
 │   │                        photo-gallery, photo-upload, photo-inputs,
@@ -819,7 +839,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── maintenance/         index, show, form, complete, edit-log, history,
 │   │                        choose-asset
 │   ├── routines/            index, show, form, edit, preview, choose, run,
-│   │                        completion
+│   │                        start, contents, step, submit, completion
 │   ├── pat/                 index, show, form, history, wizard, choose-asset
 │   ├── hires/               index, show, checkout, return
 │   ├── hirers/              index, show, form
@@ -1433,6 +1453,28 @@ subdirectory.
 - **Routine evidence is exclusive**, like condition photos and PAT, fault and
   maintenance evidence. `routine_response_files` never touches `media_library`,
   and `tests/security-audit.php` asserts it alongside the other four.
+- **A routine's category covers its subtree.** `MaintenanceRoutine::runnableFor()`
+  is the picker's query and `appliesTo()` is the same rule asked of one routine;
+  `RoutineRunController::target()` calls the second, so a routine reached by
+  typing a URL is refused exactly where one hidden from the list would have
+  been. Both go through `Category::ancestorIds()`.
+- **A checklist version is worked through as a run, not a form.**
+  `routine_versions.allow_out_of_order` sends `run()` to a start card rather
+  than the wizard; everything after that happens at
+  `/maintenance/completions/{id}`, which is the contents page while the run is
+  open and the record once it is signed off. One address, two states.
+- **Required is enforced at sign-off, not on the way in.**
+  `RoutineRunController::outstanding()` reads what is *stored*, because the
+  answers arrive one at a time and from different people — and `submit()`
+  refuses while anything is outstanding, whether or not the button was disabled.
+- **Every answer carries its own name.** `saveResponse()` deletes and re-inserts
+  so that a corrected answer takes the corrector's name with it: the record has
+  to say who stands behind what it now says, not who first touched it.
+- **The Routine scan target decides in one place.**
+  `ScanController::routineDestination()` is called by both the form post and the
+  JSON lookup, so the camera, a USB scanner and a typed tag cannot disagree.
+  Open run → the run; else a completion inside
+  `RoutineCompletion::RECENT_DAYS` → that record; else the maintenance log page.
 
 ### 4.16 PDF
 
@@ -1661,6 +1703,20 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
     an ordinary maintenance log entry, has a page of its own laid out as it was
     filled in, and downloads as a PDF built by the new first-party
     `App\Core\Pdf` (§4.16).
+23. **Routines scoped, opened and scanned to.** A routine may name a
+    **category**, which restricts it to that category and everything nested
+    beneath it — enforced in the picker *and* by the runner, so a typed URL is
+    refused too. **Run routine instead** appears at the top of an asset's
+    maintenance log page exactly when a routine applies to it. A version may
+    allow its steps to be answered **out of order**: a run of one stays open as
+    a checklist with a contents page, any step answerable by anybody in any
+    order, each answer keeping the name of whoever gave it, and an explicit
+    sign-off recording separately who closed it out — with required steps
+    enforced at that sign-off rather than on the way through. **Routine** joins
+    the scan targets, branching to an open run, a record from the last seven
+    days, or the maintenance log page. On Add asset, *Available to hire out*
+    now defaults unticked with its help text full width beneath the label
+    (§6, the `.checkbox` note).
 
 ### 5.2 What has been verified, and how
 
@@ -1668,18 +1724,20 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 142 PHP files under `src/`, `bin/` and `routes/`, and all 113 templates | 0 failures |
+| `php -l` on all 142 PHP files under `src/`, `bin/` and `routes/`, and all 117 templates | 0 failures |
 | `tests/security-audit.php` | **45 passed, 0 failed** |
-| `tests/escape-audit.php` | **2896 output expressions across 113 templates, 0 unescaped** |
-| All 5 migrations against an empty database | applied cleanly; 42 tables, 473 columns, 85 FKs, all InnoDB |
-| A fresh install vs one upgraded through 005 | **identical** — 473 columns, 239 index rows and 85 foreign keys diffed one by one from `information_schema`, and a schedule that existed before the upgrade survives with `routine_id` NULL |
+| `tests/escape-audit.php` | **3033 output expressions across 117 templates, 0 unescaped** |
+| All 6 migrations against an empty database | applied cleanly; 42 tables, 479 columns, 88 FKs, all InnoDB |
+| A fresh install vs one upgraded through 006 | **identical** — 479 columns, 244 index rows and 88 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
 | Seed data counts | 4 roles / 38 permissions / 74 grants / 51 settings / 0 template overrides |
 | `tests/permission-matrix.php` | **408 checks, 0 mismatches** |
-| `tests/routines.php` | **72 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, and the PDF checked object by object |
+| `tests/routines.php` | **126 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, category-scoped, worked through out of order by two different accounts, scanned to, and the PDF checked object by object |
 | `tests/media-library.php` | **49 checks, 0 failed** — counted from the database *and* the filesystem |
 | `tests/fault-flow.php` | **68 checks, 0 failed** — end to end over HTTP, with a mail catcher |
 | `tests/api-contract.php` | **84 checks, 0 failed** — the API against its own generated specification |
 | `tests/docs-audit.php` | **47 checks, 0 failed** |
+| Live DOM, `/assets/create` | *Available to hire out* unticked, its hint `display: block`, starting below the label, left-aligned with it, 809px of an 809px row |
+| Live DOM, an open run at 1280px | one page head (not two), 73px step rows, labels aligned at a single left edge, no horizontal overflow |
 | Documentation links | every anchor and file link in `docs/` and `README.md` resolves |
 | `tests/totp-vectors.php` | **52 checks, 0 failed** — RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `tests/qr-encode.php` | **21 checks, 0 failed** — ISO/IEC 18004 Annex I error-correction codewords, and the geometry |
@@ -2307,6 +2365,25 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   enforces it; a CRLF shebang fails with a misleading "not found".
 - **Adding a required field to the settings form** breaks every test that POSTs a
   partial settings payload.
+- **`Controller::view()` renders; it does not return.** A controller that picks
+  between two views with an `if` and no `return` renders *both*, one under the
+  other — and the second one often works well enough not to throw, so the page
+  looks merely odd rather than broken. `RoutineRunController::run()` and
+  `show()` both branch this way and both say so.
+- **`isset()` cannot see a key whose value is null**, which is exactly what the
+  root of a tree looks like. `Category::ancestorIds()` walked up the categories
+  with `isset($parents[$current])` and stopped one short of the top every time,
+  so a routine restricted to a parent category matched nothing beneath it. Use
+  `array_key_exists()` — the same trap the contract tests hit with `??`.
+- **A `.field-hint` inside a `.checkbox` label is a `<span>`, and a span is
+  inline** — so its top margin does nothing and the sentence runs on after the
+  label in whatever width is left. It needs `display: block` *and* a flexed
+  wrapper (`.checkbox > span { flex: 1 1 auto }`) to get the row's full width.
+- **A test that asserts a control is absent needs the absence to be arrangeable.**
+  "No routine applies, so no button" cannot be staged on a database that already
+  holds an unrestricted routine. `tests/routines.php` asserts the biconditional
+  instead — the button is there exactly when the picker is not empty — which is
+  the actual requirement and is true whatever else is in the database.
 - **cURL silently stringifies a nested array in a multipart body.** With
   `CURLOPT_POSTFIELDS` and a file attached, `['step' => [12 => 'x']]` arrives at
   PHP as the literal word `Array` — which reads as a validation bug in the code

@@ -11,6 +11,8 @@ use App\Models\MaintenanceSchedule;
  * @var array<string,mixed>|null $schedule
  * @var array<string,mixed> $asset
  * @var array<int,array<string,mixed>> $users
+ * @var array<int,array<string,mixed>> $routines  applicable to this asset; empty on a scheduled job
+ * @var array<string,mixed>|null $openRun
  * @var string|null $nextDue
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
@@ -33,8 +35,27 @@ $defaultType = $isScheduled ? (string) $schedule['maintenance_type'] : 'repair';
             — <?= e($asset['name']) ?>
         </p>
     </div>
-    <a class="btn btn-ghost" href="<?= e($isScheduled ? url('/maintenance/' . $schedule['id']) : url('/assets/' . $asset['id'])) ?>">Cancel</a>
+    <div class="head-actions">
+        <?php /* Offered exactly when there is a routine behind it: a button
+                 that leads to an empty list is worse than no button. */ ?>
+        <?php if ($routines !== []): ?>
+            <a class="btn btn-primary" href="<?= e(url('/assets/' . $asset['id'] . '/routines')) ?>">
+                Run routine instead
+            </a>
+        <?php endif; ?>
+        <a class="btn btn-ghost" href="<?= e($isScheduled ? url('/maintenance/' . $schedule['id']) : url('/assets/' . $asset['id'])) ?>">Cancel</a>
+    </div>
 </div>
+
+<?php if ($openRun !== null): ?>
+    <div class="flash flash-info">
+        <span class="flash-text">
+            <strong><?= e($openRun['routine_name']) ?></strong> is open on this asset and part-answered.
+            <a href="<?= e(url('/maintenance/completions/' . (int) $openRun['id'])) ?>">Carry on with it</a>
+            instead of recording this separately.
+        </span>
+    </div>
+<?php endif; ?>
 
 <?php if ($isScheduled && !empty($schedule['instructions'])): ?>
     <div class="card notice-card">

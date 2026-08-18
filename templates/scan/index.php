@@ -2,7 +2,7 @@
 /**
  * Quick scan.
  *
- * @var string $mode  view | checkout | return | maintenance | pat | new
+ * @var string $mode  view | checkout | return | maintenance | routine | pat | new
  * @var array<string,mixed>|null $taken  The asset a New asset scan collided with
  */
 $titles = [
@@ -10,6 +10,7 @@ $titles = [
     'checkout'    => 'Scan to check out',
     'return'      => 'Scan to book in',
     'maintenance' => 'Scan to record maintenance',
+    'routine'     => 'Scan to work on a routine',
     'pat'         => 'Scan to record a PAT test',
     'new'         => 'Scan a tag for a new asset',
 ];
@@ -19,6 +20,7 @@ $blurbs = [
     'checkout'    => 'Scan the item going out. You will be taken straight to the checkout form.',
     'return'      => 'Scan the item coming back. You will be taken straight to its return form.',
     'maintenance' => 'Scan the item you have worked on. You will be taken straight to the record form.',
+    'routine'     => 'Scan the item in front of you. A routine already open on it opens at its contents so you can do your part; otherwise you land where one can be started.',
     'pat'         => 'Scan the appliance you are testing. You will be taken straight to the test form.',
     'new'         => 'Scan the label you are about to put on something. If nothing is using that tag yet, the Add asset form opens with it filled in.',
 ];
@@ -31,7 +33,7 @@ $taken = $taken ?? null;
         <p class="muted"><?= e($blurbs[$mode]) ?></p>
     </div>
     <div class="head-actions">
-        <?php foreach (['view' => 'Look up', 'checkout' => 'Check out', 'return' => 'Book in', 'maintenance' => 'Record work', 'pat' => 'PAT test', 'new' => 'New asset'] as $option => $label): ?>
+        <?php foreach (['view' => 'Look up', 'checkout' => 'Check out', 'return' => 'Book in', 'maintenance' => 'Record work', 'routine' => 'Routine', 'pat' => 'PAT test', 'new' => 'New asset'] as $option => $label): ?>
             <?php
             if ($option === 'checkout' && !can('hires.create')) {
                 continue;
@@ -40,6 +42,9 @@ $taken = $taken ?? null;
                 continue;
             }
             if ($option === 'maintenance' && !can('maintenance.complete')) {
+                continue;
+            }
+            if ($option === 'routine' && !can('maintenance.complete')) {
                 continue;
             }
             if ($option === 'pat' && !can('pat.manage')) {

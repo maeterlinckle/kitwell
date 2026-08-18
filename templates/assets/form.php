@@ -281,8 +281,8 @@ $responsible = array_key_exists('responsible', $old)
 
         <div class="field">
             <label class="checkbox">
-                <input type="checkbox" name="is_hireable" value="1" <?= $checked('is_hireable', true) ? 'checked' : '' ?>>
-                <span>Available to hire out<span class="field-hint">Untick for fixed machinery or anything that must not leave site.</span></span>
+                <input type="checkbox" name="is_hireable" value="1" <?= $checked('is_hireable', false) ? 'checked' : '' ?>>
+                <span>Available to hire out<span class="field-hint">Tick for anything that goes out to a hirer. Leave it off for fixed machinery, or anything that must not leave site.</span></span>
             </label>
         </div>
     </div>

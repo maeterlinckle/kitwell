@@ -10,6 +10,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Models\Asset;
 use App\Models\Hire;
+use App\Models\RoutineCompletion;
 
 /**
  * Quick scan, reachable from every page.
@@ -26,7 +27,7 @@ use App\Models\Hire;
  */
 final class ScanController extends Controller
 {
-    private const MODES = ['view', 'checkout', 'return', 'maintenance', 'pat', 'new'];
+    private const MODES = ['view', 'checkout', 'return', 'maintenance', 'routine', 'pat', 'new'];
 
     public function index(): void
     {
@@ -107,14 +108,78 @@ final class ScanController extends Controller
                 'checkout'    => Auth::can('hires.create') && $blocked === null,
                 'return'      => Auth::can('hires.return') && $openHire !== null,
                 'maintenance' => Auth::can('maintenance.complete'),
+                'routine'     => Auth::can('maintenance.complete'),
                 'pat'         => Auth::can('pat.manage'),
             ],
             'blocked'         => $blocked,
+            'routine'         => self::routineJson($assetId),
             'edit_url'        => url('/assets/' . $assetId . '/edit'),
             'checkout_url'    => url('/hires/checkout?asset=' . $assetId),
             'maintenance_url' => url('/assets/' . $assetId . '/maintenance/log'),
             'pat_url'         => url('/pat/create?asset=' . $assetId),
         ]);
+    }
+
+    /**
+     * The same decision, shaped for the scanner's JSON.
+     *
+     * @return array{url:string,reason:string,completed_on:?string}
+     */
+    private static function routineJson(int $assetId): array
+    {
+        $destination = self::routineDestination($assetId);
+
+        return [
+            'url'          => url($destination['path']),
+            'reason'       => $destination['reason'],
+            'completed_on' => $destination['completed_on'] === null
+                ? null
+                : format_date($destination['completed_on']),
+        ];
+    }
+
+    /**
+     * Where a Routine scan should land.
+     *
+     * Three cases, in order:
+     *   - a run is open on this asset — go to it, because that is the whole
+     *     point of scanning at a station;
+     *   - a routine was completed on it within the last few days — show that
+     *     record, so nobody repeats work that was just done;
+     *   - otherwise the maintenance log page, which offers to start a routine.
+     *
+     * @return array{path:string,reason:string,completion_id:int,completed_on:?string}
+     */
+    private static function routineDestination(int $assetId): array
+    {
+        $open = RoutineCompletion::openForAsset($assetId);
+
+        if ($open !== null) {
+            return [
+                'path'          => '/maintenance/completions/' . (int) $open['id'],
+                'reason'        => 'open',
+                'completion_id' => (int) $open['id'],
+                'completed_on'  => null,
+            ];
+        }
+
+        $recent = RoutineCompletion::recentForAsset($assetId);
+
+        if ($recent !== null) {
+            return [
+                'path'          => '/maintenance/completions/' . (int) $recent['id'],
+                'reason'        => 'recent',
+                'completion_id' => (int) $recent['id'],
+                'completed_on'  => (string) $recent['completed_at'],
+            ];
+        }
+
+        return [
+            'path'          => '/assets/' . $assetId . '/maintenance/log',
+            'reason'        => 'none',
+            'completion_id' => 0,
+            'completed_on'  => null,
+        ];
     }
 
     /**
@@ -180,6 +245,22 @@ final class ScanController extends Controller
         // Recording the work is the errand; the asset page is a detour.
         if ($mode === 'maintenance' && Auth::can('maintenance.complete')) {
             Response::redirect('/assets/' . $assetId . '/maintenance/log');
+        }
+
+        // A routine scan is the one that has to think. Somebody standing at a
+        // station wants their part of the job in front of them, not a menu.
+        if ($mode === 'routine' && Auth::can('maintenance.complete')) {
+            $destination = self::routineDestination($assetId);
+
+            if ($destination['reason'] === 'recent') {
+                Flash::info(sprintf(
+                    '%s had a routine completed on %s. Check it before starting the work again.',
+                    (string) $asset['asset_tag'],
+                    format_date((string) $destination['completed_on'])
+                ));
+            }
+
+            Response::redirect($destination['path']);
         }
 
         // Same for a PAT test: the tester has the appliance in their hand.

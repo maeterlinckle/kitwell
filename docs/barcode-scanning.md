@@ -49,7 +49,9 @@ Three ways in, all landing at the same lookup:
 
 Scan modes: **Look up** jumps to the asset, **Check out** goes straight to the
 checkout form, **Book in** goes to that item's return form, **Record work**
-goes to the maintenance form, **PAT test** goes to the test form. A successful
+goes to the maintenance form, **PAT test** goes to the test form, and
+**Routine** goes to whichever part of a maintenance routine the item is up
+to — see [Maintenance routines](routines.md#scanning-to-a-routine). A successful
 read beeps and vibrates, so you are not staring at the screen.
 
 **A good scan does not ask you to confirm it.** An asset tag identifies exactly
@@ -159,4 +161,4 @@ is a mail client's message pane.
 
 ---
 
-**See also:** [Documentation index](README.md) · [Assets](assets.md) · [Hires and hirers](hires.md)
+**See also:** [Documentation index](README.md) · [Assets](assets.md) · [Maintenance routines](routines.md) · [Hires and hirers](hires.md)

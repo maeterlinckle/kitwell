@@ -237,11 +237,15 @@ final class MaintenanceController extends Controller
             ));
         }
 
+        // Reached only when the job names no runnable routine, so the
+        // "run one instead" offer would be noise here.
         $this->view('maintenance/complete', [
             'pageTitle' => 'Complete: ' . $schedule['title'],
             'schedule'  => $schedule,
             'asset'     => Asset::find((int) $schedule['asset_id']),
             'users'     => MaintenanceSchedule::assignableUsers(),
+            'routines'  => [],
+            'openRun'   => null,
             'nextDue'   => MaintenanceSchedule::nextDueAfter($schedule, date('Y-m-d')),
         ]);
     }
@@ -308,11 +312,18 @@ final class MaintenanceController extends Controller
             $this->notFound();
         }
 
+        // Only what actually applies to this asset. The button is offered
+        // exactly when there is something behind it, which is why the list is
+        // fetched rather than the count guessed at.
+        $categoryId = (int) ($asset['category_id'] ?? 0);
+
         $this->view('maintenance/complete', [
             'pageTitle' => 'Log maintenance · ' . $asset['asset_tag'],
             'schedule'  => null,
             'asset'     => $asset,
             'users'     => MaintenanceSchedule::assignableUsers(),
+            'routines'  => MaintenanceRoutine::runnableFor($categoryId > 0 ? $categoryId : null),
+            'openRun'   => RoutineCompletion::openForAsset((int) $asset['id']),
             'nextDue'   => null,
         ]);
     }

@@ -46,7 +46,8 @@ final class RoutineRunController extends Controller
         $this->view('routines/choose', [
             'pageTitle' => 'Run a routine · ' . $asset['asset_tag'],
             'asset'     => $asset,
-            'routines'  => MaintenanceRoutine::runnable(),
+            'routines'  => MaintenanceRoutine::runnableFor(self::categoryOf($asset)),
+            'openRun'   => RoutineCompletion::openForAsset((int) $asset['id']),
         ]);
     }
 
@@ -56,6 +57,30 @@ final class RoutineRunController extends Controller
         [$asset, $routine, $version] = $this->target((int) $assetId, (int) $routineId);
 
         $schedule = $this->scheduleFromQuery((int) $asset['id'], (int) $routine['id']);
+
+        // A version worked through as a checklist is not a form to fill in and
+        // post; it is a run that gets opened and then visited. Join the one
+        // already open on this asset rather than starting a rival to it.
+        if ((int) $version['allow_out_of_order'] === 1) {
+            $open = RoutineCompletion::openForAsset((int) $asset['id']);
+
+            if ($open !== null) {
+                Response::redirect('/maintenance/completions/' . (int) $open['id']);
+            }
+
+            $this->view('routines/start', [
+                'pageTitle' => 'Start ' . $routine['name'],
+                'asset'     => $asset,
+                'routine'   => $routine,
+                'version'   => $version,
+                'schedule'  => $schedule,
+                'pages'     => MaintenanceRoutine::structure((int) $version['id']),
+            ]);
+
+            // view() writes the page; it does not end the request. Without this
+            // the wizard below is rendered underneath the start card.
+            return;
+        }
 
         $this->view('routines/run', [
             'pageTitle' => $routine['name'] . ' · ' . $asset['asset_tag'],
@@ -81,65 +106,37 @@ final class RoutineRunController extends Controller
         $redirect = '/assets/' . (int) $asset['id'] . '/routines/' . (int) $routine['id'] . '/run'
             . ($scheduleId === null ? '' : '?schedule=' . $scheduleId);
 
-        $steps  = MaintenanceRoutine::allSteps((int) $version['id']);
+        $steps   = MaintenanceRoutine::allSteps((int) $version['id']);
         $answers = $this->readAnswers($steps, $redirect);
-
-        $log = $this->validate([
-            'performed_on'         => 'required|date',
-            'result'               => 'required|in:' . implode(',', MaintenanceLog::RESULTS),
-            'performed_by_user_id' => 'integer',
-            'condition_after'      => 'in:' . implode(',', Asset::CONDITIONS),
-            'notes'                => 'max:5000',
-            'next_due_date'        => 'date',
-        ], [
-            'performed_on'    => 'Date performed',
-            'result'          => 'Result',
-            'condition_after' => 'Condition afterwards',
-            'next_due_date'   => 'Next due date',
-        ], $redirect);
-
-        if ($log['performed_on'] > date('Y-m-d')) {
-            $this->failValidation(['performed_on' => 'The date performed cannot be in the future.'], $redirect);
-        }
-
-        $performedBy = (int) $log['performed_by_user_id'];
-
-        // The routine's own name is what the history should read, so the log's
-        // "work done" says which procedure was followed and which edition of
-        // it, and the notes box adds whatever the technician wants to say.
-        $workDone = sprintf('%s (v%d)', $routine['name'], (int) $version['version_number']);
+        $log     = $this->validateLog($redirect);
 
         Database::beginTransaction();
 
         try {
-            $logId = MaintenanceLog::create([
-                'asset_id'             => (int) $asset['id'],
-                'schedule_id'          => $scheduleId,
-                'maintenance_type'     => $schedule === null ? 'inspection' : 'routine',
-                'performed_on'         => $log['performed_on'],
-                'performed_by_user_id' => $performedBy > 0 ? $performedBy : Auth::id(),
-                'work_done'            => $workDone,
-                'result'               => $log['result'],
-                'condition_after'      => $log['condition_after'] !== '' ? $log['condition_after'] : null,
-                'notes'                => $log['notes'] !== '' ? $log['notes'] : null,
-                'created_by'           => Auth::id(),
-            ]);
-
-            $startedAt = (string) Request::post('started_at', '');
+            $logId = $this->writeLog($asset, $routine, $version, $schedule, $log);
 
             $completionId = RoutineCompletion::create([
                 'routine_id'         => (int) $routine['id'],
                 'version_id'         => (int) $version['id'],
                 'asset_id'           => (int) $asset['id'],
                 'schedule_id'        => $scheduleId,
+                'status'             => 'submitted',
                 'maintenance_log_id' => $logId,
                 'completed_by'       => Auth::id(),
-                'started_at'         => self::timestamp($startedAt),
+                'started_at'         => self::timestamp((string) Request::post('started_at', '')),
+                'started_by'         => Auth::id(),
                 'completed_at'       => date('Y-m-d H:i:s'),
             ]);
 
+            $answeredAt = date('Y-m-d H:i:s');
+
             foreach ($answers as $stepId => $values) {
-                RoutineCompletion::addResponse(['completion_id' => $completionId, 'step_id' => $stepId] + $values);
+                RoutineCompletion::addResponse([
+                    'completion_id' => $completionId,
+                    'step_id'       => $stepId,
+                    'answered_by'   => Auth::id(),
+                    'answered_at'   => $answeredAt,
+                ] + $values);
             }
 
             Database::commit();
@@ -153,52 +150,59 @@ final class RoutineRunController extends Controller
         // nothing behind, but a rolled-back file does not delete itself.
         $this->storeFiles($completionId, $steps);
 
-        if ($schedule !== null) {
-            $nextDue = $log['next_due_date'] !== ''
-                ? $log['next_due_date']
-                : MaintenanceSchedule::nextDueAfter($schedule, (string) $log['performed_on']);
+        $this->afterCompletion($asset, $routine, $version, $schedule, $log, $completionId);
 
-            MaintenanceSchedule::applyCompletion(
-                $scheduleId,
-                (string) $log['performed_on'],
-                $nextDue,
-                $schedule['maintenance_type'] === 'ad-hoc'
-            );
-        }
-
-        $assetChanges = [];
-
-        if (in_array($log['condition_after'], Asset::CONDITIONS, true)) {
-            $assetChanges['condition_rating'] = $log['condition_after'];
-        }
-
-        if (Request::boolean('return_to_stock') && $asset['status'] === 'In Maintenance') {
-            $assetChanges['status'] = 'In Stock';
-        }
-
-        if ($assetChanges !== []) {
-            $assetChanges['updated_by'] = Auth::id();
-            Asset::update((int) $asset['id'], $assetChanges);
-        }
-
-        ActivityLog::record(
-            'maintenance_logged',
-            'asset',
-            (int) $asset['id'],
-            sprintf(
-                'Completed the routine "%s" (v%d) on %s',
-                $routine['name'],
-                (int) $version['version_number'],
-                format_date((string) $log['performed_on'])
-            ),
-            ['routine_completion_id' => $completionId]
-        );
-
-        Flash::success(sprintf('Routine recorded against %s.', $asset['asset_tag']));
+        Flash::success(sprintf('Routine recorded against %s.', (string) $asset['asset_tag']));
         Response::redirect('/maintenance/completions/' . $completionId);
     }
 
-    /** A completed routine, laid out as it was filled in. */
+    /** Open a run of a checklist routine, and go straight to its contents. */
+    public function start(string $assetId, string $routineId): void
+    {
+        [$asset, $routine, $version] = $this->target((int) $assetId, (int) $routineId);
+
+        if ((int) $version['allow_out_of_order'] !== 1) {
+            $this->notFound('That routine is filled in as one form, not opened as a run.');
+        }
+
+        $open = RoutineCompletion::openForAsset((int) $asset['id']);
+
+        if ($open !== null) {
+            Flash::info('There is already a run open on ' . $asset['asset_tag'] . '.');
+            Response::redirect('/maintenance/completions/' . (int) $open['id']);
+        }
+
+        $schedule = $this->scheduleFromQuery((int) $asset['id'], (int) $routine['id']);
+
+        $completionId = RoutineCompletion::create([
+            'routine_id'   => (int) $routine['id'],
+            'version_id'   => (int) $version['id'],
+            'asset_id'     => (int) $asset['id'],
+            'schedule_id'  => $schedule === null ? null : (int) $schedule['id'],
+            'status'       => 'open',
+            'started_at'   => date('Y-m-d H:i:s'),
+            'started_by'   => Auth::id(),
+            'completed_at' => null,
+        ]);
+
+        ActivityLog::record(
+            'routine_started',
+            'asset',
+            (int) $asset['id'],
+            sprintf('Started the routine "%s" (v%d)', (string) $routine['name'], (int) $version['version_number'])
+        );
+
+        Flash::success('Run started. Its steps can be answered in any order, by anybody.');
+        Response::redirect('/maintenance/completions/' . $completionId);
+    }
+
+    /**
+     * A run, or a record.
+     *
+     * One address either way. While a run is open this is its contents — every
+     * page and step, what it says now and who put it there — and once it has
+     * been signed off the same address is the record of what was done.
+     */
     public function show(string $id): void
     {
         $completion = RoutineCompletion::find((int) $id);
@@ -207,13 +211,205 @@ final class RoutineRunController extends Controller
             $this->notFound();
         }
 
+        $pages     = MaintenanceRoutine::structure((int) $completion['version_id']);
+        $responses = RoutineCompletion::responses((int) $completion['id']);
+        $files     = RoutineCompletion::files((int) $completion['id']);
+
+        if ($completion['status'] === 'open') {
+            $this->view('routines/contents', [
+                'pageTitle'   => $completion['routine_name'] . ' · ' . $completion['asset_tag'],
+                'completion'  => $completion,
+                'pages'       => $pages,
+                'responses'   => $responses,
+                'files'       => $files,
+                'attribution' => RoutineCompletion::attribution((int) $completion['id']),
+                'outstanding' => self::outstanding($pages, $responses, $files),
+            ]);
+
+            // Same reason: one of these two pages, never both.
+            return;
+        }
+
         $this->view('routines/completion', [
-            'pageTitle'  => $completion['routine_name'] . ' · ' . $completion['asset_tag'],
-            'completion' => $completion,
-            'pages'      => MaintenanceRoutine::structure((int) $completion['version_id']),
-            'responses'  => RoutineCompletion::responses((int) $completion['id']),
-            'files'      => RoutineCompletion::files((int) $completion['id']),
+            'pageTitle'   => $completion['routine_name'] . ' · ' . $completion['asset_tag'],
+            'completion'  => $completion,
+            'pages'       => $pages,
+            'responses'   => $responses,
+            'files'       => $files,
+            'attribution' => RoutineCompletion::attribution((int) $completion['id']),
         ]);
+    }
+
+    /** One step of an open run, on its own. */
+    public function step(string $id, string $stepId): void
+    {
+        [$completion, $step] = $this->openStep((int) $id, (int) $stepId);
+
+        $pages = MaintenanceRoutine::structure((int) $completion['version_id']);
+
+        $this->view('routines/step', [
+            'pageTitle'   => $step['label'] . ' · ' . $completion['asset_tag'],
+            'completion'  => $completion,
+            'step'        => $step,
+            'position'    => self::positionOf($pages, (int) $step['id']),
+            'response'    => RoutineCompletion::responses((int) $completion['id'])[(int) $step['id']] ?? null,
+            'stepFiles'   => RoutineCompletion::files((int) $completion['id'])[(int) $step['id']] ?? [],
+            'attribution' => RoutineCompletion::attribution((int) $completion['id'])[(int) $step['id']] ?? null,
+        ]);
+    }
+
+    /** Record the answer to one step, whoever happens to be at the machine. */
+    public function saveStep(string $id, string $stepId): void
+    {
+        [$completion, $step] = $this->openStep((int) $id, (int) $stepId);
+
+        $completionId = (int) $completion['id'];
+        $stepKey      = (int) $step['id'];
+        $redirect     = '/maintenance/completions/' . $completionId . '/steps/' . $stepKey;
+
+        // Steps are answered one at a time here, so "required" cannot be
+        // enforced yet — that is what signing off is for. The type checks
+        // still apply, which is why the step is passed through as optional.
+        $optional = $step;
+        $optional['is_required'] = 0;
+
+        $answers = $this->readAnswers([$optional], $redirect);
+
+        if (in_array((string) $step['field_type'], MaintenanceRoutine::FILE_TYPES, true)) {
+            if (Upload::files('step_file_' . $stepKey) === []) {
+                Flash::info('Nothing was attached, so nothing changed.');
+                Response::redirect($redirect);
+            }
+
+            // Attaching again replaces what was there, and the files that go
+            // are removed from disk with it: nothing else refers to them.
+            foreach (RoutineCompletion::forgetFiles($completionId, $stepKey) as $old) {
+                Upload::delete((string) $old['file_path']);
+            }
+
+            $this->storeFiles($completionId, [$step]);
+
+            RoutineCompletion::saveResponse($completionId, $stepKey, [
+                'value_text'    => null,
+                'value_number'  => null,
+                'value_date'    => null,
+                'value_boolean' => null,
+            ], Auth::id());
+        } elseif (isset($answers[$stepKey])) {
+            RoutineCompletion::saveResponse($completionId, $stepKey, $answers[$stepKey], Auth::id());
+        } else {
+            // Cleared on purpose. An answer taken away has to stop being an
+            // answer, or the contents page carries on calling the step done.
+            RoutineCompletion::forgetResponse($completionId, $stepKey);
+        }
+
+        Flash::success('Saved.');
+        Response::redirect('/maintenance/completions/' . $completionId . '#step-' . $stepKey);
+    }
+
+    /** The form that signs an open run off. */
+    public function submitForm(string $id): void
+    {
+        $completion = $this->openRun((int) $id);
+
+        $pages     = MaintenanceRoutine::structure((int) $completion['version_id']);
+        $responses = RoutineCompletion::responses((int) $completion['id']);
+        $files     = RoutineCompletion::files((int) $completion['id']);
+
+        $schedule = $completion['schedule_id'] === null
+            ? null
+            : MaintenanceSchedule::find((int) $completion['schedule_id']);
+
+        $this->view('routines/submit', [
+            'pageTitle'   => 'Sign off ' . $completion['routine_name'],
+            'completion'  => $completion,
+            'asset'       => Asset::find((int) $completion['asset_id']),
+            'schedule'    => $schedule,
+            'users'       => MaintenanceSchedule::assignableUsers(),
+            'outstanding' => self::outstanding($pages, $responses, $files),
+            'nextDue'     => $schedule === null ? null : MaintenanceSchedule::nextDueAfter($schedule, date('Y-m-d')),
+        ]);
+    }
+
+    /**
+     * Sign an open run off.
+     *
+     * The required steps are checked here rather than on the way in, which is
+     * the whole point of a checklist: they can be answered in any order, but
+     * the run is not finished until they all are.
+     */
+    public function submit(string $id): void
+    {
+        $completion   = $this->openRun((int) $id);
+        $completionId = (int) $completion['id'];
+        $redirect     = '/maintenance/completions/' . $completionId . '/submit';
+
+        $pages       = MaintenanceRoutine::structure((int) $completion['version_id']);
+        $outstanding = self::outstanding(
+            $pages,
+            RoutineCompletion::responses($completionId),
+            RoutineCompletion::files($completionId)
+        );
+
+        if ($outstanding !== []) {
+            Flash::error(sprintf(
+                '%d required step%s still to answer. A routine cannot be signed off part-finished.',
+                count($outstanding),
+                count($outstanding) === 1 ? '' : 's'
+            ));
+            Response::redirect('/maintenance/completions/' . $completionId);
+        }
+
+        $asset    = Asset::find((int) $completion['asset_id']);
+        $routine  = MaintenanceRoutine::find((int) $completion['routine_id']);
+        $version  = MaintenanceRoutine::findVersion((int) $completion['version_id']);
+        $schedule = $completion['schedule_id'] === null
+            ? null
+            : MaintenanceSchedule::find((int) $completion['schedule_id']);
+
+        if ($asset === null || $routine === null || $version === null) {
+            $this->notFound();
+        }
+
+        $log   = $this->validateLog($redirect);
+        $logId = $this->writeLog($asset, $routine, $version, $schedule, $log);
+
+        RoutineCompletion::update($completionId, [
+            'status'             => 'submitted',
+            'maintenance_log_id' => $logId,
+            'completed_by'       => Auth::id(),
+            'completed_at'       => date('Y-m-d H:i:s'),
+        ]);
+
+        $this->afterCompletion($asset, $routine, $version, $schedule, $log, $completionId);
+
+        Flash::success(sprintf('Routine signed off against %s.', (string) $asset['asset_tag']));
+        Response::redirect('/maintenance/completions/' . $completionId);
+    }
+
+    /** Abandon an open run, taking its answers and files with it. */
+    public function discard(string $id): void
+    {
+        $completion   = $this->openRun((int) $id);
+        $completionId = (int) $completion['id'];
+
+        foreach (RoutineCompletion::files($completionId) as $stepFiles) {
+            foreach ($stepFiles as $file) {
+                Upload::delete((string) $file['file_path']);
+            }
+        }
+
+        ActivityLog::record(
+            'routine_discarded',
+            'asset',
+            (int) $completion['asset_id'],
+            sprintf('Discarded the open run of "%s"', (string) $completion['routine_name'])
+        );
+
+        RoutineCompletion::delete($completionId);
+
+        Flash::success('Run discarded. Nothing was recorded against the asset.');
+        Response::redirect('/assets/' . (int) $completion['asset_id']);
     }
 
     /** The same record as a document, for filing or sending on. */
@@ -278,6 +474,245 @@ final class RoutineRunController extends Controller
 
         readfile($path);
         exit;
+    }
+
+    // -- Closing a run out ---------------------------------------------------
+
+    /**
+     * The maintenance record's own fields, which every routine produces
+     * whichever way it was filled in.
+     *
+     * @return array<string,mixed>
+     */
+    private function validateLog(string $redirect): array
+    {
+        $log = $this->validate([
+            'performed_on'         => 'required|date',
+            'result'               => 'required|in:' . implode(',', MaintenanceLog::RESULTS),
+            'performed_by_user_id' => 'integer',
+            'condition_after'      => 'in:' . implode(',', Asset::CONDITIONS),
+            'notes'                => 'max:5000',
+            'next_due_date'        => 'date',
+        ], [
+            'performed_on'    => 'Date performed',
+            'result'          => 'Result',
+            'condition_after' => 'Condition afterwards',
+            'next_due_date'   => 'Next due date',
+        ], $redirect);
+
+        if ($log['performed_on'] > date('Y-m-d')) {
+            $this->failValidation(['performed_on' => 'The date performed cannot be in the future.'], $redirect);
+        }
+
+        return $log;
+    }
+
+    /**
+     * Write the maintenance log entry a completion produces.
+     *
+     * The routine's own name is what the history should read, so "work done"
+     * says which procedure was followed and which edition of it; the notes box
+     * adds whatever the technician wants to say.
+     *
+     * @param array<string,mixed> $asset
+     * @param array<string,mixed> $routine
+     * @param array<string,mixed> $version
+     * @param array<string,mixed>|null $schedule
+     * @param array<string,mixed> $log
+     */
+    private function writeLog(array $asset, array $routine, array $version, ?array $schedule, array $log): int
+    {
+        $performedBy = (int) $log['performed_by_user_id'];
+
+        return MaintenanceLog::create([
+            'asset_id'             => (int) $asset['id'],
+            'schedule_id'          => $schedule === null ? null : (int) $schedule['id'],
+            'maintenance_type'     => $schedule === null ? 'inspection' : 'routine',
+            'performed_on'         => $log['performed_on'],
+            'performed_by_user_id' => $performedBy > 0 ? $performedBy : Auth::id(),
+            'work_done'            => sprintf('%s (v%d)', (string) $routine['name'], (int) $version['version_number']),
+            'result'               => $log['result'],
+            'condition_after'      => $log['condition_after'] !== '' ? $log['condition_after'] : null,
+            'notes'                => $log['notes'] !== '' ? $log['notes'] : null,
+            'created_by'           => Auth::id(),
+        ]);
+    }
+
+    /**
+     * Everything that follows a completion: the schedule rolls forward, the
+     * asset takes its recorded condition, and the activity log says so.
+     *
+     * @param array<string,mixed> $asset
+     * @param array<string,mixed> $routine
+     * @param array<string,mixed> $version
+     * @param array<string,mixed>|null $schedule
+     * @param array<string,mixed> $log
+     */
+    private function afterCompletion(array $asset, array $routine, array $version, ?array $schedule, array $log, int $completionId): void
+    {
+        if ($schedule !== null) {
+            $nextDue = $log['next_due_date'] !== ''
+                ? $log['next_due_date']
+                : MaintenanceSchedule::nextDueAfter($schedule, (string) $log['performed_on']);
+
+            MaintenanceSchedule::applyCompletion(
+                (int) $schedule['id'],
+                (string) $log['performed_on'],
+                $nextDue,
+                $schedule['maintenance_type'] === 'ad-hoc'
+            );
+        }
+
+        $assetChanges = [];
+
+        if (in_array($log['condition_after'], Asset::CONDITIONS, true)) {
+            $assetChanges['condition_rating'] = $log['condition_after'];
+        }
+
+        if (Request::boolean('return_to_stock') && $asset['status'] === 'In Maintenance') {
+            $assetChanges['status'] = 'In Stock';
+        }
+
+        if ($assetChanges !== []) {
+            $assetChanges['updated_by'] = Auth::id();
+            Asset::update((int) $asset['id'], $assetChanges);
+        }
+
+        ActivityLog::record(
+            'maintenance_logged',
+            'asset',
+            (int) $asset['id'],
+            sprintf(
+                'Completed the routine "%s" (v%d) on %s',
+                (string) $routine['name'],
+                (int) $version['version_number'],
+                format_date((string) $log['performed_on'])
+            ),
+            ['routine_completion_id' => $completionId]
+        );
+    }
+
+    // -- Open runs -----------------------------------------------------------
+
+    /**
+     * An open run, or a refusal.
+     *
+     * A run that has already been signed off is history: it is read at its own
+     * address and changed nowhere.
+     *
+     * @return array<string,mixed>
+     */
+    private function openRun(int $id): array
+    {
+        $completion = RoutineCompletion::find($id);
+
+        if ($completion === null) {
+            $this->notFound();
+        }
+
+        if ($completion['status'] !== 'open') {
+            Flash::info('That routine has already been signed off.');
+            Response::redirect('/maintenance/completions/' . $id);
+        }
+
+        return $completion;
+    }
+
+    /**
+     * An open run and one step of the version it is following.
+     *
+     * The step is checked against the run's own version, so a step id
+     * belonging to a different routine — or to a different edition of this one
+     * — cannot be answered into it.
+     *
+     * @return array{0:array<string,mixed>,1:array<string,mixed>}
+     */
+    private function openStep(int $id, int $stepId): array
+    {
+        $completion = $this->openRun($id);
+        $step       = MaintenanceRoutine::findStep($stepId);
+
+        if ($step === null) {
+            $this->notFound('That step is not part of this routine.');
+        }
+
+        $page = MaintenanceRoutine::findPage((int) $step['page_id']);
+
+        if ($page === null || (int) $page['version_id'] !== (int) $completion['version_id']) {
+            $this->notFound('That step is not part of this routine.');
+        }
+
+        return [$completion, $step];
+    }
+
+    /**
+     * The required steps of a run that still have no answer.
+     *
+     * Worked out from what is stored rather than from what was posted, because
+     * the answers arrive one at a time and from different people.
+     *
+     * @param array<int,array<string,mixed>> $pages
+     * @param array<int,array<string,mixed>> $responses keyed by step id
+     * @param array<int,array<int,array<string,mixed>>> $files keyed by step id
+     * @return array<int,array<string,mixed>>
+     */
+    private static function outstanding(array $pages, array $responses, array $files): array
+    {
+        $missing = [];
+
+        foreach ($pages as $page) {
+            foreach ((array) $page['steps'] as $step) {
+                if ((int) $step['is_required'] !== 1) {
+                    continue;
+                }
+
+                if (!self::isAnswered($step, $responses, $files)) {
+                    $missing[] = $step + ['page_title' => $page['title']];
+                }
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
+     * Has this step been answered?
+     *
+     * A file step counts once a file is attached; everything else counts once
+     * a response row exists, which is only written for a value that is
+     * actually there.
+     *
+     * @param array<string,mixed> $step
+     * @param array<int,array<string,mixed>> $responses
+     * @param array<int,array<int,array<string,mixed>>> $files
+     */
+    public static function isAnswered(array $step, array $responses, array $files): bool
+    {
+        $stepId = (int) $step['id'];
+
+        if (in_array((string) $step['field_type'], MaintenanceRoutine::FILE_TYPES, true)) {
+            return ($files[$stepId] ?? []) !== [];
+        }
+
+        return RoutineCompletion::answer($step, $responses[$stepId] ?? null) !== null;
+    }
+
+    /**
+     * "Page 2, step 3" — where a step sits, for a page that shows only it.
+     *
+     * @param array<int,array<string,mixed>> $pages
+     */
+    private static function positionOf(array $pages, int $stepId): string
+    {
+        foreach ($pages as $pageIndex => $page) {
+            foreach ((array) $page['steps'] as $stepIndex => $step) {
+                if ((int) $step['id'] === $stepId) {
+                    return sprintf('Page %d, step %d', $pageIndex + 1, $stepIndex + 1);
+                }
+            }
+        }
+
+        return '';
     }
 
     // -- Reading a submission ------------------------------------------------
@@ -516,6 +951,17 @@ final class RoutineRunController extends Controller
             $this->notFound('That routine is not available to run.');
         }
 
+        // The picker only offers applicable routines; this is what makes that
+        // a rule rather than a courtesy, since a URL can be typed.
+        if (!MaintenanceRoutine::appliesTo($routine, self::categoryOf($asset))) {
+            $this->notFound(sprintf(
+                'The routine "%s" is for %s equipment, and %s is not in that category.',
+                $routine['name'],
+                (string) ($routine['category_name'] ?? 'another category'),
+                (string) $asset['asset_tag']
+            ));
+        }
+
         $version = MaintenanceRoutine::currentVersion($routineId);
 
         if ($version === null) {
@@ -550,6 +996,14 @@ final class RoutineRunController extends Controller
         }
 
         return $schedule;
+    }
+
+    /** An asset's category id, or null when it has none. */
+    private static function categoryOf(array $asset): ?int
+    {
+        $categoryId = (int) ($asset['category_id'] ?? 0);
+
+        return $categoryId > 0 ? $categoryId : null;
     }
 
     /** A posted timestamp, or null — never a value the client invented a shape for. */

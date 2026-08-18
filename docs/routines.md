@@ -6,9 +6,12 @@ Procedures a technician steps through and fills in — checks, readings, photogr
 
 - [What a routine is](#what-a-routine-is)
 - [Building one](#building-one)
+- [Which assets a routine is for](#which-assets-a-routine-is-for)
 - [Publishing, and who may](#publishing-and-who-may)
 - [Carrying one out](#carrying-one-out)
+- [Checklist routines: any step, any order, anybody](#checklist-routines-any-step-any-order-anybody)
 - [Attaching one to a scheduled job](#attaching-one-to-a-scheduled-job)
+- [Scanning to a routine](#scanning-to-a-routine)
 - [Versions](#versions)
 - [Reading a completed routine](#reading-a-completed-routine)
 
@@ -61,9 +64,31 @@ button you pressed is acted on, so adding a step never loses an edit made
 further up the page. **Preview** shows the routine exactly as somebody carrying
 it out will meet it, with every control switched off.
 
+Two settings sit beside the pages: **Applies to**, covered next, and **Allow
+steps to be completed out of order**, covered under
+[Checklist routines](#checklist-routines-any-step-any-order-anybody).
+
 Layout is not configurable beyond the order of pages and steps. What a routine
 says is yours; how it is drawn is the application's, so every routine on the
 shop floor looks and behaves the same way.
+
+## Which assets a routine is for
+
+**Applies to** on the routine names one category. The routine is then offered
+only for assets in that category **and every category nested beneath it** —
+categories are a tree, and a routine written for *Access equipment* is meant
+for the ladders and the podium steps alike without being listed against each.
+
+Left as **Any asset**, the routine is unrestricted. That is the default: only a
+routine that has deliberately been given a category is limited by one.
+
+The restriction is a rule, not a tidy-up of the list. A routine that does not
+apply is absent from the picker, and reaching its address directly gives a
+**not found** naming the category it is for.
+
+Moving an asset into a different category changes which routines it is offered,
+immediately. Records already made against it are unaffected — they say what was
+asked and answered, whatever the asset is filed under now.
 
 ## Publishing, and who may
 
@@ -91,11 +116,16 @@ is never deleted, because the records that followed it have to keep working.
 
 ## Carrying one out
 
-Two ways in, and they end in the same record:
+Three ways in, and they end in the same record:
 
 1. **From an asset** — *Run a routine* on the asset's Maintenance card, then
-   pick from the published, active ones.
-2. **From a scheduled job** — see the next section.
+   pick from the routines that apply to it.
+2. **From the maintenance log page** — **Run routine instead** at the top of
+   *Record work*, which appears exactly when at least one routine applies to
+   that asset. It is the way out of the free-text form for somebody who
+   started there and would rather follow a procedure.
+3. **From a scheduled job** — see [Attaching one to a scheduled
+   job](#attaching-one-to-a-scheduled-job).
 
 Either way it is a guided form: one page at a time, a progress rail across the
 top, and a required step that has not been answered stops you moving on. The
@@ -110,6 +140,48 @@ photo is not: they are a claim about one item on one day.
 With JavaScript switched off every page is simply visible at once and the form
 still submits. The required steps are checked by the server either way — the
 one-page-at-a-time flow is a convenience, never the control.
+
+## Checklist routines: any step, any order, anybody
+
+A routine built with **Allow steps to be completed out of order** behaves as a
+checklist rather than a one-way form. It suits work that passes between
+stations: a machine is built at one bench, tested at another and finished at a
+third, and no one person is at the item for the whole job.
+
+Starting one **opens a run** rather than filling a form in. The run has a page
+of its own — its **contents** — listing every page and step with:
+
+- whether it has been answered;
+- what the answer says;
+- who gave it, and when.
+
+Any unanswered step can be opened straight from there, whatever page it is on
+and whatever order the pages are in. Answering a step records **your** name
+against that step. Somebody else answering a different step records theirs.
+Changing an answer moves the name to whoever changed it, because the record has
+to say who stands behind what it now says.
+
+An asset carries at most one open run at a time. Anybody who reaches the routine
+for an asset that already has one is taken to the run in progress rather than
+starting a second.
+
+**The run stays open until it is signed off.** Signing off is its own step, from
+the contents page: it asks for the date, the result and anything to add, writes
+the maintenance entry against the asset, and closes the run. That is recorded
+separately from the individual answers, so a routine carried out by five people
+at five stations ends with a clear record of who did which part **and** who
+closed it out.
+
+Required steps are enforced at sign-off, not on the way through. A run with a
+required step still blank cannot be signed off — the page names the outstanding
+steps and links to each — but the steps before and after it can be answered
+freely in the meantime.
+
+**Discard this run** on the contents page abandons it: every answer and
+photograph on it goes, and nothing is recorded against the asset.
+
+A routine without the option is unchanged: one form, filled in from top to
+bottom in a single sitting, recorded when it is submitted.
 
 ## Attaching one to a scheduled job
 
@@ -129,6 +201,23 @@ Assignment decides who is *reminded*, never who *may* complete. See
 
 Only a published routine can be attached, since a schedule pointing at a draft
 would send whoever picked the job up to a form that does not exist yet.
+
+## Scanning to a routine
+
+**Routine** is one of the modes on the Scan page. Scanning a tag with it
+selected goes straight to whichever of these applies, in this order:
+
+| The asset has | You land on |
+|---|---|
+| A run open on it | That run's contents, ready for your part of it |
+| No open run, and a routine completed in the last 7 days | That record, with a note saying when it was done |
+| Neither | Its maintenance log page, where **Run routine instead** offers to start one |
+
+The middle case is the one worth knowing about: it exists so that somebody
+scanning an item does not start the work again on something that was finished
+this week. Seven days is fixed and not a setting.
+
+The mode needs the same permission as recording any other maintenance.
 
 ## Versions
 
@@ -161,6 +250,9 @@ it was filled in: grouped by page, each step showing its original question
 alongside the recorded answer, photographs inline, documents offered as a
 download. A step that was left blank says **Not answered** rather than leaving a
 gap to interpret.
+
+Each answer carries the name of whoever gave it and when. A run that was worked
+through as a checklist also names who started it and who signed it off.
 
 **Download PDF** produces the same record as a document, with the organisation's
 masthead and logo, the asset and the work in a summary block, every question

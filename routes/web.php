@@ -223,6 +223,7 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/maintenance/routines/{id:\d+}',             [RoutineController::class, 'update'],     ['can:routines.manage', 'csrf']);
     $router->post('/maintenance/routines/{id:\d+}/status',      [RoutineController::class, 'setStatus'],  ['can:routines.manage', 'csrf']);
     $router->post('/maintenance/routines/{id:\d+}/new-version', [RoutineController::class, 'newVersion'], ['can:routines.manage', 'csrf']);
+    $router->post('/maintenance/routines/{id:\d+}/out-of-order', [RoutineController::class, 'setOutOfOrder'], ['can:routines.manage', 'csrf']);
     $router->post('/maintenance/routines/{id:\d+}/publish',     [RoutineController::class, 'publish'],    ['can:routines.manage', 'csrf']);
     $router->post('/maintenance/routines/{id:\d+}/discard',     [RoutineController::class, 'discard'],    ['can:routines.manage', 'csrf']);
 
@@ -232,6 +233,15 @@ $router->group(['auth'], static function (Router $router): void {
     // A routine that was carried out. Reading one is part of reading the
     // maintenance history, so it needs no permission of its own.
     $router->get('/maintenance/completions/{id:\d+}',                    [RoutineRunController::class, 'show'], ['can:maintenance.view']);
+
+    // Working through an open run. Answering a step and signing the run off
+    // are recording work, so they carry `maintenance.complete`; reading it
+    // needs only `maintenance.view`, like any other maintenance record.
+    $router->get('/maintenance/completions/{id:\d+}/submit',  [RoutineRunController::class, 'submitForm'], ['can:maintenance.complete']);
+    $router->post('/maintenance/completions/{id:\d+}/submit', [RoutineRunController::class, 'submit'],     ['can:maintenance.complete', 'csrf']);
+    $router->post('/maintenance/completions/{id:\d+}/discard',[RoutineRunController::class, 'discard'],    ['can:maintenance.complete', 'csrf']);
+    $router->get('/maintenance/completions/{id:\d+}/steps/{stepId:\d+}',  [RoutineRunController::class, 'step'],     ['can:maintenance.complete']);
+    $router->post('/maintenance/completions/{id:\d+}/steps/{stepId:\d+}', [RoutineRunController::class, 'saveStep'], ['can:maintenance.complete', 'csrf']);
     $router->get('/maintenance/completions/{id:\d+}/pdf',                [RoutineRunController::class, 'pdf'],  ['can:maintenance.view']);
     $router->get('/maintenance/completions/{id:\d+}/files/{fileId:\d+}', [RoutineRunController::class, 'file'], ['can:maintenance.view']);
 
@@ -254,6 +264,11 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/assets/{assetId:\d+}/routines', [RoutineRunController::class, 'choose'], ['can:maintenance.complete']);
     $router->get('/assets/{assetId:\d+}/routines/{routineId:\d+}/run',  [RoutineRunController::class, 'run'],   ['can:maintenance.complete']);
     $router->post('/assets/{assetId:\d+}/routines/{routineId:\d+}/run', [RoutineRunController::class, 'store'], ['can:maintenance.complete', 'csrf']);
+
+    // A routine whose steps may be answered out of order is opened rather than
+    // filled in: this creates the run, and everything after it happens at the
+    // run's own address.
+    $router->post('/assets/{assetId:\d+}/routines/{routineId:\d+}/start', [RoutineRunController::class, 'start'], ['can:maintenance.complete', 'csrf']);
 
     // Correcting a record after the fact. Recording work needs
     // `maintenance.complete`; rewriting what a record says is a bigger thing,

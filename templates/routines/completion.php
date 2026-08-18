@@ -14,6 +14,7 @@ use App\Models\RoutineCompletion;
  * @var array<int,array<string,mixed>> $pages
  * @var array<int,array<string,mixed>> $responses keyed by step id
  * @var array<int,array<int,array<string,mixed>>> $files keyed by step id
+ * @var array<int,array{name:?string,at:?string}> $attribution keyed by step id
  */
 $id      = (int) $completion['id'];
 $assetId = (int) $completion['asset_id'];
@@ -68,6 +69,12 @@ $assetId = (int) $completion['asset_id'];
                                 <?= e($step['label']) ?>
                                 <?php if (!empty($step['help_text'])): ?>
                                     <span class="answer-help muted"><?= e($step['help_text']) ?></span>
+                                <?php endif; ?>
+                                <?php $by = $attribution[$stepId] ?? null; ?>
+                                <?php if ($by !== null && $by['name'] !== null): ?>
+                                    <span class="answer-help muted">
+                                        <?= e($by['name']) ?><?php if ($by['at'] !== null): ?>, <?= e(format_datetime((string) $by['at'])) ?><?php endif; ?>
+                                    </span>
                                 <?php endif; ?>
                             </dt>
                             <dd class="answer-value">
@@ -157,8 +164,19 @@ $assetId = (int) $completion['asset_id'];
                         — version <?= (int) $completion['version_number'] ?>
                     </dd>
                 </div>
+                <?php if ((int) $completion['allow_out_of_order'] === 1 && !empty($completion['started_by_name'])): ?>
+                    <div>
+                        <dt>Started by</dt>
+                        <dd>
+                            <?= e((string) $completion['started_by_name']) ?>
+                            <?php if ($completion['started_at'] !== null): ?>
+                                <span class="cell-sub"><?= e(format_datetime((string) $completion['started_at'])) ?></span>
+                            <?php endif; ?>
+                        </dd>
+                    </div>
+                <?php endif; ?>
                 <div>
-                    <dt>Carried out by</dt>
+                    <dt><?= (int) $completion['allow_out_of_order'] === 1 ? 'Signed off by' : 'Carried out by' ?></dt>
                     <dd><?= e((string) ($completion['completed_by_name'] ?? 'Unknown')) ?></dd>
                 </div>
                 <div>

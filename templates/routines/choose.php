@@ -5,6 +5,7 @@
  *
  * @var array<string,mixed> $asset
  * @var array<int,array<string,mixed>> $routines
+ * @var array<string,mixed>|null $openRun
  */
 $assetId = (int) $asset['id'];
 ?>
@@ -19,11 +20,23 @@ $assetId = (int) $asset['id'];
     <a class="btn btn-ghost" href="<?= e(url('/assets/' . $assetId)) ?>">Cancel</a>
 </div>
 
+<?php if ($openRun !== null): ?>
+    <div class="flash flash-info">
+        <span class="flash-text">
+            <strong><?= e($openRun['routine_name']) ?></strong> is already open on this asset.
+            <a href="<?= e(url('/maintenance/completions/' . (int) $openRun['id'])) ?>">Carry on with it</a>
+            rather than starting something else.
+        </span>
+    </div>
+<?php endif; ?>
+
 <?php if ($routines === []): ?>
     <div class="card empty-state">
         <h2>No routines are available</h2>
         <p class="muted">
-            A routine has to be published before it can be run, and an archived one is not offered.
+            A routine has to be published before it can be run, an archived one is not offered, and a
+            routine restricted to a category is only offered for assets in that category or one nested
+            beneath it.
             <?php if (can('routines.manage')): ?>
                 <a href="<?= e(url('/maintenance/routines')) ?>">Manage routines</a>.
             <?php endif; ?>

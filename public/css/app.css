@@ -3002,3 +3002,67 @@ form + .section-title,
 
 /* A file control that is only there to be looked at. */
 .btn-file.is-disabled { opacity: 0.6; cursor: default; }
+
+/* --- Checkbox help text ---------------------------------------------------- */
+
+/* A `.field-hint` inside a checkbox label is a span, and a span is inline —
+   so its top margin does nothing and the sentence runs on after the label,
+   squeezed into whatever width is left. Both rules are needed: the block makes
+   it a line of its own, and the flexed wrapper gives it the row's full width
+   to use. Same stacking as the label/value lists elsewhere. */
+.checkbox > span { flex: 1 1 auto; min-width: 0; }
+.checkbox .field-hint { display: block; margin-top: var(--space-1); }
+
+/* --- An open routine run --------------------------------------------------- */
+
+.run-step-list { list-style: none; margin: 0; padding: 0; }
+
+.run-step {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+}
+.run-step:last-child { border-bottom: 0; }
+
+/* A tick that is present or absent, in a column that is always there — so the
+   labels line up whether or not a step has been answered. */
+.run-step-mark {
+    flex: 0 0 1.5rem;
+    width: 1.5rem;
+    text-align: center;
+    font-weight: 700;
+    color: var(--ok);
+    line-height: 1.6;
+}
+
+.run-step-body { flex: 1 1 auto; min-width: 0; }
+
+.run-step-label {
+    display: block;
+    font-weight: 600;
+    color: inherit;
+    text-decoration: none;
+}
+.run-step-label:hover { text-decoration: underline; }
+
+.run-step-meta { display: block; font-size: 0.88rem; overflow-wrap: anywhere; }
+
+.run-step-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+}
+
+.run-step.is-done .run-step-label { font-weight: 500; }
+
+@media (max-width: 620px) {
+    .run-step { flex-wrap: wrap; }
+    .run-step-actions { width: 100%; padding-left: calc(1.5rem + var(--space-3)); }
+}
+
+.plain-list { list-style: none; margin: 0; padding: 0; }
+.plain-list li + li { margin-top: var(--space-2); }

@@ -49,14 +49,17 @@ final class MaintenanceRoutine
 
     private const SELECT = 'SELECT r.*,
                                    cu.name AS created_by_name,
+                                   cat.name AS category_name,
                                    cv.id AS current_version_id,
                                    cv.version_number AS current_version_number,
                                    cv.published_at AS current_published_at,
+                                   cv.allow_out_of_order AS current_allow_out_of_order,
                                    dv.id AS draft_version_id,
                                    dv.version_number AS draft_version_number,
                                    (SELECT COUNT(*) FROM routine_completions rc WHERE rc.routine_id = r.id) AS completion_count
                               FROM maintenance_routines r
                               LEFT JOIN users cu ON cu.id = r.created_by
+                              LEFT JOIN categories cat ON cat.id = r.category_id
                               LEFT JOIN routine_versions cv ON cv.routine_id = r.id AND cv.is_current = 1
                               LEFT JOIN routine_versions dv ON dv.routine_id = r.id AND dv.published_at IS NULL';
 
@@ -88,6 +91,62 @@ final class MaintenanceRoutine
         return Database::select(
             self::SELECT . " WHERE r.status = 'active' AND cv.id IS NOT NULL ORDER BY r.name"
         );
+    }
+
+    /**
+     * The runnable routines that apply to an asset in this category.
+     *
+     * A routine naming a category covers that category and everything nested
+     * beneath it, so the match is made by walking *up* from the asset's own
+     * category: any routine restricted to one of its ancestors — or to itself,
+     * or to nothing at all — applies.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function runnableFor(?int $categoryId): array
+    {
+        $covering = $categoryId === null ? [] : Category::ancestorIds($categoryId);
+
+        if ($covering === []) {
+            return Database::select(
+                self::SELECT . " WHERE r.status = 'active' AND cv.id IS NOT NULL
+                                   AND r.category_id IS NULL
+                                 ORDER BY r.name"
+            );
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($covering), '?'));
+
+        return Database::select(
+            self::SELECT . " WHERE r.status = 'active' AND cv.id IS NOT NULL
+                               AND (r.category_id IS NULL OR r.category_id IN (" . $placeholders . "))
+                             ORDER BY r.name",
+            $covering
+        );
+    }
+
+    /**
+     * Is this routine allowed to run against an asset in this category?
+     *
+     * The same rule as runnableFor(), asked of one routine — the picker uses
+     * the query and the runner uses this, so a routine reached by typing a URL
+     * is refused exactly where one hidden from the list would have been.
+     *
+     * @param array<string,mixed> $routine
+     */
+    public static function appliesTo(array $routine, ?int $categoryId): bool
+    {
+        $restriction = $routine['category_id'] === null ? 0 : (int) $routine['category_id'];
+
+        if ($restriction === 0) {
+            return true;
+        }
+
+        if ($categoryId === null) {
+            return false;
+        }
+
+        return in_array($restriction, Category::ancestorIds($categoryId), true);
     }
 
     /** @param array<string,mixed> $data */
@@ -225,10 +284,11 @@ final class MaintenanceRoutine
         $routineId = (int) $source['routine_id'];
 
         $draftId = Database::insert('routine_versions', [
-            'routine_id'     => $routineId,
-            'version_number' => self::nextVersionNumber($routineId),
-            'is_current'     => 0,
-            'published_at'   => null,
+            'routine_id'         => $routineId,
+            'version_number'     => self::nextVersionNumber($routineId),
+            'is_current'         => 0,
+            'published_at'       => null,
+            'allow_out_of_order' => (int) ($source['allow_out_of_order'] ?? 0),
         ]);
 
         foreach (self::pages((int) $source['id']) as $page) {
@@ -279,6 +339,18 @@ final class MaintenanceRoutine
             'published_at' => date('Y-m-d H:i:s'),
             'published_by' => Auth::id(),
         ], $versionId);
+    }
+
+    /**
+     * Whether a run of this version is worked through as a checklist.
+     *
+     * Held on the version rather than on the routine, because it is part of
+     * what was published: a completion knows how it was meant to be carried
+     * out from the version it followed.
+     */
+    public static function setOutOfOrder(int $versionId, bool $allow): void
+    {
+        Database::update('routine_versions', ['allow_out_of_order' => $allow ? 1 : 0], $versionId);
     }
 
     /** Throw a draft away. Only ever a draft: a published version is history. */

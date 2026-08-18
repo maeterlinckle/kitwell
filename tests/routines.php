@@ -21,7 +21,15 @@ declare(strict_types=1);
  *     completion alone, stream back through the path guard, and appear in the
  *     generated PDF;
  *   - the PDF is a structurally valid document — every cross-reference offset
- *     is checked against the object it claims to point at.
+ *     is checked against the object it claims to point at;
+ *   - a routine restricted to a category is offered for that category and
+ *     everything nested beneath it, and refused for anything else — in the
+ *     picker and by typing the URL;
+ *   - a checklist routine's steps can be answered by different people in any
+ *     order, each answer keeping its own name, and the run is refused a
+ *     sign-off while a required step is blank;
+ *   - the Routine scan target lands on an open run, a recent record, or the
+ *     maintenance log page, according to what the asset actually has.
  *
  * **This test writes.** It creates routines, completions, schedules and
  * maintenance log entries. Point it at a scratch database.
@@ -559,6 +567,366 @@ check('read-only can read the routine list', $r['status'] === 200);
 $r = request('GET', '/assets/' . $assetId . '/routines', [], false, false);
 check('read-only cannot run one', $r['status'] === 403, (string) $r['status']);
 
+// ---------------------------------------------------------------------------
+echo "\n== Restricting a routine to a category ==\n";
+
+signIn('admin@example.com');
+
+// A parent and a child, so the "and everything beneath it" rule has something
+// to be true of.
+$parentName = 'Access equipment ' . $nonce;
+$childName  = 'Podium steps ' . $nonce;
+
+request('POST', '/admin/categories', [
+    '_token' => token('/admin/categories/create'),
+    'name'   => $parentName,
+    'parent_id' => '',
+]);
+
+$r = request('GET', '/admin/categories');
+preg_match('#/admin/categories/(\d+)/edit#', $r['body'], $m);
+
+// The tree lists newest last only by chance, so find the two by name.
+$categoryIdOf = static function (string $name): int {
+    $r = request('GET', '/admin/categories/create');
+
+    if (preg_match('#<option value="(\d+)"[^>]*>\s*' . preg_quote($name, '#') . '\s*</option>#', $r['body'], $m)) {
+        return (int) $m[1];
+    }
+
+    // Nested entries are shown as "Parent → Child".
+    if (preg_match('#<option value="(\d+)"[^>]*>[^<]*' . preg_quote($name, '#') . '\s*</option>#', $r['body'], $m)) {
+        return (int) $m[1];
+    }
+
+    return 0;
+};
+
+$parentId = $categoryIdOf($parentName);
+check('the parent category exists', $parentId > 0);
+
+request('POST', '/admin/categories', [
+    '_token'    => token('/admin/categories/create'),
+    'name'      => $childName,
+    'parent_id' => $parentId,
+]);
+
+$childId = $categoryIdOf($childName);
+check('the child category exists', $childId > 0);
+
+/**
+ * Register an asset, optionally in a category.
+ *
+ * Registering rather than re-categorising something that already exists: an
+ * asset built here is known to have exactly the category the test means, which
+ * a partial edit of a seeded record is not.
+ */
+$registerAsset = static function (string $assetName, int $categoryId): int {
+    // The form arrives with the next tag already generated; posting without it
+    // is refused, as it should be.
+    $form = request('GET', '/assets/create');
+
+    preg_match('/name="_token" value="([a-f0-9]+)"/', $form['body'], $t);
+    preg_match('#name="asset_tag"[^>]*value="([^"]+)"#', $form['body'], $tag);
+
+    $fields = [
+        '_token'           => $t[1] ?? '',
+        'asset_tag'        => $tag[1] ?? '',
+        'name'             => $assetName,
+        'status'           => 'In Stock',
+        'condition_rating' => 'Good',
+    ];
+
+    if ($categoryId > 0) {
+        $fields['category_id'] = $categoryId;
+    }
+
+    $r = request('POST', '/assets', $fields);
+
+    return preg_match('#/assets/(\d+)#', $r['url'], $m) ? (int) $m[1] : 0;
+};
+
+$inCategory  = $registerAsset('Podium step unit ' . $nonce, $childId);
+$outCategory = $registerAsset('Bench vice ' . $nonce, 0);
+
+check('an asset in the nested category', $inCategory > 0, (string) $inCategory);
+check('an asset in no category at all', $outCategory > 0, (string) $outCategory);
+
+// A routine restricted to the *parent*.
+$restricted = 'Ladder inspection ' . $nonce;
+$r = request('POST', '/maintenance/routines', [
+    '_token'      => token('/maintenance/routines/create'),
+    'name'        => $restricted,
+    'description' => 'Only for access equipment.',
+    'category_id' => $parentId,
+]);
+preg_match('#/maintenance/routines/(\d+)/edit#', $r['url'], $m);
+$restrictedId = (int) ($m[1] ?? 0);
+$restrictedEdit = '/maintenance/routines/' . $restrictedId . '/edit';
+check('the restricted routine is created', $restrictedId > 0);
+
+request('POST', '/maintenance/routines/' . $restrictedId . '/pages', [
+    '_token' => token($restrictedEdit),
+    'title'  => 'Checks',
+]);
+
+$r = request('GET', $restrictedEdit);
+preg_match('#/pages/(\d+)"#', $r['body'], $m);
+$restrictedPage = (int) $m[1];
+
+addStep($restrictedId, $restrictedPage, 'Checks', 'Feet undamaged?', 'boolean', true);
+request('POST', '/maintenance/routines/' . $restrictedId . '/publish', ['_token' => token($restrictedEdit)]);
+
+$r = request('GET', '/maintenance/routines/' . $restrictedId . '/edit');
+check('the editor keeps the category', str_contains($r['body'], 'value="' . $parentId . '" selected')
+    || str_contains($r['body'], 'value="' . $parentId . '"' . "\n" . '                            selected'), 'category ' . $parentId);
+
+// The picker: offered for the asset in the child category, hidden for the other.
+$r = request('GET', '/assets/' . $inCategory . '/routines');
+check('offered for an asset in a category nested under the restriction', str_contains($r['body'], $restricted));
+
+$r = request('GET', '/assets/' . $outCategory . '/routines');
+check('hidden for an asset outside the restriction', !str_contains($r['body'], $restricted));
+check('an unrestricted routine is still offered there', str_contains($r['body'], $name));
+
+// And by URL, which is what makes it a rule rather than a courtesy.
+$r = request('GET', '/assets/' . $inCategory . '/routines/' . $restrictedId . '/run');
+check('running it against an asset in the category is allowed', $r['status'] === 200);
+
+$r = request('GET', '/assets/' . $outCategory . '/routines/' . $restrictedId . '/run', [], false, false);
+check('running it against an asset outside is refused', $r['status'] === 404, (string) $r['status']);
+
+$r = request('POST', '/assets/' . $outCategory . '/routines/' . $restrictedId . '/run', [
+    '_token'       => token('/assets/' . $inCategory . '/routines/' . $restrictedId . '/run'),
+    'performed_on' => date('Y-m-d'),
+    'result'       => 'Completed',
+], false, false);
+check('and posting to it is refused too', $r['status'] === 404, (string) $r['status']);
+
+// ---------------------------------------------------------------------------
+echo "\n== Run routine instead ==\n";
+
+$r = request('GET', '/assets/' . $inCategory . '/maintenance/log');
+check('the log page offers to run a routine', str_contains($r['body'], 'Run routine instead'));
+check('and the offer points at the picker', str_contains($r['body'], '/assets/' . $inCategory . '/routines"'));
+
+/**
+ * The button is offered exactly when the picker has something in it.
+ *
+ * Asserted as that biconditional rather than as a flat absence, because a
+ * database that already holds an unrestricted routine — as any real one will —
+ * makes "no routine applies" impossible to arrange from outside.
+ */
+$offerMatchesPicker = static function (int $assetId): bool {
+    $picker = request('GET', '/assets/' . $assetId . '/routines');
+    $log    = request('GET', '/assets/' . $assetId . '/maintenance/log');
+
+    $anyOffered = !str_contains($picker['body'], 'No routines are available');
+
+    return $anyOffered === str_contains($log['body'], 'Run routine instead');
+};
+
+check('the button tracks the picker for an asset in the category', $offerMatchesPicker($inCategory));
+check('and for one outside it', $offerMatchesPicker($outCategory));
+
+// ---------------------------------------------------------------------------
+echo "\n== A checklist routine, answered out of order ==\n";
+
+$checklistName = 'Five station build ' . $nonce;
+$r = request('POST', '/maintenance/routines', [
+    '_token'      => token('/maintenance/routines/create'),
+    'name'        => $checklistName,
+    'description' => 'Passes between stations.',
+    'category_id' => '',
+]);
+preg_match('#/maintenance/routines/(\d+)/edit#', $r['url'], $m);
+$checklistId   = (int) ($m[1] ?? 0);
+$checklistEdit = '/maintenance/routines/' . $checklistId . '/edit';
+check('the checklist routine is created', $checklistId > 0);
+
+foreach (['Station one', 'Station two'] as $title) {
+    request('POST', '/maintenance/routines/' . $checklistId . '/pages', [
+        '_token' => token($checklistEdit),
+        'title'  => $title,
+    ]);
+}
+
+$r = request('GET', $checklistEdit);
+preg_match_all('#/pages/(\d+)"#', $r['body'], $m);
+$checklistPages = array_values(array_unique(array_map('intval', $m[1])));
+
+addStep($checklistId, $checklistPages[0], 'Station one', 'Torque setting', 'number', true, 'Nm');
+addStep($checklistId, $checklistPages[0], 'Station one', 'Anything to note', 'long_text', false);
+addStep($checklistId, $checklistPages[1], 'Station two', 'Final visual check passed?', 'boolean', true);
+
+request('POST', '/maintenance/routines/' . $checklistId . '/out-of-order', [
+    '_token'             => token($checklistEdit),
+    'allow_out_of_order' => '1',
+]);
+
+$r = request('GET', $checklistEdit);
+check('the checklist option is saved', str_contains($r['body'], 'name="allow_out_of_order" value="1"' . "\n" . '                        checked')
+    || preg_match('#name="allow_out_of_order"[^>]*checked#', $r['body']) === 1);
+
+request('POST', '/maintenance/routines/' . $checklistId . '/publish', ['_token' => token($checklistEdit)]);
+
+$runUrl = '/assets/' . $outCategory . '/routines/' . $checklistId . '/run';
+$r = request('GET', $runUrl);
+check('a checklist routine offers to be started rather than filled in', str_contains($r['body'], 'Start the run'));
+check('and does not render the one-page-at-a-time wizard', !str_contains($r['body'], 'data-routine-wizard'));
+
+$r = request('POST', '/assets/' . $outCategory . '/routines/' . $checklistId . '/start', ['_token' => token($runUrl)]);
+check('starting it lands on the run', str_contains($r['url'], '/maintenance/completions/'), $r['url']);
+
+preg_match('#/maintenance/completions/(\d+)#', $r['url'], $m);
+$runId = (int) ($m[1] ?? 0);
+$runPage = '/maintenance/completions/' . $runId;
+
+check('the run is open', str_contains($r['body'], '>Open<'));
+check('the contents lists every step', substr_count($r['body'], 'class="run-step') >= 3);
+check('nothing is answered yet', substr_count($r['body'], 'Not started') === 3, (string) substr_count($r['body'], 'Not started'));
+check('it says how many required steps remain', str_contains($r['body'], '2 required steps'));
+
+// Signing off is refused while required steps are blank — including by posting
+// straight at it.
+$r = request('POST', $runPage . '/submit', [
+    '_token'       => token($runPage . '/submit'),
+    'performed_on' => date('Y-m-d'),
+    'result'       => 'Completed',
+]);
+check('signing off is refused while a required step is blank', str_contains($r['body'], 'still to answer'));
+check('and the run is still open', str_contains($r['body'], '>Open<'));
+
+// Station one, as the administrator.
+$r = request('GET', $runPage);
+preg_match_all('#/maintenance/completions/' . $runId . '/steps/(\d+)#', $r['body'], $m);
+$runSteps = array_values(array_unique(array_map('intval', $m[1])));
+check('every step has its own address', count($runSteps) === 3, (string) count($runSteps));
+
+$typeOfStep = [];
+foreach ($runSteps as $stepId) {
+    $r = request('GET', $runPage . '/steps/' . $stepId);
+    $typeOfStep[$stepId] = preg_match('#data-field-type="([a-z_]+)"#', $r['body'], $m) ? $m[1] : '';
+}
+
+$numberStep  = (int) array_search('number', $typeOfStep, true);
+$booleanStep = (int) array_search('boolean', $typeOfStep, true);
+check('the step pages render the real controls', $numberStep > 0 && $booleanStep > 0);
+
+// Deliberately out of order: the last page's step first.
+$r = request('POST', $runPage . '/steps/' . $booleanStep, [
+    '_token'                 => token($runPage . '/steps/' . $booleanStep),
+    'step'                   => [$booleanStep => '1'],
+]);
+check('a step on the last page can be answered first', str_contains($r['body'], '&check;')
+    || str_contains($r['body'], 'is-done'), 'expected a tick on the contents');
+check('the earlier step is still outstanding', str_contains($r['body'], '1 required step'));
+
+// Station two, as somebody else entirely.
+signIn('manager@example.com');
+
+$r = request('GET', $runPage);
+check('a second person sees the run in progress', $r['status'] === 200 && str_contains($r['body'], '>Open<'));
+check('and sees who did the first part', str_contains($r['body'], 'Alex Admin'));
+
+$r = request('POST', $runPage . '/steps/' . $numberStep, [
+    '_token' => token($runPage . '/steps/' . $numberStep),
+    'step'   => [$numberStep => '42.5'],
+]);
+check('the second person can answer their own step', str_contains($r['body'], '42.5 Nm'));
+check('each answer carries its own name',
+    str_contains($r['body'], 'Alex Admin') && str_contains($r['body'], 'Sam Staff'));
+check('the run is now ready to sign off', str_contains($r['body'], 'ready to sign off'));
+
+// A third party signs it off.
+$r = request('POST', $runPage . '/submit', [
+    '_token'       => token($runPage . '/submit'),
+    'performed_on' => date('Y-m-d'),
+    'result'       => 'Completed',
+    'notes'        => 'Built across two stations.',
+]);
+check('the run signs off', !str_contains($r['body'], '>Open<') && str_contains($r['body'], 'Download PDF'));
+check('the record names who signed it off', str_contains($r['body'], 'Signed off by'));
+check('and who started it', str_contains($r['body'], 'Started by'));
+check('the per-step names survive on the record',
+    str_contains($r['body'], 'Alex Admin') && str_contains($r['body'], 'Sam Staff'));
+
+$r = request('GET', $runPage . '/pdf');
+check('a checklist run produces a PDF like any other', str_starts_with($r['body'], '%PDF-'));
+
+signIn('admin@example.com');
+
+// ---------------------------------------------------------------------------
+echo "\n== The Routine scan target ==\n";
+
+$r = request('GET', '/scan?mode=routine');
+check('the scan page offers a Routine mode', $r['status'] === 200 && str_contains($r['body'], 'Scan to work on a routine'));
+
+$tagOf = static function (int $assetId): string {
+    $r = request('GET', '/assets/' . $assetId . '/edit');
+
+    return preg_match('#name="asset_tag"[^>]*value="([^"]+)"#', $r['body'], $m)
+        ? html_entity_decode($m[1], ENT_QUOTES)
+        : '';
+};
+
+$scanTag = $tagOf($outCategory);
+check('found the asset tag to scan', $scanTag !== '', $scanTag);
+
+// It has a routine completed just now, so a scan lands on that record.
+$r = request('POST', '/scan', ['_token' => token('/scan?mode=routine'), 'mode' => 'routine', 'code' => $scanTag]);
+check('a recent completion is shown rather than started again',
+    str_contains($r['url'], '/maintenance/completions/' . $runId), $r['url']);
+check('and the reason is said out loud', str_contains($r['body'], 'Check it before starting the work again'));
+
+// Open a second run: an open one wins over a recent record.
+request('POST', '/assets/' . $outCategory . '/routines/' . $checklistId . '/start', ['_token' => token($runUrl)]);
+$r = request('GET', '/assets/' . $outCategory . '/routines/' . $checklistId . '/run');
+preg_match('#/maintenance/completions/(\d+)#', $r['url'], $m);
+$secondRun = (int) ($m[1] ?? 0);
+check('a second run opens', $secondRun > 0 && $secondRun !== $runId, (string) $secondRun);
+
+$r = request('POST', '/scan', ['_token' => token('/scan?mode=routine'), 'mode' => 'routine', 'code' => $scanTag]);
+check('an open run wins over a recent record',
+    str_contains($r['url'], '/maintenance/completions/' . $secondRun), $r['url']);
+check('and it opens at the contents', str_contains($r['body'], '>Open<'));
+
+// The JSON lookup agrees with the form post.
+$r = request('GET', '/scan/lookup?code=' . rawurlencode($scanTag));
+$json = json_decode($r['body'], true);
+check('the lookup reports the same destination',
+    is_array($json) && str_contains((string) ($json['routine']['url'] ?? ''), '/maintenance/completions/' . $secondRun),
+    (string) ($json['routine']['url'] ?? 'missing'));
+check('and says why', ($json['routine']['reason'] ?? '') === 'open');
+
+// Discard it, and the asset falls back to its recent record.
+request('POST', '/maintenance/completions/' . $secondRun . '/discard', [
+    '_token' => token('/maintenance/completions/' . $secondRun),
+]);
+
+$r = request('POST', '/scan', ['_token' => token('/scan?mode=routine'), 'mode' => 'routine', 'code' => $scanTag]);
+check('discarding the run falls back to the recent record',
+    str_contains($r['url'], '/maintenance/completions/' . $runId), $r['url']);
+
+// An asset with neither goes to the maintenance log page. Registered here
+// rather than picked from the register, because every asset the test has
+// touched so far now has a routine against it.
+$untouched = $registerAsset('Never touched ' . $nonce, 0);
+$freshTag  = $tagOf($untouched);
+
+$r = request('POST', '/scan', ['_token' => token('/scan?mode=routine'), 'mode' => 'routine', 'code' => $freshTag]);
+check('an asset with no recent routine lands on the maintenance log page',
+    str_contains($r['url'], '/assets/' . $untouched . '/maintenance/log'), $r['url']);
+
+// ---------------------------------------------------------------------------
+echo "\n== Add asset: available to hire out ==\n";
+
+$r = request('GET', '/assets/create');
+check('the hireable box is unticked by default',
+    preg_match('#name="is_hireable" value="1"\s*>#', $r['body']) === 1,
+    'expected no `checked` on is_hireable');
+check('its help text is a block beneath the label',
+    str_contains($r['body'], 'Tick for anything that goes out to a hirer'));
 @unlink($photo);
 @unlink($document);
 @unlink($jar);

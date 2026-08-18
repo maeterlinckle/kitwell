@@ -61,6 +61,41 @@ final class Category
         return Tree::descendantIds(self::all(), $id);
     }
 
+    /**
+     * One entry and every ancestor above it, nearest first.
+     *
+     * The mirror of descendantIds(), and the direction a lookup usually wants:
+     * "which categories cover this asset" is answered by walking up from the
+     * asset's own category rather than by expanding every candidate's subtree.
+     *
+     * @return array<int,int>
+     */
+    public static function ancestorIds(int $id): array
+    {
+        $parents = [];
+
+        foreach (self::all() as $row) {
+            $parents[(int) $row['id']] = $row['parent_id'] === null ? null : (int) $row['parent_id'];
+        }
+
+        $found   = [];
+        $current = $id;
+
+        // array_key_exists, not isset: a root category's parent is null, and
+        // isset() cannot tell that from an id nothing answers to — which ends
+        // the walk one step early and loses the top of the tree.
+        //
+        // A cycle put there by hand would otherwise loop forever; stopping at
+        // an id already seen ends the walk rather than pretending the data is
+        // sound.
+        while ($current !== null && array_key_exists($current, $parents) && !in_array($current, $found, true)) {
+            $found[] = $current;
+            $current = $parents[$current];
+        }
+
+        return $found;
+    }
+
     public static function create(string $name, ?int $parentId, ?string $description): int
     {
         return Database::insert('categories', [

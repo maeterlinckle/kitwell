@@ -9,6 +9,7 @@ use App\Core\Flash;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\ActivityLog;
+use App\Models\Category;
 use App\Models\MaintenanceRoutine;
 use App\Models\RoutineCompletion;
 
@@ -62,8 +63,9 @@ final class RoutineController extends Controller
     public function create(): void
     {
         $this->view('routines/form', [
-            'pageTitle' => 'New maintenance routine',
-            'routine'   => null,
+            'pageTitle'  => 'New maintenance routine',
+            'routine'    => null,
+            'categories' => Category::parentOptions(),
         ]);
     }
 
@@ -78,6 +80,7 @@ final class RoutineController extends Controller
         $id = MaintenanceRoutine::create([
             'name'        => $data['name'],
             'description' => $data['description'] !== '' ? $data['description'] : null,
+            'category_id' => $this->categoryFrom($data, '/maintenance/routines/create'),
             'status'      => 'active',
             'created_by'  => Auth::id(),
         ]);
@@ -112,6 +115,7 @@ final class RoutineController extends Controller
         MaintenanceRoutine::update($routineId, [
             'name'        => $data['name'],
             'description' => $data['description'] !== '' ? $data['description'] : null,
+            'category_id' => $this->categoryFrom($data, $redirect),
         ]);
 
         ActivityLog::record(
@@ -179,11 +183,12 @@ final class RoutineController extends Controller
         }
 
         $this->view('routines/edit', [
-            'pageTitle' => 'Edit ' . $routine['name'],
-            'routine'   => $routine,
-            'version'   => $version,
-            'current'   => $current,
-            'pages'     => $version === null ? [] : MaintenanceRoutine::structure((int) $version['id']),
+            'pageTitle'  => 'Edit ' . $routine['name'],
+            'routine'    => $routine,
+            'version'    => $version,
+            'current'    => $current,
+            'categories' => Category::parentOptions(),
+            'pages'      => $version === null ? [] : MaintenanceRoutine::structure((int) $version['id']),
         ]);
     }
 
@@ -285,6 +290,64 @@ final class RoutineController extends Controller
         }
 
         Response::redirect('/maintenance/routines/' . $routineId);
+    }
+
+    /**
+     * Whether a run of the version being edited is a checklist or a wizard.
+     *
+     * Its own action because it belongs to the version rather than to the
+     * routine, and because it changes how a run behaves rather than what it
+     * asks — a published version keeps the behaviour it was published with.
+     */
+    public function setOutOfOrder(string $id): void
+    {
+        [$routine, $version] = $this->editable((int) $id);
+
+        $allow = Request::boolean('allow_out_of_order');
+
+        MaintenanceRoutine::setOutOfOrder((int) $version['id'], $allow);
+
+        ActivityLog::record(
+            'updated',
+            'maintenance_routine',
+            (int) $routine['id'],
+            sprintf(
+                'Version %d of "%s" %s its steps to be answered out of order',
+                (int) $version['version_number'],
+                (string) $routine['name'],
+                $allow ? 'now allows' : 'no longer allows'
+            )
+        );
+
+        Flash::success($allow
+            ? 'This version is now worked through as a checklist: any step, in any order, by anybody.'
+            : 'This version is now worked through in order, as one form.');
+
+        Response::redirect('/maintenance/routines/' . (int) $routine['id'] . '/edit');
+    }
+
+    /**
+     * The category a routine is restricted to, checked against the tree.
+     *
+     * A category that has since been deleted comes back as an id nothing
+     * answers to, and silently storing it would leave a routine restricted to
+     * nothing at all.
+     *
+     * @param array<string,mixed> $data
+     */
+    private function categoryFrom(array $data, string $redirect): ?int
+    {
+        $categoryId = (int) $data['category_id'];
+
+        if ($categoryId < 1) {
+            return null;
+        }
+
+        if (Category::find($categoryId) === null) {
+            $this->failValidation(['category_id' => 'That category no longer exists.'], $redirect);
+        }
+
+        return $categoryId;
     }
 
     /** The routine as somebody carrying it out would see it. */
@@ -571,9 +634,11 @@ final class RoutineController extends Controller
         return $this->validate([
             'name'        => 'required|max:191',
             'description' => 'max:1000',
+            'category_id' => 'integer',
         ], [
             'name'        => 'Name',
             'description' => 'Description',
+            'category_id' => 'Applies to',
         ], $redirect);
     }
 }

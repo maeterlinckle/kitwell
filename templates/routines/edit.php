@@ -16,6 +16,7 @@ use App\Models\MaintenanceRoutine;
  * @var array<string,mixed> $routine
  * @var array<string,mixed>|null $version
  * @var array<string,mixed>|null $current
+ * @var array<int,array{id:int,path:string}> $categories
  * @var array<int,array<string,mixed>> $pages
  */
 $routineId = (int) $routine['id'];
@@ -106,6 +107,52 @@ $isDraft   = $version !== null && $version['published_at'] === null;
             <div class="field">
                 <label class="label" for="description">Description <span class="optional">(optional)</span></label>
                 <textarea class="input" id="description" name="description" rows="2" maxlength="1000"><?= e((string) ($routine['description'] ?? '')) ?></textarea>
+            </div>
+
+            <div class="field">
+                <label class="label" for="category_id">Applies to</label>
+                <select class="input" id="category_id" name="category_id">
+                    <option value="">Any asset</option>
+                    <?php foreach ($categories as $category): ?>
+                        <option value="<?= (int) $category['id'] ?>"
+                            <?= (int) ($routine['category_id'] ?? 0) === (int) $category['id'] ? 'selected' : '' ?>>
+                            <?= e($category['path']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="field-hint">
+                    The routine is offered for assets in this category and every category nested beneath
+                    it, and refused for anything else.
+                </p>
+            </div>
+
+            <div class="form-actions form-actions-inline">
+                <button type="submit" class="btn">Save</button>
+            </div>
+        </div>
+    </form>
+
+    <?php /* Held on the version rather than on the routine: a run knows how it
+             was meant to be worked through from the edition it followed. */ ?>
+    <form method="post" action="<?= e(url('/maintenance/routines/' . $routineId . '/out-of-order')) ?>" class="form">
+        <?= csrf_field() ?>
+        <div class="card">
+            <div class="card-head"><h2>How it is worked through</h2></div>
+
+            <div class="field">
+                <label class="checkbox">
+                    <input type="checkbox" name="allow_out_of_order" value="1"
+                        <?= (int) $version['allow_out_of_order'] === 1 ? 'checked' : '' ?>>
+                    <span>
+                        Allow steps to be completed out of order
+                        <span class="field-hint">
+                            A run then stays open as a checklist: any step on any page can be answered
+                            at any time, by anybody, and the run is signed off once the required ones
+                            are done. Suits work that passes between stations. Left off, the routine is
+                            one form filled in from top to bottom in a single sitting.
+                        </span>
+                    </span>
+                </label>
             </div>
 
             <div class="form-actions form-actions-inline">
