@@ -54,7 +54,7 @@ Where something is *not* verified, it says so.
 
 Built by applying everything in `database/migrations/` to an empty database.
 
-**Totals:** 42 domain tables, 479 columns, 88 foreign keys.
+**Totals:** 43 domain tables, 485 columns, 91 foreign keys.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
 A database migrated with `php bin/migrate.php` has a **33rd** table,
@@ -65,7 +65,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-Six files, applied in filename order and recorded in `migrations`. Each is
+Seven files, applied in filename order and recorded in `migrations`. Each is
 written to be safe to re-run.
 
 | File | Contents |
@@ -76,13 +76,14 @@ written to be safe to re-run.
 | `004_media_library_and_templates.sql` | `media_library`, `asset_media`, `asset_templates`, `template_media`; moves every row of `asset_manuals` into the library and drops that table; adds `templates.manage` for admin and manager |
 | `005_maintenance_routines.sql` | `maintenance_routines`, `routine_versions`, `routine_pages`, `routine_steps`, `routine_completions`, `routine_responses`, `routine_response_files`; adds `maintenance_schedules.routine_id`; adds `routines.manage` for admin |
 | `006_routine_scope_and_open_runs.sql` | `maintenance_routines.category_id`; `routine_versions.allow_out_of_order`; `routine_completions.status` / `.started_by` and a nullable `completed_at`; `routine_responses.answered_by` / `.answered_at` |
+| `007_routine_page_batching.sql` | `routine_versions.page_batched`; `routine_pages.required_for_signoff`; `routine_page_completions` |
 
-A fresh install and one upgraded through 006 produce the same schema —
+A fresh install and one upgraded through 007 produce the same schema —
 verified by migrating both and diffing `information_schema` column by column,
 with rows in place on the upgraded one so an `ALTER` cannot be checked only
 against an empty table.
 
-To change the schema, add a new numbered file — `007_…` and upward. Do not edit
+To change the schema, add a new numbered file — `008_…` and upward. Do not edit
 one that has been applied anywhere.
 
 ### 2.2 Tables
@@ -498,7 +499,7 @@ working.
 #### `routine_versions`
 `id` int, `routine_id` NN (**CASCADE**), `version_number` smallint NN,
 `is_current` tinyint NN 0, **`allow_out_of_order` tinyint NN 0**,
-`published_at` datetime (**NULL means draft**),
+**`page_batched` tinyint NN 0**, `published_at` datetime (**NULL means draft**),
 `published_by` (SET NULL), `created_at`, `updated_at`.
 Unique `(routine_id, version_number)`. Index `(routine_id, is_current)`.
 
@@ -508,8 +509,13 @@ since MariaDB has no partial unique index.
 
 #### `routine_pages`
 `id` int, `version_id` NN (**CASCADE**), `position` smallint NN 1,
-`title` varchar(191) NN, `description` varchar(1000), `created_at`.
+`title` varchar(191) NN, `description` varchar(1000),
+**`required_for_signoff` tinyint NN 0**, `created_at`.
 Index `(version_id, position)`.
+
+`required_for_signoff` is only read by a page-batched version, and only at
+sign-off. A page without it can be left untouched and the run still closes:
+that is what an optional page — a fault that was not found — is for.
 
 #### `routine_steps`
 `id` int, `page_id` NN (**CASCADE**), `position` smallint NN 1,
@@ -555,6 +561,17 @@ for. A **multi-choice answer is the chosen labels one per line in
 A step left blank has no row at all, so "unanswered" and "answered with
 nothing" cannot be confused.
 
+#### `routine_page_completions`
+`completion_id` NN (CASCADE), `page_id` NN (**RESTRICT**),
+`completed_by` (SET NULL), `completed_at` datetime NN.
+Primary key `(completion_id, page_id)`. Index `page_id`.
+
+Written only by a page-batched run, where the page rather than the step is
+the unit somebody sits down and finishes. It is what such a run reports
+instead of the per-step names in `routine_responses`, on screen and on the
+PDF alike — the step-level columns are still filled in, but repeating one
+person's name against every step of a page they did in one sitting is noise.
+
 #### `routine_response_files`
 `id` bigint, `completion_id` NN (CASCADE), `step_id` NN (RESTRICT),
 `file_kind` enum('photo','document') NN, `file_path` varchar(255) NN,
@@ -573,12 +590,12 @@ Added by 005: `int` NULL, FK to `maintenance_routines` (SET NULL), index
 instead of the free-text form. It sits *beside* `instructions` rather than
 instead of it.
 
-### 2.3 Foreign keys (88)
+### 2.3 Foreign keys (91)
 
 | Delete rule | Where it is used |
 |---|---|
 | **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
-| **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id`, **`routine_completions.routine_id`**, **`routine_completions.version_id`**, **`routine_responses.step_id`**, **`routine_response_files.step_id`** |
+| **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id`, **`routine_completions.routine_id`**, **`routine_completions.version_id`**, **`routine_responses.step_id`**, **`routine_response_files.step_id`**, **`routine_page_completions.page_id`** |
 | **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
 
 `maintenance_schedules.assigned_to_team_id` is SET NULL on purpose: archiving is
@@ -758,7 +775,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── config/
 │   └── config.php           every value from Env::get(); nothing hardcoded
 │
-├── database/migrations/     001…006, plain .sql, applied in filename order
+├── database/migrations/     001…007, plain .sql, applied in filename order
 ├── vendor/                  gitignored; created by `composer install` (PHPMailer)
 │
 ├── public/                  ← the only directory the web server should serve
@@ -769,7 +786,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │              routine-editor.js, api-docs.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 235 routes
+│   └── web.php              the whole route table, 237 routes
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -821,7 +838,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            faults/{faultReportId},
 │                            hires/{hireId}, branding/, imports/
 │
-├── templates/               117 .php templates
+├── templates/               118 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, brand, footer, print-header, flash,
 │   │                        photo-gallery, photo-upload, photo-inputs,
@@ -839,7 +856,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── maintenance/         index, show, form, complete, edit-log, history,
 │   │                        choose-asset
 │   ├── routines/            index, show, form, edit, preview, choose, run,
-│   │                        start, contents, step, submit, completion
+│   │                        start, contents, step, page, submit, completion
 │   ├── pat/                 index, show, form, history, wizard, choose-asset
 │   ├── hires/               index, show, checkout, return
 │   ├── hirers/              index, show, form
@@ -1470,6 +1487,19 @@ subdirectory.
 - **Every answer carries its own name.** `saveResponse()` deletes and re-inserts
   so that a corrected answer takes the corrector's name with it: the record has
   to say who stands behind what it now says, not who first touched it.
+- **A batched version moves the unit of work, not the rules.**
+  `MaintenanceRoutine::isPageBatched()` is the one test — true only when the
+  version is *both* out-of-order and batched, because batching describes how
+  a checklist's pages are answered and means nothing to a one-way form.
+  Switching out-of-order off clears it rather than leaving a setting that
+  reads as on and does nothing.
+- **A batched run refuses the step-at-a-time routes.** `step()` and
+  `saveStep()` redirect to the step's own page rather than answering it
+  alone, so a bookmarked URL cannot get round the unit of work.
+- **`outstanding()` answers in whatever the unit is.** Steps for a
+  step-at-a-time run; pages flagged `required_for_signoff` for a batched
+  one, and only those. Both the contents page and `submit()` call it, so
+  what the screen says is blocking sign-off is what actually blocks it.
 - **The Routine scan target decides in one place.**
   `ScanController::routineDestination()` is called by both the form post and the
   JSON lookup, so the camera, a USB scanner and a typed tag cannot disagree.
@@ -1717,6 +1747,17 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
     days, or the maintenance log page. On Add asset, *Available to hire out*
     now defaults unticked with its help text full width beneath the label
     (§6, the `.checkbox` note).
+24. **Routines answered a page at a time.** A checklist version may also
+    **require all steps on a page to be completed together**. The pages stay
+    independent — any page, in any order — but a page is answered and submitted
+    as one unit: the contents offers one action per page rather than per step,
+    opening it shows that page's steps and only those, and its own required
+    steps are enforced on submission with no bearing from any other page.
+    Completion is recorded against the **page** and whoever finished it, which
+    is what such a run reports in place of per-step names. Each page also gets
+    its own **required before sign-off** flag, and the run cannot be closed out
+    until every flagged page is done — a page left off the list can be skipped
+    entirely, which is what an optional page is for.
 
 ### 5.2 What has been verified, and how
 
@@ -1724,20 +1765,21 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 142 PHP files under `src/`, `bin/` and `routes/`, and all 117 templates | 0 failures |
+| `php -l` on all 142 PHP files under `src/`, `bin/` and `routes/`, and all 118 templates | 0 failures |
 | `tests/security-audit.php` | **45 passed, 0 failed** |
-| `tests/escape-audit.php` | **3033 output expressions across 117 templates, 0 unescaped** |
-| All 6 migrations against an empty database | applied cleanly; 42 tables, 479 columns, 88 FKs, all InnoDB |
-| A fresh install vs one upgraded through 006 | **identical** — 479 columns, 244 index rows and 88 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
+| `tests/escape-audit.php` | **3081 output expressions across 118 templates, 0 unescaped** |
+| All 7 migrations against an empty database | applied cleanly; 43 tables, 485 columns, 91 FKs, all InnoDB |
+| A fresh install vs one upgraded through 007 | **identical** — 485 columns, 248 index rows and 91 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
 | Seed data counts | 4 roles / 38 permissions / 74 grants / 51 settings / 0 template overrides |
 | `tests/permission-matrix.php` | **408 checks, 0 mismatches** |
-| `tests/routines.php` | **126 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, category-scoped, worked through out of order by two different accounts, scanned to, and the PDF checked object by object |
+| `tests/routines.php` | **165 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, category-scoped, worked through out of order by two different accounts a step *and* a page at a time, scanned to, and the PDF checked object by object |
 | `tests/media-library.php` | **49 checks, 0 failed** — counted from the database *and* the filesystem |
 | `tests/fault-flow.php` | **68 checks, 0 failed** — end to end over HTTP, with a mail catcher |
 | `tests/api-contract.php` | **84 checks, 0 failed** — the API against its own generated specification |
 | `tests/docs-audit.php` | **47 checks, 0 failed** |
 | Live DOM, `/assets/create` | *Available to hire out* unticked, its hint `display: block`, starting below the label, left-aligned with it, 809px of an 809px row |
 | Live DOM, an open run at 1280px | one page head (not two), 73px step rows, labels aligned at a single left edge, no horizontal overflow |
+| Live DOM, a page-batched run at 1280px | three page cards with one **Answer** button each and **zero** step-level actions, progress read in pages, "Still required" listing only the flagged pages; submitting a page returns to the contents anchored at it, reading "Completed by Alex Admin" with its button now **Change** |
 | Documentation links | every anchor and file link in `docs/` and `README.md` resolves |
 | `tests/totp-vectors.php` | **52 checks, 0 failed** — RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `tests/qr-encode.php` | **21 checks, 0 failed** — ISO/IEC 18004 Annex I error-correction codewords, and the geometry |

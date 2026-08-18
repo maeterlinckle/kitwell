@@ -10,6 +10,7 @@ Procedures a technician steps through and fills in — checks, readings, photogr
 - [Publishing, and who may](#publishing-and-who-may)
 - [Carrying one out](#carrying-one-out)
 - [Checklist routines: any step, any order, anybody](#checklist-routines-any-step-any-order-anybody)
+- [Answering a page at a time](#answering-a-page-at-a-time)
 - [Attaching one to a scheduled job](#attaching-one-to-a-scheduled-job)
 - [Scanning to a routine](#scanning-to-a-routine)
 - [Versions](#versions)
@@ -64,9 +65,11 @@ button you pressed is acted on, so adding a step never loses an edit made
 further up the page. **Preview** shows the routine exactly as somebody carrying
 it out will meet it, with every control switched off.
 
-Two settings sit beside the pages: **Applies to**, covered next, and **Allow
-steps to be completed out of order**, covered under
-[Checklist routines](#checklist-routines-any-step-any-order-anybody).
+Three settings sit beside the pages: **Applies to**, covered next, and two under
+**How it is worked through** — **Allow steps to be completed out of order** and
+**Require all steps on a page to be completed together**, covered under
+[Checklist routines](#checklist-routines-any-step-any-order-anybody) and
+[Answering a page at a time](#answering-a-page-at-a-time).
 
 Layout is not configurable beyond the order of pages and steps. What a routine
 says is yours; how it is drawn is the application's, so every routine on the
@@ -183,6 +186,42 @@ photograph on it goes, and nothing is recorded against the asset.
 A routine without the option is unchanged: one form, filled in from top to
 bottom in a single sitting, recorded when it is submitted.
 
+## Answering a page at a time
+
+**Require all steps on a page to be completed together** sits under the
+out-of-order option and only applies alongside it. With both on, the pages stay
+independent of each other — any page, in any order — but a page is answered and
+submitted as **one unit** rather than a step at a time. That suits a station
+where one person has the item in front of them for a whole page's worth of work.
+
+What changes:
+
+| | Step at a time | A page at a time |
+|---|---|---|
+| The contents offers | One action per step | One **Answer** button per page |
+| Opening it shows | That one step | That page's steps, and only those |
+| Required is enforced | Per step, as you go | Across the page, when it is submitted |
+| Completion is recorded against | Each step, and whoever answered it | The page, and whoever finished it |
+
+Submitting a page returns you to the contents, where it now reads as completed
+with the name and time against it. Opening it again shows what was recorded and
+lets it be changed; doing so moves the name to whoever changed it.
+
+Required steps are scoped to the page being submitted. A page cannot be
+submitted while one of *its* required steps is blank, and what is outstanding on
+any other page has no bearing on it.
+
+### Pages that must be done
+
+In this mode each page gets its own **Require this page to be completed before
+the routine can be signed off**. The run cannot be closed out until every page
+flagged that way is complete — the contents lists the ones still outstanding and
+links to each.
+
+Leave it off for a page that only applies sometimes: a fault that was not found,
+a part that was not fitted. An unflagged page can be left untouched and the run
+still signs off, and the record says plainly that the page was not completed.
+
 ## Attaching one to a scheduled job
 
 A maintenance schedule can name a routine, on the schedule form under
@@ -251,8 +290,10 @@ alongside the recorded answer, photographs inline, documents offered as a
 download. A step that was left blank says **Not answered** rather than leaving a
 gap to interpret.
 
-Each answer carries the name of whoever gave it and when. A run that was worked
-through as a checklist also names who started it and who signed it off.
+A run that was worked through as a checklist names who started it and who signed
+it off. Where it went step by step, each answer carries the name of whoever gave
+it and when; where it went a page at a time, each **page** carries the name of
+whoever completed it — on screen and on the PDF alike.
 
 **Download PDF** produces the same record as a document, with the organisation's
 masthead and logo, the asset and the work in a summary block, every question

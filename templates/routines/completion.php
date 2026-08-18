@@ -15,6 +15,8 @@ use App\Models\RoutineCompletion;
  * @var array<int,array<string,mixed>> $responses keyed by step id
  * @var array<int,array<int,array<string,mixed>>> $files keyed by step id
  * @var array<int,array{name:?string,at:?string}> $attribution keyed by step id
+ * @var array<int,array{name:?string,at:string}> $pageCompletions keyed by page id
+ * @var bool $batched
  */
 $id      = (int) $completion['id'];
 $assetId = (int) $completion['asset_id'];
@@ -50,6 +52,18 @@ $assetId = (int) $completion['asset_id'];
             <section class="card">
                 <div class="card-head">
                     <h2><?= (int) $index + 1 ?>. <?= e($page['title']) ?></h2>
+                    <?php /* A batched run is completed a page at a time, so the
+                             page is where the name belongs — not repeated
+                             against each of its steps. */ ?>
+                    <?php $pageDone = $pageCompletions[(int) $page['id']] ?? null; ?>
+                    <?php if ($batched && $pageDone !== null): ?>
+                        <span class="muted">
+                            <?php if ($pageDone['name'] !== null): ?><?= e($pageDone['name']) ?>, <?php endif; ?>
+                            <?= e(format_datetime($pageDone['at'])) ?>
+                        </span>
+                    <?php elseif ($batched): ?>
+                        <span class="badge badge-muted">Not completed</span>
+                    <?php endif; ?>
                 </div>
 
                 <?php if (!empty($page['description'])): ?>
@@ -70,7 +84,7 @@ $assetId = (int) $completion['asset_id'];
                                 <?php if (!empty($step['help_text'])): ?>
                                     <span class="answer-help muted"><?= e($step['help_text']) ?></span>
                                 <?php endif; ?>
-                                <?php $by = $attribution[$stepId] ?? null; ?>
+                                <?php $by = $batched ? null : ($attribution[$stepId] ?? null); ?>
                                 <?php if ($by !== null && $by['name'] !== null): ?>
                                     <span class="answer-help muted">
                                         <?= e($by['name']) ?><?php if ($by['at'] !== null): ?>, <?= e(format_datetime((string) $by['at'])) ?><?php endif; ?>

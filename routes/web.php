@@ -240,6 +240,8 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/maintenance/completions/{id:\d+}/submit',  [RoutineRunController::class, 'submitForm'], ['can:maintenance.complete']);
     $router->post('/maintenance/completions/{id:\d+}/submit', [RoutineRunController::class, 'submit'],     ['can:maintenance.complete', 'csrf']);
     $router->post('/maintenance/completions/{id:\d+}/discard',[RoutineRunController::class, 'discard'],    ['can:maintenance.complete', 'csrf']);
+    $router->get('/maintenance/completions/{id:\d+}/pages/{pageId:\d+}',  [RoutineRunController::class, 'page'],     ['can:maintenance.complete']);
+    $router->post('/maintenance/completions/{id:\d+}/pages/{pageId:\d+}', [RoutineRunController::class, 'savePage'], ['can:maintenance.complete', 'csrf']);
     $router->get('/maintenance/completions/{id:\d+}/steps/{stepId:\d+}',  [RoutineRunController::class, 'step'],     ['can:maintenance.complete']);
     $router->post('/maintenance/completions/{id:\d+}/steps/{stepId:\d+}', [RoutineRunController::class, 'saveStep'], ['can:maintenance.complete', 'csrf']);
     $router->get('/maintenance/completions/{id:\d+}/pdf',                [RoutineRunController::class, 'pdf'],  ['can:maintenance.view']);

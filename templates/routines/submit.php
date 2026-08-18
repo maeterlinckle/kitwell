@@ -16,6 +16,7 @@ use App\Models\MaintenanceSchedule;
  * @var array<string,mixed> $asset
  * @var array<string,mixed>|null $schedule
  * @var array<int,array<string,mixed>> $users
+ * @var bool $batched
  * @var array<int,array<string,mixed>> $outstanding
  * @var string|null $nextDue
  * @var array<string,string> $errors
@@ -44,11 +45,15 @@ $id = (int) $completion['id'];
     <div class="flash flash-error">
         <span class="flash-text">
             <strong>Not ready.</strong>
-            <?= count($outstanding) ?> required step<?= count($outstanding) === 1 ? '' : 's' ?>
-            still <?= count($outstanding) === 1 ? 'has' : 'have' ?> no answer:
-            <?php foreach ($outstanding as $index => $step): ?>
+            <?= count($outstanding) ?> required <?= $batched ? 'page' : 'step' ?><?= count($outstanding) === 1 ? '' : 's' ?>
+            still <?= count($outstanding) === 1 ? 'has' : 'have' ?> to be completed:
+            <?php foreach ($outstanding as $index => $item): ?>
                 <?= $index > 0 ? ', ' : '' ?>
-                <a href="<?= e(url('/maintenance/completions/' . $id . '/steps/' . (int) $step['id'])) ?>"><?= e($step['label']) ?></a>
+                <?php if ($batched): ?>
+                    <a href="<?= e(url('/maintenance/completions/' . $id . '/pages/' . (int) $item['id'])) ?>"><?= e($item['title']) ?></a>
+                <?php else: ?>
+                    <a href="<?= e(url('/maintenance/completions/' . $id . '/steps/' . (int) $item['id'])) ?>"><?= e($item['label']) ?></a>
+                <?php endif; ?>
             <?php endforeach; ?>.
         </span>
     </div>
@@ -61,7 +66,8 @@ $id = (int) $completion['id'];
         <h2>The maintenance record</h2>
         <p class="muted">
             This is what goes into <?= e($completion['asset_tag']) ?>'s history. Your name is recorded
-            as having closed the run out; each answer keeps the name of whoever gave it.
+            as having closed the run out; each <?= $batched ? 'page' : 'answer' ?> keeps the name of
+            whoever <?= $batched ? 'completed it' : 'gave it' ?>.
         </p>
 
         <div class="field-row">

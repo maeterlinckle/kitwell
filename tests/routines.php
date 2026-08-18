@@ -29,7 +29,11 @@ declare(strict_types=1);
  *     order, each answer keeping its own name, and the run is refused a
  *     sign-off while a required step is blank;
  *   - the Routine scan target lands on an open run, a recent record, or the
- *     maintenance log page, according to what the asset actually has.
+ *     maintenance log page, according to what the asset actually has;
+ *   - a page-batched routine is answered a page at a time: the contents
+ *     offers one action per page, a page enforces its own required steps and
+ *     nobody else's, completion is recorded against the page, and sign-off
+ *     waits for the pages flagged as required and only those.
  *
  * **This test writes.** It creates routines, completions, schedules and
  * maintenance log entries. Point it at a scratch database.
@@ -794,7 +798,8 @@ $r = request('POST', $runPage . '/submit', [
     'performed_on' => date('Y-m-d'),
     'result'       => 'Completed',
 ]);
-check('signing off is refused while a required step is blank', str_contains($r['body'], 'still to answer'));
+check('signing off is refused while a required step is blank',
+    str_contains($r['body'], 'cannot be signed off part-finished'));
 check('and the run is still open', str_contains($r['body'], '>Open<'));
 
 // Station one, as the administrator.
@@ -927,6 +932,225 @@ check('the hireable box is unticked by default',
     'expected no `checked` on is_hireable');
 check('its help text is a block beneath the label',
     str_contains($r['body'], 'Tick for anything that goes out to a hirer'));
+// ---------------------------------------------------------------------------
+echo "\n== A page-batched routine ==\n";
+
+signIn('admin@example.com');
+
+$batchedName = 'Two station build ' . $nonce;
+$r = request('POST', '/maintenance/routines', [
+    '_token'      => token('/maintenance/routines/create'),
+    'name'        => $batchedName,
+    'description' => 'Each station finishes its own page.',
+    'category_id' => '',
+]);
+preg_match('#/maintenance/routines/(\d+)/edit#', $r['url'], $m);
+$batchedId   = (int) ($m[1] ?? 0);
+$batchedEdit = '/maintenance/routines/' . $batchedId . '/edit';
+check('the routine is created', $batchedId > 0);
+
+foreach (['Bench work', 'Test bay', 'Damage found'] as $title) {
+    request('POST', '/maintenance/routines/' . $batchedId . '/pages', [
+        '_token' => token($batchedEdit),
+        'title'  => $title,
+    ]);
+}
+
+$r = request('GET', $batchedEdit);
+preg_match_all('#/pages/(\d+)"#', $r['body'], $m);
+$batchedPages = array_values(array_unique(array_map('intval', $m[1])));
+check('three pages exist', count($batchedPages) === 3, (string) count($batchedPages));
+
+addStep($batchedId, $batchedPages[0], 'Bench work', 'Torque setting',  'number',  true, 'Nm');
+addStep($batchedId, $batchedPages[0], 'Bench work', 'Bench notes',     'long_text', false);
+addStep($batchedId, $batchedPages[1], 'Test bay',   'Test passed?',    'boolean', true);
+addStep($batchedId, $batchedPages[2], 'Damage found', 'What was damaged', 'short_text', true);
+
+// The batching option is only offered once the routine is a checklist at all.
+$r = request('GET', $batchedEdit);
+check('the batching option is hidden until out-of-order is on',
+    preg_match('#data-needs-out-of-order hidden#', $r['body']) === 1
+    || preg_match('#data-needs-out-of-order\s+hidden#', $r['body']) === 1,
+    'expected the dependent field to render hidden');
+
+request('POST', '/maintenance/routines/' . $batchedId . '/out-of-order', [
+    '_token'             => token($batchedEdit),
+    'allow_out_of_order' => '1',
+    'page_batched'       => '1',
+]);
+
+$r = request('GET', $batchedEdit);
+check('both options are saved', preg_match('#name="allow_out_of_order"[^>]*checked#', $r['body']) === 1
+    && preg_match('#name="page_batched"[^>]*checked#', $r['body']) === 1);
+check('the per-page sign-off option now appears', substr_count($r['body'], 'name="required_for_signoff"') === 3,
+    (string) substr_count($r['body'], 'name="required_for_signoff"'));
+
+// Two of the three pages must be done; the third is the "if it happened" page.
+foreach ([[$batchedPages[0], 'Bench work', true], [$batchedPages[1], 'Test bay', true], [$batchedPages[2], 'Damage found', false]] as [$pid, $title, $required]) {
+    $fields = [
+        '_token'             => token($batchedEdit),
+        'do'                 => 'save',
+        'title'              => $title,
+        'page_flags_present' => '1',
+    ];
+
+    if ($required) {
+        $fields['required_for_signoff'] = '1';
+    }
+
+    request('POST', '/maintenance/routines/' . $batchedId . '/pages/' . $pid, $fields);
+}
+
+$r = request('GET', $batchedEdit);
+check('two pages are flagged as required for sign-off',
+    substr_count($r['body'], 'name="required_for_signoff" value="1"' . "\n" . '                                checked') === 2
+    || preg_match_all('#name="required_for_signoff"[^>]*checked#', $r['body']) === 2,
+    (string) preg_match_all('#name="required_for_signoff"[^>]*checked#', $r['body']));
+
+// Turning batching off must not leave a dead setting behind.
+request('POST', '/maintenance/routines/' . $batchedId . '/out-of-order', [
+    '_token'             => token($batchedEdit),
+    'allow_out_of_order' => '0',
+    'page_batched'       => '1',
+]);
+$r = request('GET', $batchedEdit);
+check('batching cannot outlive the checklist it describes',
+    preg_match('#name="page_batched"[^>]*checked#', $r['body']) !== 1);
+
+request('POST', '/maintenance/routines/' . $batchedId . '/out-of-order', [
+    '_token'             => token($batchedEdit),
+    'allow_out_of_order' => '1',
+    'page_batched'       => '1',
+]);
+
+request('POST', '/maintenance/routines/' . $batchedId . '/publish', ['_token' => token($batchedEdit)]);
+
+// ---------------------------------------------------------------------------
+echo "\n== Working through it a page at a time ==\n";
+
+$batchedAsset = $registerAsset('Batched build rig ' . $nonce, 0);
+$batchedRun   = '/assets/' . $batchedAsset . '/routines/' . $batchedId . '/run';
+
+$r = request('GET', $batchedRun);
+check('it opens as a run rather than a form', str_contains($r['body'], 'Start the run'));
+
+$r = request('POST', '/assets/' . $batchedAsset . '/routines/' . $batchedId . '/start', ['_token' => token($batchedRun)]);
+preg_match('#/maintenance/completions/(\d+)#', $r['url'], $m);
+$batchedRunId = (int) ($m[1] ?? 0);
+$batchedPage  = '/maintenance/completions/' . $batchedRunId;
+check('the run opens', $batchedRunId > 0, $r['url']);
+
+$contents = $r['body'];
+check('the contents offers one action per page, not per step',
+    substr_count($contents, '/pages/') >= 3 && !str_contains($contents, '/steps/'),
+    'pages ' . substr_count($contents, '/pages/') . ', steps ' . substr_count($contents, '/steps/'));
+check('progress is counted in pages', str_contains($contents, '0 of 3') && str_contains($contents, 'pages done'));
+check('it says two required pages remain', str_contains($contents, '2 required pages'));
+check('every page reads as not started', substr_count($contents, 'Not started.') === 3,
+    (string) substr_count($contents, 'Not started.'));
+
+// Opening a page shows that page and nothing else.
+$r = request('GET', $batchedPage . '/pages/' . $batchedPages[0]);
+$pageForm = $r['body'];
+check('the page view renders', $r['status'] === 200 && str_contains($pageForm, 'Bench work'));
+check('it shows only that page\'s steps', count(stepsOnForm($pageForm)) === 2, (string) count(stepsOnForm($pageForm)));
+check('and says it is required for sign-off', str_contains($pageForm, 'Required for sign-off'));
+check('it does not show another page\'s steps', !str_contains($pageForm, 'Test passed?'));
+
+// A step of a batched run is not answered on its own, even by URL. The step id
+// comes from the page form rather than the editor: an open run counts against
+// its version, so the editor is already showing the version-locked gate.
+$anyStep = (int) array_key_first(stepsOnForm($pageForm));
+
+$r = request('GET', $batchedPage . '/steps/' . $anyStep);
+check('a single step redirects to its page', str_contains($r['url'], '/pages/'), $r['url']);
+check('and says why', str_contains($r['body'], 'answered a page at a time'));
+
+$r = request('POST', $batchedPage . '/steps/' . $anyStep, [
+    '_token' => token($batchedPage . '/pages/' . $batchedPages[0]),
+    'step'   => [$anyStep => '99'],
+]);
+check('and posting one on its own is refused too', str_contains($r['url'], '/pages/'), $r['url']);
+
+// Required is enforced across this page, and no further.
+$r = request('POST', $batchedPage . '/pages/' . $batchedPages[0], [
+    '_token' => token($batchedPage . '/pages/' . $batchedPages[0]),
+]);
+check('a page with a blank required step is refused', str_contains($r['body'], 'has to be answered'));
+check('and nothing is recorded for it', !str_contains($r['body'], 'Completed by'));
+
+$fields = ['_token' => token($batchedPage . '/pages/' . $batchedPages[0])];
+foreach (stepsOnForm($pageForm) as $stepId => $type) {
+    if ($type === 'number') {
+        $fields['step'][$stepId] = '48';
+    }
+}
+
+$r = request('POST', $batchedPage . '/pages/' . $batchedPages[0], $fields);
+check('a page whose own required steps are answered is recorded',
+    str_contains($r['url'], '/maintenance/completions/' . $batchedRunId), $r['url']);
+check('and it returns to the contents', str_contains($r['body'], '>Open<'));
+check('the page now reads as completed', str_contains($r['body'], 'Completed by Alex Admin'));
+check('progress counts it', str_contains($r['body'], '1 of 3'));
+check('one required page remains', str_contains($r['body'], '1 required page'));
+
+// Sign-off waits for the required pages, and only those.
+$r = request('POST', $batchedPage . '/submit', [
+    '_token'       => token($batchedPage . '/submit'),
+    'performed_on' => date('Y-m-d'),
+    'result'       => 'Completed',
+]);
+check('sign-off is refused while a required page is outstanding',
+    str_contains($r['body'], 'cannot be signed off part-finished'));
+check('the message counts pages, not steps', str_contains($r['body'], '1 required page'));
+
+// A second person finishes the other required page.
+signIn('manager@example.com');
+
+$r = request('GET', $batchedPage . '/pages/' . $batchedPages[1]);
+$fields = ['_token' => token($batchedPage . '/pages/' . $batchedPages[1])];
+foreach (stepsOnForm($r['body']) as $stepId => $type) {
+    if ($type === 'boolean') {
+        $fields['step'][$stepId] = '1';
+    }
+}
+
+$r = request('POST', $batchedPage . '/pages/' . $batchedPages[1], $fields);
+check('a second person completes the other page', str_contains($r['body'], 'Completed by Sam Staff'));
+check('each page keeps its own name',
+    str_contains($r['body'], 'Completed by Alex Admin') && str_contains($r['body'], 'Completed by Sam Staff'));
+check('the optional page is still untouched', str_contains($r['body'], 'Not started.'));
+check('the run is ready to sign off', str_contains($r['body'], 'ready to sign off'));
+
+// The optional page is genuinely optional.
+$r = request('POST', $batchedPage . '/submit', [
+    '_token'       => token($batchedPage . '/submit'),
+    'performed_on' => date('Y-m-d'),
+    'result'       => 'Completed',
+    'notes'        => 'No damage found, so that page was left.',
+]);
+check('a page not flagged as required does not block sign-off',
+    !str_contains($r['body'], '>Open<') && str_contains($r['body'], 'Download PDF'), $r['url']);
+check('the record names who signed it off', str_contains($r['body'], 'Signed off by'));
+check('and reports each page against whoever completed it',
+    str_contains($r['body'], 'Alex Admin') && str_contains($r['body'], 'Sam Staff'));
+check('the page nobody did says so', str_contains($r['body'], 'Not completed'));
+
+$r = request('GET', $batchedPage . '/pdf');
+$pdf = $r['body'];
+check('a batched run produces a PDF', str_starts_with($pdf, '%PDF-'));
+
+$text = '';
+if (preg_match_all('/stream\n(.*?)\nendstream/s', $pdf, $sm)) {
+    foreach ($sm[1] as $stream) {
+        $plain = @gzuncompress($stream);
+        $text .= is_string($plain) ? $plain : '';
+    }
+}
+check('the document names who completed each page',
+    str_contains($text, 'Alex Admin') && str_contains($text, 'Sam Staff'));
+
+signIn('admin@example.com');
 @unlink($photo);
 @unlink($document);
 @unlink($jar);

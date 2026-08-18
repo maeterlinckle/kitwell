@@ -215,15 +215,20 @@ final class RoutineRunController extends Controller
         $responses = RoutineCompletion::responses((int) $completion['id']);
         $files     = RoutineCompletion::files((int) $completion['id']);
 
+        $batched = MaintenanceRoutine::isPageBatched($completion);
+        $done    = RoutineCompletion::pageCompletions((int) $completion['id']);
+
         if ($completion['status'] === 'open') {
             $this->view('routines/contents', [
-                'pageTitle'   => $completion['routine_name'] . ' · ' . $completion['asset_tag'],
-                'completion'  => $completion,
-                'pages'       => $pages,
-                'responses'   => $responses,
-                'files'       => $files,
-                'attribution' => RoutineCompletion::attribution((int) $completion['id']),
-                'outstanding' => self::outstanding($pages, $responses, $files),
+                'pageTitle'       => $completion['routine_name'] . ' · ' . $completion['asset_tag'],
+                'completion'      => $completion,
+                'pages'           => $pages,
+                'responses'       => $responses,
+                'files'           => $files,
+                'batched'         => $batched,
+                'attribution'     => RoutineCompletion::attribution((int) $completion['id']),
+                'pageCompletions' => $done,
+                'outstanding'     => self::outstanding($completion, $pages, $responses, $files, $done),
             ]);
 
             // Same reason: one of these two pages, never both.
@@ -231,12 +236,14 @@ final class RoutineRunController extends Controller
         }
 
         $this->view('routines/completion', [
-            'pageTitle'   => $completion['routine_name'] . ' · ' . $completion['asset_tag'],
-            'completion'  => $completion,
-            'pages'       => $pages,
-            'responses'   => $responses,
-            'files'       => $files,
-            'attribution' => RoutineCompletion::attribution((int) $completion['id']),
+            'pageTitle'       => $completion['routine_name'] . ' · ' . $completion['asset_tag'],
+            'completion'      => $completion,
+            'pages'           => $pages,
+            'responses'       => $responses,
+            'files'           => $files,
+            'batched'         => $batched,
+            'attribution'     => RoutineCompletion::attribution((int) $completion['id']),
+            'pageCompletions' => $done,
         ]);
     }
 
@@ -244,6 +251,8 @@ final class RoutineRunController extends Controller
     public function step(string $id, string $stepId): void
     {
         [$completion, $step] = $this->openStep((int) $id, (int) $stepId);
+
+        $this->refuseIfBatched($completion, (int) $step['page_id']);
 
         $pages = MaintenanceRoutine::structure((int) $completion['version_id']);
 
@@ -262,6 +271,8 @@ final class RoutineRunController extends Controller
     public function saveStep(string $id, string $stepId): void
     {
         [$completion, $step] = $this->openStep((int) $id, (int) $stepId);
+
+        $this->refuseIfBatched($completion, (int) $step['page_id']);
 
         $completionId = (int) $completion['id'];
         $stepKey      = (int) $step['id'];
@@ -307,6 +318,84 @@ final class RoutineRunController extends Controller
         Response::redirect('/maintenance/completions/' . $completionId . '#step-' . $stepKey);
     }
 
+    /** One page of a batched run: its steps, and only its steps. */
+    public function page(string $id, string $pageId): void
+    {
+        [$completion, $page] = $this->openPage((int) $id, (int) $pageId);
+
+        $completionId = (int) $completion['id'];
+        $steps        = MaintenanceRoutine::steps((int) $page['id']);
+        $structure    = MaintenanceRoutine::structure((int) $completion['version_id']);
+
+        $this->view('routines/page', [
+            'pageTitle'  => $page['title'] . ' · ' . $completion['asset_tag'],
+            'completion' => $completion,
+            'page'       => $page,
+            'steps'      => $steps,
+            'position'   => self::pagePositionOf($structure, (int) $page['id']),
+            'responses'  => RoutineCompletion::responses($completionId),
+            'files'      => RoutineCompletion::files($completionId),
+            'done'       => RoutineCompletion::pageCompletions($completionId)[(int) $page['id']] ?? null,
+        ]);
+    }
+
+    /**
+     * Record a whole page in one go.
+     *
+     * Required is enforced across this page and no further: a page is an
+     * independently completable unit, so what is outstanding elsewhere is
+     * nobody's business here. The run as a whole is checked at sign-off.
+     */
+    public function savePage(string $id, string $pageId): void
+    {
+        [$completion, $page] = $this->openPage((int) $id, (int) $pageId);
+
+        $completionId = (int) $completion['id'];
+        $pageKey      = (int) $page['id'];
+        $redirect     = '/maintenance/completions/' . $completionId . '/pages/' . $pageKey;
+
+        $steps   = MaintenanceRoutine::steps($pageKey);
+        $stored  = RoutineCompletion::files($completionId);
+        $answers = $this->readAnswers(self::withFilesAnswered($steps, $stored), $redirect);
+
+        foreach ($steps as $step) {
+            $stepKey = (int) $step['id'];
+
+            if (in_array((string) $step['field_type'], MaintenanceRoutine::FILE_TYPES, true)) {
+                if (Upload::files('step_file_' . $stepKey) === []) {
+                    continue;
+                }
+
+                foreach (RoutineCompletion::forgetFiles($completionId, $stepKey) as $old) {
+                    Upload::delete((string) $old['file_path']);
+                }
+
+                $this->storeFiles($completionId, [$step]);
+
+                RoutineCompletion::saveResponse($completionId, $stepKey, [
+                    'value_text'    => null,
+                    'value_number'  => null,
+                    'value_date'    => null,
+                    'value_boolean' => null,
+                ], Auth::id());
+
+                continue;
+            }
+
+            if (isset($answers[$stepKey])) {
+                RoutineCompletion::saveResponse($completionId, $stepKey, $answers[$stepKey], Auth::id());
+                continue;
+            }
+
+            RoutineCompletion::forgetResponse($completionId, $stepKey);
+        }
+
+        RoutineCompletion::completePage($completionId, $pageKey, Auth::id());
+
+        Flash::success(sprintf('“%s” recorded.', (string) $page['title']));
+        Response::redirect('/maintenance/completions/' . $completionId . '#page-' . $pageKey);
+    }
+
     /** The form that signs an open run off. */
     public function submitForm(string $id): void
     {
@@ -326,7 +415,14 @@ final class RoutineRunController extends Controller
             'asset'       => Asset::find((int) $completion['asset_id']),
             'schedule'    => $schedule,
             'users'       => MaintenanceSchedule::assignableUsers(),
-            'outstanding' => self::outstanding($pages, $responses, $files),
+            'batched'     => MaintenanceRoutine::isPageBatched($completion),
+            'outstanding' => self::outstanding(
+                $completion,
+                $pages,
+                $responses,
+                $files,
+                RoutineCompletion::pageCompletions((int) $completion['id'])
+            ),
             'nextDue'     => $schedule === null ? null : MaintenanceSchedule::nextDueAfter($schedule, date('Y-m-d')),
         ]);
     }
@@ -346,15 +442,20 @@ final class RoutineRunController extends Controller
 
         $pages       = MaintenanceRoutine::structure((int) $completion['version_id']);
         $outstanding = self::outstanding(
+            $completion,
             $pages,
             RoutineCompletion::responses($completionId),
-            RoutineCompletion::files($completionId)
+            RoutineCompletion::files($completionId),
+            RoutineCompletion::pageCompletions($completionId)
         );
 
         if ($outstanding !== []) {
+            $unit = MaintenanceRoutine::isPageBatched($completion) ? 'page' : 'step';
+
             Flash::error(sprintf(
-                '%d required step%s still to answer. A routine cannot be signed off part-finished.',
+                '%d required %s%s still to complete. A routine cannot be signed off part-finished.',
                 count($outstanding),
+                $unit,
                 count($outstanding) === 1 ? '' : 's'
             ));
             Response::redirect('/maintenance/completions/' . $completionId);
@@ -646,18 +747,47 @@ final class RoutineRunController extends Controller
     }
 
     /**
-     * The required steps of a run that still have no answer.
+     * What still stands between a run and its sign-off.
      *
-     * Worked out from what is stored rather than from what was posted, because
-     * the answers arrive one at a time and from different people.
+     * The unit depends on how the run is worked through. A step-at-a-time run
+     * is blocked by its unanswered **required steps**, wherever they are. A
+     * page-batched one is blocked by its incomplete **pages flagged as
+     * required** — and only those, because a page nobody needed to fill in is
+     * exactly what an optional page is for.
      *
+     * Worked out from what is stored rather than from what was posted: the
+     * answers arrive separately, and from different people.
+     *
+     * @param array<string,mixed> $completion
      * @param array<int,array<string,mixed>> $pages
      * @param array<int,array<string,mixed>> $responses keyed by step id
      * @param array<int,array<int,array<string,mixed>>> $files keyed by step id
+     * @param array<int,array{name:?string,at:string}> $pageCompletions keyed by page id
      * @return array<int,array<string,mixed>>
      */
-    private static function outstanding(array $pages, array $responses, array $files): array
-    {
+    private static function outstanding(
+        array $completion,
+        array $pages,
+        array $responses,
+        array $files,
+        array $pageCompletions = []
+    ): array {
+        if (MaintenanceRoutine::isPageBatched($completion)) {
+            $missing = [];
+
+            foreach ($pages as $page) {
+                if ((int) $page['required_for_signoff'] !== 1) {
+                    continue;
+                }
+
+                if (!isset($pageCompletions[(int) $page['id']])) {
+                    $missing[] = $page + ['label' => $page['title'], 'page_title' => $page['title']];
+                }
+            }
+
+            return $missing;
+        }
+
         $missing = [];
 
         foreach ($pages as $page) {
@@ -673,6 +803,44 @@ final class RoutineRunController extends Controller
         }
 
         return $missing;
+    }
+
+    /** Every required step on one page that still has no answer. */
+    public static function outstandingOnPage(array $steps, array $responses, array $files): array
+    {
+        $missing = [];
+
+        foreach ($steps as $step) {
+            if ((int) $step['is_required'] === 1 && !self::isAnswered($step, $responses, $files)) {
+                $missing[] = $step;
+            }
+        }
+
+        return $missing;
+    }
+
+    /**
+     * A file step that already has files behind it counts as answered, so a
+     * page re-submitted without re-attaching them is not refused for a
+     * requirement it has already met.
+     *
+     * @param array<int,array<string,mixed>> $steps
+     * @param array<int,array<int,array<string,mixed>>> $stored keyed by step id
+     * @return array<int,array<string,mixed>>
+     */
+    private static function withFilesAnswered(array $steps, array $stored): array
+    {
+        foreach ($steps as $index => $step) {
+            if (!in_array((string) $step['field_type'], MaintenanceRoutine::FILE_TYPES, true)) {
+                continue;
+            }
+
+            if (($stored[(int) $step['id']] ?? []) !== [] && Upload::files('step_file_' . (int) $step['id']) === []) {
+                $steps[$index]['is_required'] = 0;
+            }
+        }
+
+        return $steps;
     }
 
     /**
@@ -695,6 +863,56 @@ final class RoutineRunController extends Controller
         }
 
         return RoutineCompletion::answer($step, $responses[$stepId] ?? null) !== null;
+    }
+
+    /**
+     * An open run and one page of the version it is following.
+     *
+     * @return array{0:array<string,mixed>,1:array<string,mixed>}
+     */
+    private function openPage(int $id, int $pageId): array
+    {
+        $completion = $this->openRun($id);
+
+        if (!MaintenanceRoutine::isPageBatched($completion)) {
+            Flash::info('This routine is answered a step at a time.');
+            Response::redirect('/maintenance/completions/' . $id);
+        }
+
+        $page = MaintenanceRoutine::findPage($pageId);
+
+        if ($page === null || (int) $page['version_id'] !== (int) $completion['version_id']) {
+            $this->notFound('That page is not part of this routine.');
+        }
+
+        return [$completion, $page];
+    }
+
+    /**
+     * A step of a batched run is not answered on its own.
+     *
+     * @param array<string,mixed> $completion
+     */
+    private function refuseIfBatched(array $completion, int $pageId): void
+    {
+        if (!MaintenanceRoutine::isPageBatched($completion)) {
+            return;
+        }
+
+        Flash::info('This routine is answered a page at a time.');
+        Response::redirect('/maintenance/completions/' . (int) $completion['id'] . '/pages/' . $pageId);
+    }
+
+    /** "Page 2 of 4" — where a page sits, for a view that shows only it. */
+    private static function pagePositionOf(array $pages, int $pageId): string
+    {
+        foreach ($pages as $index => $page) {
+            if ((int) $page['id'] === $pageId) {
+                return sprintf('Page %d of %d', $index + 1, count($pages));
+            }
+        }
+
+        return '';
     }
 
     /**

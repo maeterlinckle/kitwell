@@ -13,6 +13,24 @@
 (function () {
     'use strict';
 
+    /* Page batching is a way of working through a checklist, so its box only
+       means anything while the checklist box is ticked. The server ignores it
+       either way; this just stops the editor offering a setting that would do
+       nothing. */
+    var outOfOrder = document.querySelector('[data-out-of-order]');
+    var dependent  = document.querySelectorAll('[data-needs-out-of-order]');
+
+    if (outOfOrder && dependent.length) {
+        var syncDependent = function () {
+            Array.prototype.forEach.call(dependent, function (field) {
+                field.hidden = !outOfOrder.checked;
+            });
+        };
+
+        outOfOrder.addEventListener('change', syncDependent);
+        syncDependent();
+    }
+
     var rows = document.querySelectorAll('[data-step-editor]');
     if (!rows.length) return;
 

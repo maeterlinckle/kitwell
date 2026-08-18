@@ -33,6 +33,7 @@ final class RoutineCompletion
                                    v.version_number,
                                    v.published_at AS version_published_at,
                                    v.allow_out_of_order,
+                                   v.page_batched,
                                    a.asset_tag, a.name AS asset_name,
                                    a.serial_number, a.manufacturer, a.model,
                                    cat.name AS category_name,
@@ -236,6 +237,55 @@ final class RoutineCompletion
         );
 
         return $files;
+    }
+
+    /**
+     * Record a page of a batched run as finished, by whoever finished it.
+     *
+     * Re-submitting a page moves the name to whoever submitted it last, for
+     * the same reason a re-answered step does: the record says who stands
+     * behind what it now holds.
+     */
+    public static function completePage(int $completionId, int $pageId, ?int $userId): void
+    {
+        Database::run(
+            'DELETE FROM routine_page_completions WHERE completion_id = ? AND page_id = ?',
+            [$completionId, $pageId]
+        );
+
+        Database::insert('routine_page_completions', [
+            'completion_id' => $completionId,
+            'page_id'       => $pageId,
+            'completed_by'  => $userId,
+            'completed_at'  => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * Which pages of a run are finished, with who finished them.
+     *
+     * @return array<int,array{name:?string,at:string}>
+     */
+    public static function pageCompletions(int $completionId): array
+    {
+        $rows = Database::select(
+            'SELECT p.page_id, p.completed_at, u.name
+               FROM routine_page_completions p
+               LEFT JOIN users u ON u.id = p.completed_by
+              WHERE p.completion_id = ?',
+            [$completionId]
+        );
+
+        $byPage = [];
+
+        foreach ($rows as $row) {
+            $byPage[(int) $row['page_id']] = [
+                'name' => $row['name'],
+                'at'   => (string) $row['completed_at'],
+            ];
+        }
+
+        return $byPage;
     }
 
     /**

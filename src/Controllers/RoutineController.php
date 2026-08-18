@@ -303,25 +303,32 @@ final class RoutineController extends Controller
     {
         [$routine, $version] = $this->editable((int) $id);
 
-        $allow = Request::boolean('allow_out_of_order');
+        $allow   = Request::boolean('allow_out_of_order');
+        $batched = Request::boolean('page_batched');
 
-        MaintenanceRoutine::setOutOfOrder((int) $version['id'], $allow);
+        MaintenanceRoutine::setOutOfOrder((int) $version['id'], $allow, $batched);
 
         ActivityLog::record(
             'updated',
             'maintenance_routine',
             (int) $routine['id'],
             sprintf(
-                'Version %d of "%s" %s its steps to be answered out of order',
+                'Version %d of "%s" is now worked through %s',
                 (int) $version['version_number'],
                 (string) $routine['name'],
-                $allow ? 'now allows' : 'no longer allows'
+                match (true) {
+                    $allow && $batched => 'a page at a time, in any order',
+                    $allow             => 'a step at a time, in any order',
+                    default            => 'in order, as one form',
+                }
             )
         );
 
-        Flash::success($allow
-            ? 'This version is now worked through as a checklist: any step, in any order, by anybody.'
-            : 'This version is now worked through in order, as one form.');
+        Flash::success(match (true) {
+            $allow && $batched => 'This version is now worked through a page at a time: any page, in any order, each answered in one sitting.',
+            $allow             => 'This version is now worked through as a checklist: any step, in any order, by anybody.',
+            default            => 'This version is now worked through in order, as one form.',
+        });
 
         Response::redirect('/maintenance/routines/' . (int) $routine['id'] . '/edit');
     }
@@ -465,10 +472,20 @@ final class RoutineController extends Controller
         $title       = trim((string) Request::post('title', ''));
         $description = trim((string) Request::post('description', ''));
 
-        MaintenanceRoutine::updatePage((int) $page['id'], [
+        $fields = [
             'title'       => $title !== '' ? mb_substr($title, 0, 191) : 'Untitled page',
             'description' => $description !== '' ? mb_substr($description, 0, 1000) : null,
-        ]);
+        ];
+
+        // The sign-off flag is only offered while the version batches pages, so
+        // it is only written when the form actually carried it. An unchecked box
+        // posts nothing at all, which is indistinguishable from a form that
+        // never showed one — hence the marker.
+        if (Request::post('page_flags_present') !== null) {
+            $fields['required_for_signoff'] = Request::boolean('required_for_signoff') ? 1 : 0;
+        }
+
+        MaintenanceRoutine::updatePage((int) $page['id'], $fields);
 
         $submitted = Request::post('steps');
 

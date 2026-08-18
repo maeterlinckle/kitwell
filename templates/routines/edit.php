@@ -141,7 +141,7 @@ $isDraft   = $version !== null && $version['published_at'] === null;
 
             <div class="field">
                 <label class="checkbox">
-                    <input type="checkbox" name="allow_out_of_order" value="1"
+                    <input type="checkbox" name="allow_out_of_order" value="1" data-out-of-order
                         <?= (int) $version['allow_out_of_order'] === 1 ? 'checked' : '' ?>>
                     <span>
                         Allow steps to be completed out of order
@@ -150,6 +150,22 @@ $isDraft   = $version !== null && $version['published_at'] === null;
                             at any time, by anybody, and the run is signed off once the required ones
                             are done. Suits work that passes between stations. Left off, the routine is
                             one form filled in from top to bottom in a single sitting.
+                        </span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="field" data-needs-out-of-order<?= (int) $version['allow_out_of_order'] === 1 ? '' : ' hidden' ?>>
+                <label class="checkbox">
+                    <input type="checkbox" name="page_batched" value="1"
+                        <?= (int) $version['page_batched'] === 1 ? 'checked' : '' ?>>
+                    <span>
+                        Require all steps on a page to be completed together
+                        <span class="field-hint">
+                            Pages stay independent of each other — any page, in any order — but a page
+                            is answered and submitted as one unit rather than a step at a time, and its
+                            completion is recorded against whoever finished it. Each page then gets its
+                            own “required before sign-off” setting below.
                         </span>
                     </span>
                 </label>
@@ -195,6 +211,27 @@ $isDraft   = $version !== null && $version['published_at'] === null;
                                placeholder="Shown under the heading while the routine is being filled in">
                     </div>
                 </div>
+
+                <?php /* Only meaningful when a page is the unit of work, so it is
+                         only offered then. The marker tells the controller the
+                         form carried the setting at all — an unchecked box posts
+                         nothing, which otherwise reads as "clear it". */ ?>
+                <?php if ((int) $version['page_batched'] === 1 && (int) $version['allow_out_of_order'] === 1): ?>
+                    <input type="hidden" name="page_flags_present" value="1">
+                    <div class="field">
+                        <label class="checkbox">
+                            <input type="checkbox" name="required_for_signoff" value="1"
+                                <?= (int) $page['required_for_signoff'] === 1 ? 'checked' : '' ?>>
+                            <span>
+                                Require this page to be completed before the routine can be signed off
+                                <span class="field-hint">
+                                    Leave it off for a page that only applies sometimes — a fault that
+                                    was not found, a part that was not fitted.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                <?php endif; ?>
 
                 <?php if ($page['steps'] === []): ?>
                     <p class="muted">No steps on this page yet.</p>

@@ -46,6 +46,9 @@ final class RoutineDocument
         $pages     = MaintenanceRoutine::structure((int) $completion['version_id']);
         $responses = RoutineCompletion::responses((int) $completion['id']);
         $files     = RoutineCompletion::files((int) $completion['id']);
+        $byPage    = MaintenanceRoutine::isPageBatched($completion)
+            ? RoutineCompletion::pageCompletions((int) $completion['id'])
+            : [];
 
         $title = sprintf(
             '%s — v%d',
@@ -66,7 +69,7 @@ final class RoutineDocument
         self::summary($pdf, $completion);
 
         foreach ($pages as $page) {
-            self::section($pdf, $page, $responses, $files, (int) $completion['id']);
+            self::section($pdf, $page, $responses, $files, (int) $completion['id'], $byPage[(int) $page['id']] ?? null);
         }
 
         self::signOff($pdf, $completion);
@@ -275,7 +278,7 @@ final class RoutineDocument
      * @param array<int,array<string,mixed>> $responses keyed by step id
      * @param array<int,array<int,array<string,mixed>>> $files keyed by step id
      */
-    private static function section(Pdf $pdf, array $page, array $responses, array $files, int $completionId): void
+    private static function section(Pdf $pdf, array $page, array $responses, array $files, int $completionId, ?array $completedBy = null): void
     {
         // A heading with nothing under it at the foot of a page is worse than
         // a slightly short page, so the band only lands where a row can follow.
@@ -284,6 +287,19 @@ final class RoutineDocument
         $pdf->fillRect($pdf->left(), $pdf->y(), $pdf->contentWidth(), 22.0, self::BAND);
         $pdf->setFont(Pdf::BOLD, 10.5);
         $pdf->text((string) $page['title'], $pdf->left() + 8.0, $pdf->y() + 15.0, self::INK);
+
+        // A page-batched run is completed a page at a time, so the band that
+        // names the page is where that name belongs.
+        if ($completedBy !== null) {
+            $pdf->setFont(Pdf::REGULAR, 8.0);
+            $pdf->textRight(
+                trim(((string) ($completedBy['name'] ?? '')) . '  ' . format_datetime((string) $completedBy['at'])),
+                $pdf->right() - 8.0,
+                $pdf->y() + 15.0,
+                self::MUTED
+            );
+        }
+
         $pdf->moveDown(26.0);
 
         if (trim((string) ($page['description'] ?? '')) !== '') {

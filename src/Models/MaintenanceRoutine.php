@@ -54,6 +54,7 @@ final class MaintenanceRoutine
                                    cv.version_number AS current_version_number,
                                    cv.published_at AS current_published_at,
                                    cv.allow_out_of_order AS current_allow_out_of_order,
+                                   cv.page_batched AS current_page_batched,
                                    dv.id AS draft_version_id,
                                    dv.version_number AS draft_version_number,
                                    (SELECT COUNT(*) FROM routine_completions rc WHERE rc.routine_id = r.id) AS completion_count
@@ -289,14 +290,16 @@ final class MaintenanceRoutine
             'is_current'         => 0,
             'published_at'       => null,
             'allow_out_of_order' => (int) ($source['allow_out_of_order'] ?? 0),
+            'page_batched'       => (int) ($source['page_batched'] ?? 0),
         ]);
 
         foreach (self::pages((int) $source['id']) as $page) {
             $pageId = Database::insert('routine_pages', [
-                'version_id'  => $draftId,
-                'position'    => (int) $page['position'],
-                'title'       => $page['title'],
-                'description' => $page['description'],
+                'version_id'           => $draftId,
+                'position'             => (int) $page['position'],
+                'title'                => $page['title'],
+                'description'          => $page['description'],
+                'required_for_signoff' => (int) $page['required_for_signoff'],
             ]);
 
             foreach (self::steps((int) $page['id']) as $step) {
@@ -348,9 +351,16 @@ final class MaintenanceRoutine
      * what was published: a completion knows how it was meant to be carried
      * out from the version it followed.
      */
-    public static function setOutOfOrder(int $versionId, bool $allow): void
+    public static function setOutOfOrder(int $versionId, bool $allow, bool $pageBatched = false): void
     {
-        Database::update('routine_versions', ['allow_out_of_order' => $allow ? 1 : 0], $versionId);
+        Database::update('routine_versions', [
+            'allow_out_of_order' => $allow ? 1 : 0,
+            // Batching pages is a way of working through a checklist, so it
+            // cannot outlive the checklist: switching out-of-order off clears
+            // it rather than leaving a setting that reads as on and does
+            // nothing.
+            'page_batched'       => ($allow && $pageBatched) ? 1 : 0,
+        ], $versionId);
     }
 
     /** Throw a draft away. Only ever a draft: a published version is history. */
@@ -588,6 +598,21 @@ final class MaintenanceRoutine
     public static function typeLabel(string $type): string
     {
         return self::FIELD_TYPES[$type] ?? $type;
+    }
+
+    /**
+     * Is a run of this version worked through a page at a time?
+     *
+     * Only ever true of a checklist version: page batching describes how the
+     * pages of an out-of-order run are answered, and means nothing to a
+     * version that is one form from top to bottom.
+     *
+     * @param array<string,mixed> $version
+     */
+    public static function isPageBatched(array $version): bool
+    {
+        return (int) ($version['allow_out_of_order'] ?? 0) === 1
+            && (int) ($version['page_batched'] ?? 0) === 1;
     }
 
     /** "v3", or "v3 (draft)" — used wherever a version is named. */

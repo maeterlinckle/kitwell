@@ -142,7 +142,7 @@ scheduled job — checking on the way that the schedule rolls forward exactly as
 the free-text form makes it, and that a team-assigned job can be picked up by
 anybody with `maintenance.complete`.
 
-Six claims it exists to hold up:
+Seven claims it exists to hold up:
 
 - **Designing and doing are different rights.** A Manager / Staff account can
   run any published routine and is refused the builder, the editor and the
@@ -165,6 +165,12 @@ Six claims it exists to hold up:
 - **The Routine scan target branches correctly.** All three cases are staged in
   turn — an open run, a completion from today, and an asset with neither — and
   the JSON lookup is checked to agree with the form post.
+- **A page-batched run moves the unit of work.** The contents is asserted to
+  carry page actions and *no* step ones; a step's own URL is checked to redirect
+  back to its page on both `GET` and `POST`; a page is refused for its own blank
+  required step and accepted once that one is answered, whatever is outstanding
+  elsewhere; and sign-off waits for the two pages flagged as required while the
+  third, unflagged, is left untouched throughout.
 
 > **This one writes too.** It creates categories, assets, routines, completions,
 > schedules and maintenance log entries. Its names carry a per-run nonce, since

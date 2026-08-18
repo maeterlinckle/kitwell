@@ -98,7 +98,7 @@ system.
 | `api-contract.php` | The API matches its own generated specification, including that no response carries an undeclared field |
 | `fault-flow.php` | The whole fault feature end to end, with a local SMTP catcher |
 | `media-library.php` | One file is stored once however many assets use it — counted in the database *and* on disk — plus templates, deduplication and the scan-to-new-asset route |
-| `routines.php` | A routine built from every field type, run ad-hoc and from a schedule, with the design/run permissions separated, versioning holding old records still, category scoping enforced past the picker, a checklist run answered out of order by two accounts, the Routine scan target's three branches, and the generated PDF checked object by object |
+| `routines.php` | A routine built from every field type, run ad-hoc and from a schedule, with the design/run permissions separated, versioning holding old records still, category scoping enforced past the picker, a checklist run answered out of order by two accounts a step and a page at a time, the Routine scan target's three branches, and the generated PDF checked object by object |
 | `totp-vectors.php` | TOTP against RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `qr-encode.php` | The QR encoder against the ISO/IEC 18004 worked example, then round-tripped through the project's own independent decoder |
 
