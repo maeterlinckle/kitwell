@@ -37,6 +37,7 @@ use App\Controllers\BrandingController;
 use App\Controllers\HirerController;
 use App\Controllers\DashboardController;
 use App\Controllers\LabelController;
+use App\Controllers\LolerController;
 use App\Controllers\HireController;
 use App\Controllers\MyHiresController;
 use App\Controllers\ScanController;
@@ -281,6 +282,23 @@ $router->group(['auth'], static function (Router $router): void {
     // Evidence attached to a completion: photos, and the paperwork behind it.
     $router->get('/maintenance/logs/{logId:\d+}/photos/{photoId:\d+}', [MaintenanceController::class, 'photo'], ['can:maintenance.view']);
     $router->get('/maintenance/logs/{logId:\d+}/documents/{documentId:\d+}', [MaintenanceController::class, 'document'], ['can:maintenance.view']);
+});
+
+// --- LOLER thorough examinations -------------------------------------------
+//
+// Reading a report is part of reading the maintenance record, so it needs only
+// `maintenance.view`. Making one needs `loler.inspect`, which nobody holds on a
+// fresh install: LOLER regulation 9 requires a competent person, and deciding
+// who that is at a site is not something an install can assume.
+$router->group(['auth'], static function (Router $router): void {
+    $router->get('/loler', [LolerController::class, 'index'], ['can:maintenance.view'], 'loler');
+
+    $router->get('/loler/{id:\d+}',     [LolerController::class, 'show'], ['can:maintenance.view']);
+    $router->get('/loler/{id:\d+}/pdf', [LolerController::class, 'pdf'],  ['can:maintenance.view']);
+
+    $router->get('/assets/{assetId:\d+}/loler',          [LolerController::class, 'history'], ['can:maintenance.view']);
+    $router->get('/assets/{assetId:\d+}/loler/examine',  [LolerController::class, 'create'],  ['can:loler.inspect']);
+    $router->post('/assets/{assetId:\d+}/loler/examine', [LolerController::class, 'store'],   ['can:loler.inspect', 'csrf']);
 });
 
 // --- PAT testing ----------------------------------------------------------

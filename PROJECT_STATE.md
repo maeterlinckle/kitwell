@@ -54,10 +54,10 @@ Where something is *not* verified, it says so.
 
 Built by applying everything in `database/migrations/` to an empty database.
 
-**Totals:** 43 domain tables, 485 columns, 91 foreign keys.
+**Totals:** 45 domain tables, 540 columns, 95 foreign keys.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
-A database migrated with `php bin/migrate.php` has a **33rd** table,
+A database migrated with `php bin/migrate.php` has one more table,
 `migrations` (`id`, `migration`, `batch`, `applied_at`, unique on `migration`),
 created by `src/Core/Migrator.php`. It does not appear below because it is
 tracking, not domain data — and note that it is *not* created if you pipe the
@@ -65,7 +65,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-Seven files, applied in filename order and recorded in `migrations`. Each is
+Eight files, applied in filename order and recorded in `migrations`. Each is
 written to be safe to re-run.
 
 | File | Contents |
@@ -77,13 +77,14 @@ written to be safe to re-run.
 | `005_maintenance_routines.sql` | `maintenance_routines`, `routine_versions`, `routine_pages`, `routine_steps`, `routine_completions`, `routine_responses`, `routine_response_files`; adds `maintenance_schedules.routine_id`; adds `routines.manage` for admin |
 | `006_routine_scope_and_open_runs.sql` | `maintenance_routines.category_id`; `routine_versions.allow_out_of_order`; `routine_completions.status` / `.started_by` and a nullable `completed_at`; `routine_responses.answered_by` / `.answered_at` |
 | `007_routine_page_batching.sql` | `routine_versions.page_batched`; `routine_pages.required_for_signoff`; `routine_page_completions` |
+| `008_loler_examinations.sql` | `loler_examinations`, `loler_defects`; seven `assets.loler_*` columns behind `requires_loler`; the `organisation_address` setting; adds `loler.inspect`, granted to **no role** |
 
-A fresh install and one upgraded through 007 produce the same schema —
+A fresh install and one upgraded through 008 produce the same schema —
 verified by migrating both and diffing `information_schema` column by column,
 with rows in place on the upgraded one so an `ALTER` cannot be checked only
 against an empty table.
 
-To change the schema, add a new numbered file — `008_…` and upward. Do not edit
+To change the schema, add a new numbered file — `009_…` and upward. Do not edit
 one that has been applied anywhere.
 
 ### 2.2 Tables
@@ -142,7 +143,7 @@ Both self-nesting reference tables.
 Unique `uq_locations_name_parent(name, parent_id)` — locations are unique within a parent,
 categories globally by slug.
 
-#### `assets` (36 columns)
+#### `assets` (43 columns)
 | Column | Type | NN | Default / note |
 |---|---|---|---|
 | id | bigint unsigned AI | ✓ | |
@@ -169,6 +170,13 @@ categories globally by slug.
 | cable_csa_mm2 | decimal(5,2) | | mm² |
 | requires_pat | tinyint(1) | ✓ | 0 |
 | pat_interval_months | smallint unsigned | | NULL = use the site default |
+| requires_loler | tinyint(1) | ✓ | 0 — the whole LOLER block below is meaningless without it |
+| loler_type | varchar(60) | | a key of `LolerExamination::TYPES`; decides the statutory interval |
+| loler_interval_months | smallint unsigned | | NULL = the interval the type implies (6 or 12) |
+| loler_swl | decimal(12,3) | | safe working load / working load limit |
+| loler_swl_unit | varchar(12) | | one of kg, t, kN, lb, persons |
+| loler_date_of_manufacture | date | | Schedule 1(3), "where known" |
+| loler_manufacture_unknown | tinyint(1) | ✓ | 0 — ticked instead of a date, not as well as |
 | parent_asset_id | bigint unsigned | | set on sub-assets |
 | relationship_type | enum('sub-asset','accessory','related') | | only meaningful with a parent |
 | is_hireable | tinyint(1) | ✓ | 1 |
@@ -178,7 +186,8 @@ categories globally by slug.
 | created_at / updated_at | timestamp | ✓ | |
 
 Indexes: unique `asset_tag`, unique `barcode`; `category_id`, `location_id`,
-`condition_rating`, `name`, `parent_asset_id`, `requires_pat`, `serial_number`,
+`condition_rating`, `name`, `parent_asset_id`, `requires_pat`, `requires_loler`,
+`serial_number`,
 `status`, composite `(status, category_id)`, `responsible_user_id`,
 `responsible_team_id`, plus the two `*_by` FK indexes.
 
@@ -590,13 +599,74 @@ Added by 005: `int` NULL, FK to `maintenance_routines` (SET NULL), index
 instead of the free-text form. It sits *beside* `instructions` rather than
 instead of it.
 
-### 2.3 Foreign keys (91)
+#### `loler_examinations` (38 columns)
+
+The report of thorough examination. **Every column maps to a paragraph of
+Schedule 1 of LOLER 1998**, and the migration carries a column comment naming
+the paragraph wherever the mapping is not obvious from the name. Do not add a
+field here without a paragraph to hang it on, and do not remove one because a
+particular examination did not need it — a report missing a Schedule 1 item is
+not a report.
+
+| Paragraph | Column(s) |
+|---|---|
+| 1 — employer's name and address | `employer_name`, `employer_address` |
+| 2 — address of the premises | `examination_address` |
+| 3 — particulars identifying the equipment, incl. date of manufacture where known | `loler_type`, `serial_number`, `date_of_manufacture`, `manufacture_unknown` |
+| 4 — date of the last thorough examination | `previous_examination_date` |
+| 5 — SWL, or the SWL for the configuration examined | `swl`, `swl_unit`, `swl_configuration` |
+| 6 — first examination after installation/assembly | `is_first_examination`, `installed_correctly` |
+| 7 — otherwise, which of reg. 9(3)(a)(i)–(iv), and that it is safe to operate | `examination_basis`, `interval_months`, `safe_to_operate` |
+| 8 — defects, remedies, next date, tests, date of examination | `loler_defects` (below), `next_examination_date`, `testing_carried_out`, `test_particulars`, `examined_on` |
+| 9 — name, address and qualifications of the person making the report | `examiner_user_id`, `examiner_name`, `examiner_qualifications`, `examiner_self_employed`, `examiner_employer_name`, `examiner_employer_address` |
+| 10 — person authenticating on the author's behalf | `authenticated_by`, `authenticated_name`, `authenticated_at` |
+| 11 — date of the report | `reported_on` |
+
+Plus `asset_id` NN (CASCADE), `owner_name` / `owner_address` (the owner, or
+whoever the equipment is hired or leased from — reg. 10(1)(b) requires them to
+get a copy), `outcome` enum('none','defects') NN 'none', `notes`,
+`created_at` / `updated_at`.
+
+`examination_basis` is enum('6-month','12-month','scheme','exceptional') NN,
+one per limb of reg. 9(3)(a). `examiner_user_id` and `authenticated_by` are
+both SET NULL over a name stored alongside, so deleting an account cannot
+erase who examined the equipment.
+
+Indexes `(asset_id, examined_on)`, `next_examination_date`,
+`examiner_user_id`, `outcome`.
+
+**Nothing here is ever updated after submission.** A report is what a competent
+person said on a day; a later view is a new examination, not an edit. There is
+no edit route, and `LolerExamination` has no `update()`.
+
+#### `loler_defects`
+`id` bigint, `examination_id` NN (CASCADE), `position` smallint NN 1,
+`category` enum('danger','becoming_danger') NN, `part_identified` varchar(255) NN,
+`description` text NN, `remedy` text, `becomes_danger_by` date,
+`serious_injury_risk` tinyint NN 0, `created_at`.
+Index `(examination_id, position)`.
+
+The two categories are Schedule 1(8)(a)'s two halves, and each carries a
+different duty under reg. 10(3): `danger` means the equipment must not be used
+before the defect is rectified, `becoming_danger` means not after
+`becomes_danger_by` and before rectification. `remedy` is required for
+`danger` (8(b)) **and** for `becoming_danger` (8(c)(ii), which is easy to miss
+behind (8)(c)(i)'s date), and `becomes_danger_by` is required for
+`becoming_danger` alone. All of it is enforced in
+`LolerController::readDefects()` rather than by the schema, because which
+particulars are required depends on the category.
+
+**`serious_injury_risk` is not a third category.** Reg. 10(1)(c) — an existing
+or imminent risk of serious personal injury, which obliges the competent person
+to send a copy to the enforcing authority — cuts across both, so it is a flag
+rather than a severity. Kitwell records and prints the duty; it sends nothing.
+### 2.3 Foreign keys (95)
 
 | Delete rule | Where it is used |
 |---|---|
-| **CASCADE** | `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
+| **CASCADE** | **`loler_examinations.asset_id`**, **`loler_defects.examination_id`**, `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
 | **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id`, **`routine_completions.routine_id`**, **`routine_completions.version_id`**, **`routine_responses.step_id`**, **`routine_response_files.step_id`**, **`routine_page_completions.page_id`** |
-| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
+| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`loler_examinations.examiner_user_id`**, **`loler_examinations.authenticated_by`**, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
 
 `maintenance_schedules.assigned_to_team_id` is SET NULL on purpose: archiving is
 the ordinary way to retire a team, so deleting one is a deliberate act that
@@ -651,9 +721,19 @@ this draft" safe.
     holds; rewriting what it asks is a different job. It is an ordinary
     permission, so a site that wants a senior technician to own the procedures
     adds it to a role from Settings → Roles
-- Totals after 005: **38 permissions, 74 role_permissions rows**.
-- **51 settings** on a fresh install (55 once both logo variants have been
-  uploaded — the four `logo_*` keys are written on upload, never seeded).
+  - `loler.inspect` (008) is granted to **no role at all**, the only permission
+    in the set that ships held by nobody. A thorough examination under LOLER
+    reg. 9 has to be made by a competent person, and an installer cannot know
+    who that is — inheriting it from a role somebody already had would be the
+    software deciding. Granting it is a deliberate act in Settings → Roles
+- Totals after 008: **39 permissions, 74 role_permissions rows** — the extra
+  permission adds no grant.
+- **52 settings** on a fresh install (56 once both logo variants have been
+  uploaded — the four `logo_*` keys are written on upload, never seeded;
+  `flash_auto_hide_seconds` is likewise written the first time Settings is
+  saved, not seeded). 008 added `organisation_address`, which the LOLER
+  wizard's **Use our details** buttons fill the employer and premises
+  addresses from.
   Stage 16 added `flash_auto_hide_seconds` (6, 0 = never), `two_factor_required`
   (0), `trusted_device_days` (30), `trusted_device_idle_days` (14),
   `email_otp_minutes` (10) and `two_factor_max_attempts` (5). Stage 17 added
@@ -775,7 +855,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── config/
 │   └── config.php           every value from Env::get(); nothing hardcoded
 │
-├── database/migrations/     001…007, plain .sql, applied in filename order
+├── database/migrations/     001…008, plain .sql, applied in filename order
 ├── vendor/                  gitignored; created by `composer install` (PHPMailer)
 │
 ├── public/                  ← the only directory the web server should serve
@@ -783,10 +863,10 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── favicon.svg
 │   ├── css/  app.css, print.css
 │   └── js/   app.js, barcode.js, scanner.js, pat-wizard.js, routine-wizard.js,
-│              routine-editor.js, api-docs.js
+│              routine-editor.js, loler-wizard.js, api-docs.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 237 routes
+│   └── web.php              the whole route table, 243 routes
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -802,7 +882,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── Controllers/         Controller (base) + Account, Asset, AssetCopy,
 │   │                        AssetExport, Auth, Branding, Calendar, CustomReport,
 │   │                        Hirer, Dashboard, Export, Fault, Import, Label, Hire,
-│   │                        Maintenance, Media, MyHires, Pat, Photo, Profile,
+│   │                        Loler, Maintenance, Media, MyHires, Pat, Photo, Profile,
 │   │                        Report, Routine, RoutineRun, Scan, Security,
 │   │                        TwoFactor
 │   │   └── Api/             ApiController (base), ResourceController, MetaController
@@ -813,7 +893,8 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── Middleware/          Auth, Csrf, Guest, Permission, MiddlewareRunner
 │   ├── Models/              ActivityLog, Asset, AssetPhoto, AssetTemplate,
 │   │                        Assignment, Category, FaultReport, Hire, Hirer,
-│   │                        Location, MaintenanceLog, MaintenanceRoutine,
+│   │                        Location, LolerExamination, MaintenanceLog,
+│   │                        MaintenanceRoutine,
 │   │                        MaintenanceSchedule, MediaLibrary, ApiKey,
 │   │                        CustomReport, PatRecord, Permission, Role,
 │   │                        RoutineCompletion, Setting, Team, Tree,
@@ -825,8 +906,8 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── Imports/             Importer (base), ImportRegistry, AssetImporter,
 │   │                        PatImporter
 │   └── Services/            AssetTagger, AssetCopier, Branding, CalendarFeed,
-│                            FaultNotifier, HelpSettings, Markdown, MediaIntake,
-│                            RoutineDocument, TwoFactor
+│                            FaultNotifier, HelpSettings, LolerDocument, Markdown,
+│                            MediaIntake, RoutineDocument, TwoFactor
 │
 ├── storage/                 ← outside the docroot
 │   ├── logs/                app.log
@@ -838,7 +919,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            faults/{faultReportId},
 │                            hires/{hireId}, branding/, imports/
 │
-├── templates/               118 .php templates
+├── templates/               122 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, brand, footer, print-header, flash,
 │   │                        photo-gallery, photo-upload, photo-inputs,
@@ -857,6 +938,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        choose-asset
 │   ├── routines/            index, show, form, edit, preview, choose, run,
 │   │                        start, contents, step, page, submit, completion
+│   ├── loler/               index, history, examine, show
 │   ├── pat/                 index, show, form, history, wizard, choose-asset
 │   ├── hires/               index, show, checkout, return
 │   ├── hirers/              index, show, form
@@ -1529,11 +1611,71 @@ subdirectory.
   other half: `ensure()` starts pages of its own accord halfway through a
   paragraph, so a masthead the caller has to remember is a masthead that will be
   missing from page four.
-- `App\Services\RoutineDocument` is the only caller today, and holds all of the
+- `App\Services\RoutineDocument` and `App\Services\LolerDocument` are the two callers today, and each holds all of its own
   layout. `tests/routines.php` checks the result structurally — every
   cross-reference offset against the object it claims to point at — because a
   bad xref is exactly what produces a file that opens in one viewer and not
   another.
+
+
+### 4.17 LOLER thorough examination
+
+A statutory record. The rules it implements are the Lifting Operations and
+Lifting Equipment Regulations 1998, read from L113 (the ACOP and guidance)
+rather than from memory, and the code says so — column comments, `LolerExamination`
+class constants and the on-screen wording all name the regulation or Schedule 1
+paragraph they exist for. **Anything changed here should be checked against the
+regulation first, not against what looks tidier.**
+
+**`App\Models\LolerExamination` is where the regulation lives.** One class holds
+`TYPES` (each with a `kind` of `accessory` / `persons` / `equipment`),
+`SWL_UNITS`, `BASES` (the four limbs of reg. 9(3)(a), with their statutory
+wording), `DEFECT_CATEGORIES`, and the two derivations that follow from them:
+
+- `statutoryInterval()` — 12 months for `equipment`, 6 for the other two,
+  because reg. 9(3)(a)(i) covers equipment for lifting persons *and* accessories
+  for lifting, which reg. 2 defines as work equipment for attaching loads to
+  machinery for lifting. A sling and a shackle are on six months for that
+  reason, not because they are small.
+- `basisFor()` — matches a recorded interval of 6 or 12 against what the type
+  implies and calls anything else `scheme`. **It never infers `exceptional`**:
+  reg. 9(3)(a)(iv) is a judgement about what happened to the equipment, and
+  software cannot make it. The examiner picks it.
+
+**Two defect categories, and a flag that crosses both.** Schedule 1(8)(a)
+distinguishes a defect that *is* a danger from one that *could become* one, and
+reg. 10(3) hangs a different prohibition on each. Reg. 10(1)(c) — an existing or
+imminent risk of serious personal injury — is neither: it is a duty to send a
+copy to the enforcing authority, and it can attach to a defect in either
+category. It is `loler_defects.serious_injury_risk`, a flag. Do not fold it into
+the enum.
+
+**The application never certifies anything.** It records what a competent person
+reported, checks the report is internally consistent and complete against
+Schedule 1, and prints it. `LolerController::store()` refuses `safe_to_operate`
+alongside a defect categorised `danger` and cites reg. 10(3)(a) when it does —
+that is a contradiction inside the report, not a safety judgement. Every duty
+reg. 10 places on the examiner stays theirs: **Kitwell sends nothing to anybody**,
+including the reg. 10(1)(c) copy, and `LolerDocument`'s closing statement says as
+much in terms. Keep that wording; softening it would have the software claiming
+something it has no standing to claim.
+
+**`loler.inspect` is granted to no role.** Enforced in the route table and again
+in `store()`, which checks `User::holdsPermission($examinerId, 'loler.inspect')`
+for the examiner *named on the form* — the picker is a convenience and the
+server does not trust it. Reading reports needs only `maintenance.view`.
+
+**Page one confirms, it does not retype.** The wizard shows what the asset
+already holds — type, serial number, SWL, date of manufacture — each with its
+own required *Confirmed* tick, and writes any correction back to the asset via
+`applyToAsset()`. The asset is the equipment's record; the examination is a
+record of one day, and the two would otherwise drift.
+
+**Nothing is editable afterwards.** No edit route, no `update()`. Reg. 10(1)(b)
+authentication is the signed-in account at submission — `authenticated_by`,
+`authenticated_name`, `authenticated_at` — which is the "equally secure means"
+the regulation allows in place of a signature, and it only means that if the
+record cannot be rewritten later.
 
 ---
 
@@ -1758,6 +1900,23 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
     its own **required before sign-off** flag, and the run cannot be closed out
     until every flagged page is done — a page left off the list can be skipped
     entirely, which is what an optional page is for.
+25. **LOLER thorough examination, in house.** An asset can be marked as lifting
+    equipment — type, interval, SWL and date of manufacture — behind a toggle
+    that works exactly as *Requires PAT* does. A three-page wizard confirms the
+    equipment's fixed details against the item in front of the examiner (writing
+    any correction back to the asset), records the examination itself, and then
+    the report: employer, premises, owner or lessor, examiner and qualifications,
+    and the dates. The result is a report of thorough examination shaped
+    paragraph by paragraph to **Schedule 1 of LOLER 1998**, with a page of its
+    own and a one-page PDF, listed in a filterable register at
+    **Maintenance → LOLER** and in each asset's own history. Defects are recorded
+    in Schedule 1(8)(a)'s two categories, each carrying its own reg. 10(3)
+    prohibition, with reg. 10(1)(c)'s serious-injury duty as a flag across both.
+    The new `loler.inspect` is granted to **no role**: reg. 9 wants a competent
+    person, and the installation cannot know who that is. The application
+    records and presents what the competent person reported and checks it is
+    consistent and complete; it does not examine anything, certify anything, or
+    send anything to anybody — the report says so (§4.17).
 
 ### 5.2 What has been verified, and how
 
@@ -1765,18 +1924,19 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 142 PHP files under `src/`, `bin/` and `routes/`, and all 118 templates | 0 failures |
+| `php -l` on all 145 PHP files under `src/`, `bin/` and `routes/`, and all 122 templates | 0 failures |
 | `tests/security-audit.php` | **45 passed, 0 failed** |
-| `tests/escape-audit.php` | **3081 output expressions across 118 templates, 0 unescaped** |
-| All 7 migrations against an empty database | applied cleanly; 43 tables, 485 columns, 91 FKs, all InnoDB |
-| A fresh install vs one upgraded through 007 | **identical** — 485 columns, 248 index rows and 91 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
-| Seed data counts | 4 roles / 38 permissions / 74 grants / 51 settings / 0 template overrides |
-| `tests/permission-matrix.php` | **408 checks, 0 mismatches** |
+| `tests/escape-audit.php` | **3313 output expressions across 122 templates, 0 unescaped** |
+| All 8 migrations against an empty database | applied cleanly; 45 tables, 540 columns, 95 FKs, all InnoDB |
+| A fresh install vs one upgraded through 008 | **identical** — 540 columns, 259 index rows and 95 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
+| Seed data counts | 4 roles / 39 permissions / 74 grants / 52 settings / 0 template overrides |
+| `tests/permission-matrix.php` | **420 checks, 0 mismatches** |
 | `tests/routines.php` | **165 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, category-scoped, worked through out of order by two different accounts a step *and* a page at a time, scanned to, and the PDF checked object by object |
+| `tests/loler.php` | **95 checks, 0 failed** — an asset marked as lifting equipment, examined through the wizard and read back on screen, in the register and out of the PDF; the statutory interval per type, `loler.inspect` refused to every role that ships, page-one corrections written back to the asset, every defect refusal the regulations require, and all eleven Schedule 1 paragraphs found in the document |
 | `tests/media-library.php` | **49 checks, 0 failed** — counted from the database *and* the filesystem |
 | `tests/fault-flow.php` | **68 checks, 0 failed** — end to end over HTTP, with a mail catcher |
 | `tests/api-contract.php` | **84 checks, 0 failed** — the API against its own generated specification |
-| `tests/docs-audit.php` | **47 checks, 0 failed** |
+| `tests/docs-audit.php` | **49 checks, 0 failed** |
 | Live DOM, `/assets/create` | *Available to hire out* unticked, its hint `display: block`, starting below the label, left-aligned with it, 809px of an 809px row |
 | Live DOM, an open run at 1280px | one page head (not two), 73px step rows, labels aligned at a single left edge, no horizontal overflow |
 | Live DOM, a page-batched run at 1280px | three page cards with one **Answer** button each and **zero** step-level actions, progress read in pages, "Still required" listing only the flagged pages; submitting a page returns to the contents anchored at it, reading "Completed by Alex Admin" with its button now **Change** |
@@ -1785,12 +1945,15 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 | `tests/qr-encode.php` | **21 checks, 0 failed** — ISO/IEC 18004 Annex I error-correction codewords, and the geometry |
 | `tests/report-figures.php` | every figure agrees with the database |
 
-**The generated PDF was looked at, not only asserted about.** A throwaway
+**Both generated PDFs were looked at, not only asserted about.** A throwaway
 renderer parsed the content stream of a finished document back into a PNG —
 independent of the writer, so a mistake in the layout code could not agree with
 itself — and it caught a real one: the closing note of the sign-off block was
 spilling onto a page of its own. The reserved height and the summary spacing
-were both adjusted until a single-section record lands on one page.
+were both adjusted until a single-section record lands on one page. The LOLER
+report of thorough examination went through the same renderer and came back a
+clean single page carrying all eleven Schedule 1 paragraphs, the verdict banner,
+the reg. 10(1)(c) notice, a ruled signature line and the closing statement.
 
 **Stage 12 specifically, verified on this machine:**
 
@@ -2444,6 +2607,28 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   italic line and nothing else. Reserve the block; and when it still will not
   fit, tighten what comes before rather than raising the reservation past what
   a page can hold.
+- **`FIELD()` returns 0 for NULL and for anything not in its list**, which sorts
+  *above* every listed value. `FaultReport` ordered by
+  `FIELD(f.urgency,'Critical','High','Medium','Low')`, so an asset marked Faulty
+  with no fault report behind it — which editing a status directly produces, and
+  which a LOLER danger defect now produces too — sat above a Critical one at the
+  top of the register. The fix is
+  `COALESCE(NULLIF(FIELD(...), 0), 99)`: map the no-match to the end explicitly.
+  Any `FIELD()` used for ordering over a nullable or open-ended column needs the
+  same wrapper.
+- **"The same size" is not "the same window".** A test comparing an ascending
+  first page against a descending first page reversed only holds while the whole
+  result set fits in one page; past that it is comparing the first *n* rows with
+  the last *n* reversed, which are different rows. `tests/api-contract.php` now
+  reads `meta.pages` and compares ascending page 1 against descending's **last**
+  page reversed. A pagination assertion that passes today because the fixture is
+  small is a failure booked for later.
+- **A PDF content stream escapes its parentheses.** Searching an inflated stream
+  for a label written as `Regulation 9(3)(a)` finds nothing, because the stream
+  holds `Regulation 9\(3\)\(a\)` — and if the layout uppercases the caption, the
+  case will not match either. `tests/loler.php` unescapes the parens and searches
+  with `stripos`. Nine assertions were "failing" against a document that had been
+  correct all along.
 - **Two dev servers can bind the same port on Windows.** A second `php -S` on a
   port already in use starts, logs that it started, and serves nothing — every
   request goes to the first one. If a page 404s with another project's branding
@@ -2499,3 +2684,11 @@ php tests/security-audit.php && php tests/escape-audit.php
     is in the comment above the `@media` block in `app.css`, and three places
     have to agree on the number (two blocks there plus the `matchMedia` in
     `app.js`).
+11. **The LOLER feature is shaped by a statutory instrument, not by taste.**
+    Column names, the two defect categories, the four examination bases and the
+    wording on the report all trace to Schedule 1 and regulations 9 and 10 of
+    LOLER 1998 (§4.17). Before changing any of it, read the regulation — L113
+    carries the ACOP and guidance. In particular, do not soften the closing
+    statement on the report: the application records what a competent person
+    said, and claiming more than that on their behalf is the one failure mode
+    here that matters.

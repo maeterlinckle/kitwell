@@ -96,6 +96,7 @@ final class SettingsController extends Controller
             'asset_tag_prefix'     => 'max:20',
             'asset_tag_pad'        => 'required|integer|min_value:1|max_value:12',
             'organisation_name'    => 'max:120',
+            'organisation_address' => 'max:500',
             'maintenance_due_days' => 'required|integer|min_value:1|max_value:365',
             'pat_due_days'         => 'required|integer|min_value:1|max_value:365',
             'pat_default_interval_months' => 'required|integer|min_value:1|max_value:120',
@@ -114,6 +115,7 @@ final class SettingsController extends Controller
             'asset_tag_prefix'     => 'Asset tag prefix',
             'asset_tag_pad'        => 'Number padding',
             'organisation_name'    => 'Organisation name',
+            'organisation_address' => 'Organisation address',
             'maintenance_due_days' => 'Maintenance “due soon” window',
             'pat_due_days'         => 'PAT “due soon” window',
             'pat_default_interval_months' => 'Default PAT retest interval',
@@ -145,6 +147,7 @@ final class SettingsController extends Controller
         Setting::put('asset_tag_prefix', $prefix);
         Setting::put('asset_tag_pad', (string) (int) $data['asset_tag_pad']);
         Setting::put('organisation_name', (string) $data['organisation_name']);
+        Setting::put('organisation_address', (string) $data['organisation_address']);
         Setting::put('label_show_name', Request::boolean('label_show_name') ? '1' : '0');
         Setting::put('label_show_location', Request::boolean('label_show_location') ? '1' : '0');
         Setting::put('maintenance_due_days', (string) (int) $data['maintenance_due_days']);

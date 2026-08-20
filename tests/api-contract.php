@@ -393,16 +393,29 @@ $r = call('GET', API . '/assets?per_page=100000', $key);
 check('an absurd per_page is clamped, not refused',
     $r['status'] === 200 && ($r['body']['meta']['per_page'] ?? 0) <= (int) Setting::int('api_max_per_page', 100));
 
-// Both directions over the same window, so this stays a statement about
-// sorting rather than about how many assets happen to fit on a page.
-$perPage = (int) Setting::int('api_max_per_page', 100);
-$asc  = array_column(call('GET', API . '/assets?sort=asset_tag&per_page=' . $perPage, $key)['body']['data'] ?? [], 'asset_tag');
-$desc = array_column(call('GET', API . '/assets?sort=-asset_tag&per_page=' . $perPage, $key)['body']['data'] ?? [], 'asset_tag');
+// Ascending page 1 against descending's LAST page, reversed.
+//
+// Asking for the same per_page in both directions is not the same window once
+// the register outgrows one page: page 1 ascending is the smallest n, page 1
+// descending is the largest n, and they stop overlapping entirely. Sorting
+// descending puts the ascending-first rows on the final page, so that is the
+// page to compare — and the comparison then says something about sorting at
+// any size of register rather than only while everything fits on one page.
+$window = 5;
+
+$asc  = array_column(call('GET', API . '/assets?sort=asset_tag&per_page=' . $window, $key)['body']['data'] ?? [], 'asset_tag');
+$last = call('GET', API . '/assets?sort=-asset_tag&per_page=' . $window, $key)['body']['meta']['pages'] ?? 1;
+$tail = array_column(
+    call('GET', API . '/assets?sort=-asset_tag&per_page=' . $window . '&page=' . $last, $key)['body']['data'] ?? [],
+    'asset_tag'
+);
+
+$tail = array_reverse($tail);
 
 check(
     'sort ascending and descending are opposites',
-    $asc !== [] && count($asc) === count($desc) && $asc === array_reverse($desc),
-    json_encode([array_slice($asc, 0, 5), array_slice($desc, 0, 5)])
+    $asc !== [] && $tail !== [] && $tail === array_slice($asc, 0, count($tail)),
+    json_encode(['asc' => $asc, 'desc-last-reversed' => $tail])
 );
 
 $r = call('GET', API . '/assets?sort=nonsense', $key);

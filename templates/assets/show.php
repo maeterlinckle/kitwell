@@ -17,6 +17,7 @@ use App\Core\Upload;
  * @var array<int,array<string,mixed>> $routineCompletions keyed by maintenance log id
  * @var array<int,array<string,mixed>> $patRecords
  * @var array<string,mixed>|null $patStatus
+ * @var array{state:string,due:?string,latest:?array<string,mixed>}|null $lolerStatus
  * @var array<string,mixed>|null $openHire
  * @var string|null $hireBlocked
  * @var array<int,array<string,mixed>> $hireHistory
@@ -167,6 +168,91 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
                 <div><dt>Warranty expires</dt><dd><?= e(format_date($asset['warranty_expires_on'])) ?></dd></div>
             </dl>
         </div>
+
+        <?php if (can('maintenance.view') && ((int) $asset['requires_loler'] === 1 || $lolerStatus['latest'] !== null)): ?>
+            <?php
+            $lolerLatest  = $lolerStatus['latest'] ?? null;
+            $lolerOverdue = $lolerStatus['state'] === 'Overdue';
+            ?>
+            <div class="card" id="loler">
+                <div class="card-head">
+                    <h2>LOLER thorough examination</h2>
+                    <div class="head-actions">
+                        <?php if (can('loler.inspect') && (int) $asset['requires_loler'] === 1): ?>
+                            <a class="btn btn-sm btn-primary" href="<?= e(url('/assets/' . $id . '/loler/examine')) ?>">Examine</a>
+                        <?php endif; ?>
+                        <?php if ($lolerLatest !== null): ?>
+                            <a class="btn btn-sm" href="<?= e(url('/assets/' . $id . '/loler')) ?>">History</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <dl class="detail-list">
+                    <div>
+                        <dt>Type</dt>
+                        <dd>
+                            <?= $asset['loler_type'] === null
+                                ? '<span class="badge badge-warn">Not set</span>'
+                                : e(\App\Models\LolerExamination::typeLabel((string) $asset['loler_type'])) ?>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Interval</dt>
+                        <dd>
+                            <?php $lolerInterval = $asset['loler_interval_months'] !== null
+                                ? (int) $asset['loler_interval_months'] . ' months'
+                                : \App\Models\LolerExamination::statutoryInterval((string) $asset['loler_type']) . ' months (as the regulations set)'; ?>
+                            <?= e($lolerInterval) ?>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>SWL / WLL</dt>
+                        <dd>
+                            <?= $asset['loler_swl'] === null
+                                ? '&mdash;'
+                                : e(rtrim(rtrim(number_format((float) $asset['loler_swl'], 3), '0'), '.') . ' ' . (string) $asset['loler_swl_unit']) ?>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Date of manufacture</dt>
+                        <dd>
+                            <?php if ((int) $asset['loler_manufacture_unknown'] === 1): ?>
+                                <span class="muted">Not known</span>
+                            <?php elseif ($asset['loler_date_of_manufacture'] !== null): ?>
+                                <?= e(format_date((string) $asset['loler_date_of_manufacture'])) ?>
+                            <?php else: ?>
+                                &mdash;
+                            <?php endif; ?>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Last examined</dt>
+                        <dd>
+                            <?php if ($lolerLatest === null): ?>
+                                <span class="badge badge-warn">Never</span>
+                            <?php else: ?>
+                                <a href="<?= e(url('/loler/' . (int) $lolerLatest['id'])) ?>">
+                                    <?= e(format_date((string) $lolerLatest['examined_on'])) ?>
+                                </a>
+                                &mdash; <?= e(\App\Models\LolerExamination::verdict($lolerLatest)) ?>
+                            <?php endif; ?>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Next examination by</dt>
+                        <dd>
+                            <?php if ($lolerStatus['due'] === null): ?>
+                                &mdash;
+                            <?php else: ?>
+                                <span class="badge <?= $lolerOverdue ? 'badge-danger' : 'badge-ok' ?>">
+                                    <?= e(format_date((string) $lolerStatus['due'])) ?>
+                                </span>
+                            <?php endif; ?>
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        <?php endif; ?>
 
         <div class="card" id="pat">
             <div class="card-head">

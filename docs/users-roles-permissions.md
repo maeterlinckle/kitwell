@@ -56,6 +56,18 @@ without being allowed to rewrite purchase costs. It is still a change to the
 register, since it moves the asset's status, so Read-only does not hold it.
 Reading the fault history needs only `assets.view`.
 
+Lifting equipment has its own:
+
+| Permission | Held by | Allows |
+|---|---|---|
+| `loler.inspect` | Nobody, until granted | Carrying out a LOLER thorough examination and submitting the report |
+
+It is the one permission no role holds on a fresh install. LOLER regulation 9
+requires a competent person, and who that is at a site is not something an
+installation can assume — so it has to be granted deliberately rather than
+inherited from a role somebody already had. See
+[LOLER thorough examination](loler.md).
+
 Maintenance routines have their own:
 
 | Permission | Held by | Allows |

@@ -18,6 +18,7 @@ uses. The ninth is a web page, because the thing it tests is JavaScript.
 | `fault-flow.php` | A running site + seeded database + an SMTP catcher | **Yes** |
 | `media-library.php` | A running site + seeded database | **Yes** |
 | `routines.php` | A running site + seeded database | **Yes** |
+| `loler.php` | A running site + seeded database | **Yes** |
 
 ## Static checks (safe anywhere, including production)
 
@@ -175,6 +176,43 @@ Seven claims it exists to hold up:
 > **This one writes too.** It creates categories, assets, routines, completions,
 > schedules and maintenance log entries. Its names carry a per-run nonce, since
 > a routine name is unique.
+
+```bash
+php tests/loler.php
+```
+
+`loler.php` marks an asset as lifting equipment, carries out a thorough
+examination through the three-page wizard, and reads the report back — on the
+screen, in the register and out of the generated PDF.
+
+Six claims it exists to hold up:
+
+- **The interval follows the regulation, not the form.** An accessory for
+  lifting and equipment for lifting persons come back at six months, other
+  lifting equipment at twelve, and the basis recorded on the report names which
+  of regulation 9(3)(a)(i)–(iv) it was carried out under.
+- **`loler.inspect` is refused to everybody until it is granted.** Administrator,
+  Manager / Staff and Read-only are each refused the wizard with a 403, and a
+  post naming an examiner who does not hold the permission is refused too —
+  the form's list of examiners is a convenience, not the control.
+- **A report cannot contradict itself.** Safe to operate alongside a defect that
+  is a danger to persons; a danger with no remedy; a could-become-a-danger with
+  no date, and one with no remedy either; a defect with no part identified —
+  each is refused with the Schedule 1 paragraph that requires it.
+- **Confirming the equipment corrects it.** A serial number and an SWL changed on
+  page one are asserted against the *asset* afterwards, not only against the
+  report.
+- **Every paragraph of Schedule 1 reaches the document.** The PDF's content
+  streams are inflated and searched for all eleven in turn, along with the
+  verdict banner, the regulation 10(1)(c) notice and the statement that the
+  software does not certify anything.
+- **A danger takes the asset out of service.** With the box ticked the asset
+  comes back `Faulty` on its own page, and the register filters the report out
+  of the clean ones.
+
+> **This one writes too.** It creates assets, examinations and defects, and it
+> grants `loler.inspect` to the Manager / Staff role and takes it away again.
+> Its fixtures carry a per-run nonce.
 
 ## The barcode decoder
 

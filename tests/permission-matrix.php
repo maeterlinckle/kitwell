@@ -107,6 +107,14 @@ $matrix = [
     '/maintenance/routines/create' => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny',  'hirer' => 'deny'],
     '/assets/1/routines'           => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],
 
+    // LOLER. Reading a report is part of reading the maintenance record;
+    // making one is `loler.inspect`, which a fresh install grants to nobody —
+    // so only the superuser role reaches it until a site decides who is
+    // competent to carry out a thorough examination.
+    '/loler'                     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1/loler'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
+    '/assets/1/loler/examine'    => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny',  'hirer' => 'deny'],
+
     // PAT
     '/pat'                       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/pat/create'                => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny',  'hirer' => 'deny'],

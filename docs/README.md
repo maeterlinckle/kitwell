@@ -22,6 +22,7 @@ the machine the site runs on.
 | [Maintenance](maintenance.md) | Routine, periodic and one-off schedules, recording completions with evidence, how "due" is decided |
 | [Maintenance routines](routines.md) | Structured procedures a technician fills in, versioning, and the record each one produces |
 | [PAT testing](pat-testing.md) | The guided test flow, what belongs to the appliance and what to a test, how status is worked out |
+| [LOLER thorough examination](loler.md) | Lifting equipment and accessories, examination intervals, defect categories, and the report of thorough examination |
 | [Hires and hirers](hires.md) | Checking out and booking in, hirer records, the self-service Hirer role |
 | [Teams](teams.md) | Groups that work can be assigned to |
 | [Reports](reports.md) | The six built-in reports, and defining your own |
@@ -55,7 +56,7 @@ menu.
 | Menu | Goes to | Also under it |
 |---|---|---|
 | **Assets** | The register | — |
-| **Maintenance** | Schedules | Add maintenance · Schedules · Routines · PAT records |
+| **Maintenance** | Schedules | Add maintenance · Schedules · Routines · LOLER · PAT records |
 | **Hires** | Current hires | Check out · Current & history · Hirers |
 | **My hires** | A hirer's own equipment — shown *instead of* Hires to somebody who can only see their own | — |
 | **Reports** | The report index, built-in and saved | — |

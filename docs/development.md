@@ -99,11 +99,12 @@ system.
 | `fault-flow.php` | The whole fault feature end to end, with a local SMTP catcher |
 | `media-library.php` | One file is stored once however many assets use it — counted in the database *and* on disk — plus templates, deduplication and the scan-to-new-asset route |
 | `routines.php` | A routine built from every field type, run ad-hoc and from a schedule, with the design/run permissions separated, versioning holding old records still, category scoping enforced past the picker, a checklist run answered out of order by two accounts a step and a page at a time, the Routine scan target's three branches, and the generated PDF checked object by object |
+| `loler.php` | A LOLER thorough examination end to end: the asset's own fields, the statutory interval each type implies, the `loler.inspect` permission refused to every role that ships, page-one corrections written back, every defect refusal the regulations require, and each of Schedule 1's eleven paragraphs found in the generated report |
 | `totp-vectors.php` | TOTP against RFC 4226 Appendix D and RFC 6238 Appendix B |
 | `qr-encode.php` | The QR encoder against the ISO/IEC 18004 worked example, then round-tripped through the project's own independent decoder |
 
 The ones that write (`permission-matrix.php`, `fault-flow.php`,
-`api-contract.php` and `routines.php`) say so at the top and should be pointed
+`api-contract.php`, `routines.php` and `loler.php`) say so at the top and should be pointed
 at a scratch database. Each takes the address of the site under test as its
 first argument, defaulting to `http://127.0.0.1:8321`.
 

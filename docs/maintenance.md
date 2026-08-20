@@ -136,4 +136,4 @@ excluded from the summary by default.
 
 ---
 
-**See also:** [Documentation index](README.md) · [Maintenance routines](routines.md) · [Assets](assets.md) · [Teams](teams.md) · [Email and notifications](email-and-notifications.md)
+**See also:** [Documentation index](README.md) · [Maintenance routines](routines.md) · [LOLER thorough examination](loler.md) · [Assets](assets.md) · [Teams](teams.md) · [Email and notifications](email-and-notifications.md)

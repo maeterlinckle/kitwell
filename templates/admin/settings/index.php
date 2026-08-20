@@ -105,7 +105,19 @@ $setting = static fn (string $key, string $default = ''): string => (string) ($s
             <label class="label" for="organisation_name">Organisation name <span class="optional">(optional)</span></label>
             <input class="input" type="text" id="organisation_name" name="organisation_name" maxlength="120"
                    value="<?= e(old($old, 'organisation_name', $setting('organisation_name'))) ?>">
-            <p class="field-hint">Printed above the barcode. Leave blank to keep labels minimal.</p>
+            <p class="field-hint">
+                Printed above the barcode, on printed documents, and offered as the employer and
+                premises on a LOLER report of thorough examination.
+            </p>
+        </div>
+
+        <div class="field">
+            <label class="label" for="organisation_address">Organisation address <span class="optional">(optional)</span></label>
+            <textarea class="input" id="organisation_address" name="organisation_address" rows="3" maxlength="500"><?= e(old($old, 'organisation_address', $setting('organisation_address'))) ?></textarea>
+            <p class="field-hint">
+                Filled in by the \u201cUse our details\u201d buttons on a LOLER examination, which name the
+                same organisation as employer, premises and owner most of the time.
+            </p>
         </div>
 
         <div class="field">

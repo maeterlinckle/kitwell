@@ -17,6 +17,7 @@ use App\Models\Category;
 use App\Models\FaultReport;
 use App\Models\Hire;
 use App\Models\Location;
+use App\Models\LolerExamination;
 use App\Models\MaintenanceLog;
 use App\Models\MaintenanceSchedule;
 use App\Models\MediaLibrary;
@@ -78,6 +79,9 @@ final class AssetController extends Controller
             'maintenanceLogs' => Auth::can('maintenance.view') ? MaintenanceLog::forAsset($assetId, 5) : [],
             'patStatus' => Auth::can('pat.view') ? PatRecord::statusForAsset($assetId) : null,
             'patRecords'=> Auth::can('pat.view') ? PatRecord::forAsset($assetId, 3) : [],
+            'lolerStatus'=> Auth::can('maintenance.view')
+                ? LolerExamination::statusForAsset($assetId)
+                : ['state' => 'Never examined', 'due' => null, 'latest' => null],
             'openHire'  => Hire::openForAsset($assetId),
             'currentFault' => $asset['status'] === 'Faulty' ? FaultReport::latestForAsset($assetId) : null,
         ], 'layouts/print');
@@ -140,6 +144,9 @@ final class AssetController extends Controller
             'routineCompletions' => RoutineCompletion::forLogs(array_map('intval', array_column($maintenanceLogs, 'id'))),
             'patStatus'  => Auth::can('pat.view') ? PatRecord::statusForAsset($assetId) : null,
             'patRecords' => Auth::can('pat.view') ? PatRecord::forAsset($assetId, 3) : [],
+            'lolerStatus'=> Auth::can('maintenance.view')
+                ? LolerExamination::statusForAsset($assetId)
+                : ['state' => 'Never examined', 'due' => null, 'latest' => null],
             'openHire'   => Hire::openForAsset($assetId),
             'hireBlocked'=> Hire::blockedReason($asset),
             'hireHistory'=> Auth::can('hires.view') ? Hire::forAsset($assetId, 10) : [],
@@ -460,6 +467,11 @@ final class AssetController extends Controller
             'relationship_type'     => 'in:' . implode(',', Asset::RELATIONSHIPS),
             'responsible'           => 'max:20',
             'notes'                 => 'max:5000',
+            'loler_type'               => 'max:60',
+            'loler_interval_months'    => 'integer|min_value:1|max_value:120',
+            'loler_swl'                => 'numeric|min_value:0|max_value:999999999',
+            'loler_swl_unit'           => 'max:12',
+            'loler_date_of_manufacture' => 'date',
         ], [
             'asset_tag'             => 'Asset tag',
             'name'                  => 'Name',
@@ -471,6 +483,10 @@ final class AssetController extends Controller
             'load_rating_va'        => 'Load rating (VA)',
             'pat_interval_months'   => 'PAT interval',
             'responsible'           => 'Responsible party',
+            'loler_type'               => 'Type of lifting equipment',
+            'loler_interval_months'    => 'LOLER examination interval',
+            'loler_swl'                => 'Safe working load',
+            'loler_date_of_manufacture' => 'Date of manufacture',
         ], $redirect);
 
         $tag = (string) $data['asset_tag'];
@@ -519,6 +535,36 @@ final class AssetController extends Controller
         $requiresPat = Request::boolean('requires_pat');
         $hasFuse     = Request::boolean('has_fuse');
 
+        // Lifting equipment. The type is what regulation 9(3)(a) reads to set
+        // an interval, so an item that needs examining has to have one; the
+        // interval itself may be left blank and taken from the type.
+        $requiresLoler       = Request::boolean('requires_loler');
+        $manufactureUnknown  = Request::boolean('loler_manufacture_unknown');
+        $lolerType           = (string) $data['loler_type'];
+
+        if ($requiresLoler && $lolerType === '') {
+            $this->failValidation(
+                ['loler_type' => 'Choose the type of lifting equipment or accessory. It decides the'
+                    . ' examination interval the regulations set.'],
+                $redirect
+            );
+        }
+
+        if ($lolerType !== '' && !array_key_exists($lolerType, LolerExamination::TYPES)) {
+            $this->failValidation(['loler_type' => 'That is not a type of lifting equipment this system knows.'], $redirect);
+        }
+
+        if ($data['loler_swl_unit'] !== '' && !in_array($data['loler_swl_unit'], LolerExamination::SWL_UNITS, true)) {
+            $this->failValidation(['loler_swl_unit' => 'That is not a unit an SWL can be given in.'], $redirect);
+        }
+
+        if ($data['loler_date_of_manufacture'] !== '' && $data['loler_date_of_manufacture'] > date('Y-m-d')) {
+            $this->failValidation(
+                ['loler_date_of_manufacture' => 'The date of manufacture cannot be in the future.'],
+                $redirect
+            );
+        }
+
         // The fuse rating is a four-way choice, not free numeric entry. An
         // existing non-standard value is allowed through so that editing an
         // unrelated field on an old record does not silently destroy it; the
@@ -563,6 +609,13 @@ final class AssetController extends Controller
             'load_rating_va'        => self::nullIfBlank($data['load_rating_va']),
             'requires_pat'          => $requiresPat ? 1 : 0,
             'pat_interval_months'   => $requiresPat ? self::nullIfBlank($data['pat_interval_months']) : null,
+            'requires_loler'           => $requiresLoler ? 1 : 0,
+            'loler_type'               => $lolerType !== '' ? $lolerType : null,
+            'loler_interval_months'    => self::nullIfBlank($data['loler_interval_months']),
+            'loler_swl'                => self::nullIfBlank($data['loler_swl']),
+            'loler_swl_unit'           => self::nullIfBlank($data['loler_swl_unit']),
+            'loler_date_of_manufacture' => $manufactureUnknown ? null : self::nullIfBlank($data['loler_date_of_manufacture']),
+            'loler_manufacture_unknown' => $manufactureUnknown ? 1 : 0,
             'parent_asset_id'       => $parentId > 0 ? $parentId : null,
             'relationship_type'     => $parentId > 0 ? ($data['relationship_type'] !== '' ? $data['relationship_type'] : 'sub-asset') : null,
             'is_hireable'           => Request::boolean('is_hireable') ? 1 : 0,

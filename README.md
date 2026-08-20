@@ -34,6 +34,13 @@ application.
   → [Maintenance routines](docs/routines.md)
 - **PAT testing** — a guided test that records every reading with its unit, and
   a status that treats a failure as a failure. → [PAT testing](docs/pat-testing.md)
+- **LOLER thorough examination** — record an in-house report of thorough
+  examination for lifting equipment and accessories, shaped paragraph by
+  paragraph to Schedule 1 of LOLER 1998, with the statutory interval worked out
+  from what the equipment is and the two defect categories the regulations
+  distinguish. It records what a competent person reported; it does not examine
+  anything or certify compliance.
+  → [LOLER thorough examination](docs/loler.md)
 - **Faults** — mark an item faulty with a photograph, an urgency and the date it
   was noticed. Every report is kept, so an item that keeps breaking says so, and
   whoever is responsible for it is told. → [Faults](docs/faults.md)

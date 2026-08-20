@@ -431,6 +431,113 @@ $responsible = array_key_exists('responsible', $old)
         </div>
     </div>
 
+    <?php /* Lifting equipment, in the same shape as PAT above: a toggle, and
+             nothing else until it is on. These are the equipment's own fixed
+             characteristics, so the examiner confirms them rather than typing
+             them at every examination. */ ?>
+    <div class="card">
+        <h2>In-house LOLER inspection</h2>
+
+        <div class="field">
+            <label class="checkbox">
+                <input type="checkbox" id="requires_loler" name="requires_loler" value="1"
+                       data-toggles="#loler-details" <?= $checked('requires_loler', false) ? 'checked' : '' ?>>
+                <span>
+                    This item requires a periodic in-house LOLER report of thorough examination
+                    <span class="field-hint">
+                        Lifting equipment and accessories for lifting, under the Lifting Operations and
+                        Lifting Equipment Regulations 1998 regulation 9.
+                    </span>
+                </span>
+            </label>
+        </div>
+
+        <div id="loler-details" class="conditional-block">
+            <div class="field-row">
+                <div class="field">
+                    <label class="label" for="loler_type">Type of lifting equipment or accessory</label>
+                    <select class="input<?= isset($errors['loler_type']) ? ' has-error' : '' ?>"
+                            id="loler_type" name="loler_type">
+                        <option value="">&mdash; not set &mdash;</option>
+                        <?php foreach (\App\Models\LolerExamination::TYPES as $lolerKey => [$lolerLabel, $lolerKind]): ?>
+                            <option value="<?= e($lolerKey) ?>" data-kind="<?= e($lolerKind) ?>"
+                                <?= $value('loler_type') === $lolerKey ? 'selected' : '' ?>>
+                                <?= e($lolerLabel) ?><?= $lolerKind === 'accessory'
+                                    ? ' (accessory for lifting)'
+                                    : ($lolerKind === 'persons' ? ' (lifts persons)' : '') ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="field-hint">
+                        Decides the interval the regulations set: an accessory for lifting, or equipment
+                        that lifts people, at least every 6 months; other lifting equipment at least
+                        every 12.
+                    </p>
+                    <?php if (isset($errors['loler_type'])): ?><p class="field-error"><?= e($errors['loler_type']) ?></p><?php endif; ?>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="loler_interval_months">Examination interval (months)</label>
+                    <input class="input<?= isset($errors['loler_interval_months']) ? ' has-error' : '' ?>" type="number"
+                           id="loler_interval_months" name="loler_interval_months"
+                           min="1" max="120" step="1" inputmode="numeric"
+                           value="<?= e($value('loler_interval_months')) ?>">
+                    <p class="field-hint">
+                        Left blank, the interval the type implies is used. Set it where a written
+                        examination scheme says otherwise for this item.
+                    </p>
+                    <?php if (isset($errors['loler_interval_months'])): ?><p class="field-error"><?= e($errors['loler_interval_months']) ?></p><?php endif; ?>
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label class="label" for="loler_swl">Safe working load / working load limit</label>
+                    <input class="input<?= isset($errors['loler_swl']) ? ' has-error' : '' ?>" type="number"
+                           id="loler_swl" name="loler_swl" step="0.001" min="0" inputmode="decimal"
+                           value="<?= e($value('loler_swl')) ?>">
+                    <?php if (isset($errors['loler_swl'])): ?><p class="field-error"><?= e($errors['loler_swl']) ?></p><?php endif; ?>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="loler_swl_unit">Unit</label>
+                    <select class="input" id="loler_swl_unit" name="loler_swl_unit">
+                        <option value="">&mdash; not set &mdash;</option>
+                        <?php foreach (\App\Models\LolerExamination::SWL_UNITS as $lolerUnit): ?>
+                            <option value="<?= e($lolerUnit) ?>" <?= $value('loler_swl_unit') === $lolerUnit ? 'selected' : '' ?>>
+                                <?= e($lolerUnit) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label" for="loler_date_of_manufacture">Date of manufacture</label>
+                <input class="input<?= isset($errors['loler_date_of_manufacture']) ? ' has-error' : '' ?>" type="date"
+                       id="loler_date_of_manufacture" name="loler_date_of_manufacture"
+                       max="<?= e(date('Y-m-d')) ?>" value="<?= e($value('loler_date_of_manufacture')) ?>">
+                <label class="checkbox">
+                    <input type="checkbox" name="loler_manufacture_unknown" value="1"
+                        <?= $checked('loler_manufacture_unknown', false) ? 'checked' : '' ?>>
+                    <span>
+                        Not known or not marked
+                        <span class="field-hint">
+                            Reports ask for the date of manufacture where known; older and unbranded
+                            equipment frequently carries none.
+                        </span>
+                    </span>
+                </label>
+                <?php if (isset($errors['loler_date_of_manufacture'])): ?><p class="field-error"><?= e($errors['loler_date_of_manufacture']) ?></p><?php endif; ?>
+            </div>
+
+            <p class="field-hint">
+                The serial number is the asset's own, above under Make &amp; model. An examiner who
+                corrects any of these during an examination corrects them here too.
+            </p>
+        </div>
+    </div>
+
     <div class="card">
         <h2>Purchase</h2>
 

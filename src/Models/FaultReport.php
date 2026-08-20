@@ -42,8 +42,18 @@ final class FaultReport
      */
     public const URGENT = 'urgent';
 
-    /** Most urgent first. Used wherever a query has to sort by urgency. */
-    private const URGENCY_ORDER = "FIELD(f.urgency,'Critical','High','Medium','Low')";
+    /**
+     * Most urgent first. Used wherever a query has to sort by urgency.
+     *
+     * FIELD() returns **0** for a value it does not find, including NULL — so a
+     * bare FIELD() sorts an unrated fault *above* a Critical one. An asset can
+     * carry the Faulty status with no fault report behind it: somebody set the
+     * status on the asset form, or a LOLER examination found a defect that is a
+     * danger to persons and took the item out of service. Those rows have no
+     * urgency, and they belong at the bottom of a list headed "most urgent
+     * first", not the top.
+     */
+    private const URGENCY_ORDER = "COALESCE(NULLIF(FIELD(f.urgency,'Critical','High','Medium','Low'), 0), 99)";
 
     /** What each level is for, shown beside the choice on the form. */
     public const URGENCY_HINTS = [
