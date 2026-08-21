@@ -19,6 +19,7 @@ uses. The ninth is a web page, because the thing it tests is JavaScript.
 | `media-library.php` | A running site + seeded database | **Yes** |
 | `routines.php` | A running site + seeded database | **Yes** |
 | `loler.php` | A running site + seeded database | **Yes** |
+| `password-policy.php` | A running site + seeded database | **Yes** |
 
 ## Static checks (safe anywhere, including production)
 
@@ -213,6 +214,45 @@ Six claims it exists to hold up:
 > **This one writes too.** It creates assets, examinations and defects, and it
 > grants `loler.inspect` to the Manager / Staff role and takes it away again.
 > Its fixtures carry a per-run nonce.
+
+```bash
+php tests/password-policy.php
+```
+
+`password-policy.php` covers the password rules at both levels, and the
+trusted-device relaxation that went in beside them.
+
+Six claims it exists to hold up:
+
+- **The complexity rule is a setting, not a constant.** The site-wide minimum is
+  raised, and a password that would have been fine a moment earlier is refused
+  at the point one is actually set — with the new figure in the message.
+- **An account's own policy wins, in either direction.** The same account is
+  made *more* lenient than the site and asserted to be so while the site itself
+  is unchanged.
+- **NULL and 0 are different answers.** An account exempted from expiry stores
+  0 and stays exempt after the site-wide figure is tightened; an account nobody
+  has decided about stores NULL and follows the new figure. Clearing an override
+  puts all three columns back to NULL rather than freezing today's numbers.
+- **An expired password interrupts rather than locks out.** The sign-in
+  succeeds, every page redirects to one place, that page refuses the password
+  that has just expired, and the moment a new one is set the rest of the
+  application opens — with no administrator involved at any point.
+- **A trusted device survives a change of address.** The same device is checked
+  from another network, from an IPv6 address and from no address at all, and
+  stays trusted each time — then loses trust to a changed browser and to the
+  idle window, which are the two things that should still end it.
+- **The address check is gone from the code, not merely unused.** The model is
+  read and asserted to contain no address comparison at all, so it cannot come
+  back as a subtle condition somebody re-adds.
+
+> **This one writes too.** It edits the site-wide password policy, creates a
+> user, and stands two-factor and email down for the duration. Everything it
+> changes is put back on exit, including if it fails part way. It writes the
+> policy settings directly rather than by posting the settings form: that form
+> saves every key it renders at once, so driving it from a scraped copy of its
+> own markup rewrites two dozen unrelated settings and breaks whatever runs
+> next.
 
 ## The barcode decoder
 

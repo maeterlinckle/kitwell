@@ -1,9 +1,17 @@
 <?php
+
+use App\Models\PasswordPolicy;
+
 /**
  * @var array<string,mixed> $user
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
+
+// The minimum this account's policy asks for. Resolved once, so that what is
+// printed on the control is what the server will enforce.
+$passwordMinLength = PasswordPolicy::forUser($user)['min_length'];
+
 ?>
 <div class="page-head">
     <div>
@@ -69,10 +77,10 @@
         <label class="label" for="password">New password</label>
         <div class="input-with-button">
             <input class="input<?= isset($errors['password']) ? ' has-error' : '' ?>" type="password"
-                   id="password" name="password" autocomplete="new-password" required minlength="12">
+                   id="password" name="password" autocomplete="new-password" required minlength="<?= (int) $passwordMinLength ?>">
             <button type="button" class="btn btn-ghost btn-inline" data-toggle-password="password">Show</button>
         </div>
-        <p class="field-hint">At least 12 characters.</p>
+        <p class="field-hint"><?= e(PasswordPolicy::describe($user)) ?></p>
         <?php if (isset($errors['password'])): ?><p class="field-error"><?= e($errors['password']) ?></p><?php endif; ?>
     </div>
 

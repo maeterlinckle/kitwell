@@ -9,6 +9,7 @@ Recording an in-house report of thorough examination under the Lifting Operation
 - [How often](#how-often)
 - [Who may examine](#who-may-examine)
 - [Carrying one out](#carrying-one-out)
+- [Photographic evidence](#photographic-evidence)
 - [Recording defects](#recording-defects)
 - [The report](#the-report)
 
@@ -96,8 +97,8 @@ frequently carries none.
 
 **2. The examination.** Which statutory basis it is being carried out under,
 whether it is the first examination after installation, what the examination
-found, whether it included testing, and — as your own judgement — whether the
-equipment is safe to operate.
+found, whether it included testing, at least one photograph of the equipment,
+and — as your own judgement — whether the equipment is safe to operate.
 
 **3. The report.** The employer it was made for, the premises, the owner or
 whoever the equipment is hired from, who examined it and their qualifications,
@@ -108,6 +109,36 @@ examination and can be overridden wherever it is not.
 The next examination date is worked out from the date of examination and the
 interval, and stays editable — a written scheme or the condition of the
 equipment may call for sooner.
+
+## Photographic evidence
+
+**At least one photograph is required**, and the report cannot be submitted
+without one. Add as many as it takes: the whole item, and a close-up of
+anything you are reporting.
+
+It is the same control used everywhere else in Kitwell. **Take photo** opens
+the camera straight away on a phone or tablet; **Choose files** opens the
+gallery for shots taken earlier. What you pick is previewed with its size
+checked against the server's limit before anything is uploaded.
+
+Underneath there is a box for **what the photographs show** — one line per
+photograph, in the order you added them. Each line is optional; leave it blank
+for anything self-evident. A line that is filled in appears under its
+photograph on the report.
+
+These belong to the examination and not to the
+[media library](media-library.md), which describes what an asset *is* rather
+than one day's inspection of it — the same treatment PAT, fault and maintenance
+evidence gets.
+
+The stage indicator at the top of the form stays neutral for the examination
+page until a photograph has been attached. Everything else on that page arrives
+filled in; the photograph is the part that can only come from somebody standing
+in front of the equipment.
+
+> **If a submission is refused, the photographs are not kept.** A browser will
+> not let a page put files back into a file box, so they have to be attached
+> again along with whatever was corrected.
 
 ## Recording defects
 
@@ -142,8 +173,11 @@ prints it on the report. Sending the copy is yours to do.
 
 ## The report
 
-A completed examination has its own page and a **Download PDF** that fits on
-one page for an ordinary examination. Both carry everything Schedule 1
+A completed examination has its own page and a **Download PDF**. The report
+itself is one page for an ordinary examination, however many photographs follow
+it: each photograph gets a page of its own after the report, with its
+description underneath. Somebody printing only the first page still has a
+complete report. Both carry everything Schedule 1
 requires: the employer and the premises, particulars identifying the equipment
 including its date of manufacture, the date of the last examination, the safe
 working load and the configuration it applies to, which statutory basis this

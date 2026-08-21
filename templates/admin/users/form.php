@@ -1,4 +1,7 @@
 <?php
+
+use App\Models\PasswordPolicy;
+
 /**
  * Create/edit user.
  *
@@ -13,6 +16,11 @@
  */
 $isEdit = $user !== null;
 $action = $isEdit ? url('/admin/users/' . $user['id']) : url('/admin/users');
+
+// The minimum this account's policy asks for. Resolved once, so that what is
+// printed on the control is what the server will enforce.
+$passwordMinLength = PasswordPolicy::forUser($user)['min_length'];
+
 ?>
 <div class="page-head">
     <div>
@@ -108,10 +116,14 @@ $action = $isEdit ? url('/admin/users/' . $user['id']) : url('/admin/users');
                 <label class="label" for="password">Password</label>
                 <div class="input-with-button">
                     <input class="input<?= isset($errors['password']) ? ' has-error' : '' ?>" type="password"
-                           id="password" name="password" autocomplete="new-password" required minlength="12">
+                           id="password" name="password" autocomplete="new-password" required
+                           minlength="<?= (int) PasswordPolicy::appMinLength() ?>">
                     <button type="button" class="btn btn-ghost btn-inline" data-toggle-password="password">Show</button>
                 </div>
-                <p class="field-hint">At least 12 characters. Ask the user to change it after their first sign-in.</p>
+                <p class="field-hint">
+                    <?= e(PasswordPolicy::describe()) ?>
+                    Ask the user to change it after their first sign-in.
+                </p>
                 <?php if (isset($errors['password'])): ?><p class="field-error"><?= e($errors['password']) ?></p><?php endif; ?>
             </div>
 
@@ -192,7 +204,8 @@ $action = $isEdit ? url('/admin/users/' . $user['id']) : url('/admin/users');
             <label class="label" for="reset_password">New password</label>
             <div class="input-with-button">
                 <input class="input" type="password" id="reset_password" name="password"
-                       autocomplete="new-password" required minlength="12">
+                       autocomplete="new-password" required
+                       minlength="<?= (int) $passwordMinLength ?>">
                 <button type="button" class="btn btn-ghost btn-inline" data-toggle-password="reset_password">Show</button>
             </div>
         </div>
@@ -208,6 +221,104 @@ $action = $isEdit ? url('/admin/users/' . $user['id']) : url('/admin/users');
         </div>
     </form>
 
+    <?php
+        $appPolicy    = PasswordPolicy::forUser();
+        $userPolicy   = PasswordPolicy::forUser($user);
+        $expiryMode   = $user['password_expiry_days'] === null
+            ? 'inherit'
+            : ((int) $user['password_expiry_days'] === 0 ? 'never' : 'custom');
+        $complexMode  = ($user['password_min_length'] === null && $user['password_min_classes'] === null)
+            ? 'inherit'
+            : 'custom';
+        $expiresAt    = PasswordPolicy::expiresAt($user);
+    ?>
+    <form method="post" action="<?= e(url('/admin/users/' . $user['id'] . '/password-policy')) ?>" class="form card" novalidate>
+        <?= csrf_field() ?>
+        <h2>Password policy for this account</h2>
+        <p class="muted">
+            Everything here overrides
+            <a href="<?= e(url('/admin/settings')) ?>">the site-wide policy</a> for this account alone.
+            Leave both on <em>site policy</em> and the account simply follows whatever the site decides,
+            now and in future.
+        </p>
+
+        <div class="field">
+            <label class="label" for="password_expiry_mode">Password expiry</label>
+            <select class="input" id="password_expiry_mode" name="password_expiry_mode" data-expiry-mode>
+                <option value="inherit" <?= $expiryMode === 'inherit' ? 'selected' : '' ?>>
+                    Site policy — <?= $appPolicy['expiry_days'] > 0
+                        ? 'every ' . (int) $appPolicy['expiry_days'] . ' days'
+                        : 'never expires' ?>
+                </option>
+                <option value="never" <?= $expiryMode === 'never' ? 'selected' : '' ?>>
+                    Never expires
+                </option>
+                <option value="custom" <?= $expiryMode === 'custom' ? 'selected' : '' ?>>
+                    Expires after a set number of days
+                </option>
+            </select>
+            <p class="field-hint">
+                <strong>Never expires</strong> is not the same as site policy. It is a decision to exempt this
+                account, and it survives a later change to the site-wide figure — which is the point of it
+                for a shared rig or service account that nobody can be asked to log in and rotate.
+            </p>
+            <?php if (isset($errors['password_expiry_mode'])): ?><p class="field-error"><?= e($errors['password_expiry_mode']) ?></p><?php endif; ?>
+        </div>
+
+        <div class="field" data-expiry-days<?= $expiryMode === 'custom' ? '' : ' hidden' ?>>
+            <label class="label" for="password_expiry_days">Expires after (days)</label>
+            <input class="input<?= isset($errors['password_expiry_days']) ? ' has-error' : '' ?>" type="number"
+                   id="password_expiry_days" name="password_expiry_days" min="1" max="3650" step="1"
+                   value="<?= e((string) ($user['password_expiry_days'] ?: $appPolicy['expiry_days'] ?: 90)) ?>">
+            <?php if (isset($errors['password_expiry_days'])): ?><p class="field-error"><?= e($errors['password_expiry_days']) ?></p><?php endif; ?>
+        </div>
+
+        <div class="field">
+            <label class="label" for="password_complexity_mode">Minimum complexity</label>
+            <select class="input" id="password_complexity_mode" name="password_complexity_mode" data-complexity-mode>
+                <option value="inherit" <?= $complexMode === 'inherit' ? 'selected' : '' ?>>
+                    Site policy — <?= (int) $appPolicy['min_length'] ?> characters,
+                    <?= (int) $appPolicy['min_classes'] ?> of 4 character types
+                </option>
+                <option value="custom" <?= $complexMode === 'custom' ? 'selected' : '' ?>>
+                    Set it for this account
+                </option>
+            </select>
+        </div>
+
+        <div class="field-row" data-complexity-fields<?= $complexMode === 'custom' ? '' : ' hidden' ?>>
+            <div class="field">
+                <label class="label" for="user_password_min_length">Minimum length</label>
+                <input class="input<?= isset($errors['password_min_length']) ? ' has-error' : '' ?>" type="number"
+                       id="user_password_min_length" name="password_min_length" min="8" max="64" step="1"
+                       value="<?= e((string) ($user['password_min_length'] ?? $appPolicy['min_length'])) ?>">
+                <?php if (isset($errors['password_min_length'])): ?><p class="field-error"><?= e($errors['password_min_length']) ?></p><?php endif; ?>
+            </div>
+
+            <div class="field">
+                <label class="label" for="user_password_min_classes">Different character types required</label>
+                <select class="input" id="user_password_min_classes" name="password_min_classes">
+                    <?php foreach ([1, 2, 3, 4] as $count): ?>
+                        <option value="<?= (int) $count ?>"
+                            <?= (int) ($user['password_min_classes'] ?? $appPolicy['min_classes']) === $count ? 'selected' : '' ?>>
+                            <?= (int) $count ?> of 4
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+
+        <p class="field-hint">
+            In force now: <?= e(PasswordPolicy::describe($user)) ?>
+            <?php if ($expiresAt !== null): ?>
+                This password expires <strong><?= e(format_datetime($expiresAt)) ?></strong>.
+            <?php endif; ?>
+        </p>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save password policy</button>
+        </div>
+    </form>
     <?php /* The lost-phone path. Not a reset — there is nothing to reset to,
              because the secret only exists on their device — so this removes
              the second factor and lets them set a new one up. */ ?>

@@ -930,3 +930,31 @@
         });
     });
 })();
+
+/*
+ * Per-account password policy: reveal the numbers only for the mode that uses
+ * them. The server does not depend on this — a "custom" mode with nothing typed
+ * is refused there — but a form showing a days box beside "never expires" reads
+ * as a contradiction.
+ */
+(function () {
+    document.addEventListener('DOMContentLoaded', function () {
+        var expiryMode = document.querySelector('[data-expiry-mode]');
+        var expiryDays = document.querySelector('[data-expiry-days]');
+
+        if (expiryMode && expiryDays) {
+            expiryMode.addEventListener('change', function () {
+                expiryDays.hidden = expiryMode.value !== 'custom';
+            });
+        }
+
+        var complexityMode = document.querySelector('[data-complexity-mode]');
+        var complexityFields = document.querySelector('[data-complexity-fields]');
+
+        if (complexityMode && complexityFields) {
+            complexityMode.addEventListener('change', function () {
+                complexityFields.hidden = complexityMode.value !== 'custom';
+            });
+        }
+    });
+})();

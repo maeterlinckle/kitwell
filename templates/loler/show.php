@@ -11,6 +11,7 @@ use App\Models\LolerExamination;
  *
  * @var array<string,mixed> $examination
  * @var array<int,array<string,mixed>> $defects
+ * @var array<int,array<string,mixed>> $photos
  */
 $id      = (int) $examination['id'];
 $assetId = (int) $examination['asset_id'];
@@ -169,6 +170,41 @@ $swl = $examination['swl'] === null
             </dl>
         </div>
 
+        <?php /* Evidence of the physical examination. Required when the report
+                 was made, so this card is never empty on a report recorded
+                 since — but older reports predate the requirement, and an
+                 empty grid says that better than a missing card. */ ?>
+        <div class="card">
+            <div class="card-head">
+                <h2>Photographs</h2>
+                <span class="count-pill"><?= count($photos) ?></span>
+            </div>
+
+            <?php if ($photos === []): ?>
+                <p class="muted">No photographs were attached to this report.</p>
+            <?php else: ?>
+                <ul class="photo-grid photo-grid-compact">
+                    <?php foreach ($photos as $photo): ?>
+                        <?php $src = url('/loler/' . $examination['id'] . '/photos/' . $photo['id']); ?>
+                        <li class="photo-tile">
+                            <a class="photo-link" href="<?= e($src) ?>"
+                               data-lightbox
+                               data-caption="<?= e((string) ($photo['description'] ?? '')) ?>"
+                               data-meta="<?= e('Examined ' . format_date((string) $examination['examined_on'])) ?>">
+                                <img src="<?= e($src . '?size=thumb') ?>"
+                                     alt="<?= e($photo['description'] !== null
+                                        ? (string) $photo['description']
+                                        : 'Photograph taken during the examination on ' . format_date((string) $examination['examined_on'])) ?>"
+                                     loading="lazy" decoding="async">
+                            </a>
+                            <?php if ($photo['description'] !== null): ?>
+                                <p class="photo-tile-caption"><?= e((string) $photo['description']) ?></p>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
+        </div>
         <div class="card">
             <div class="card-head">
                 <h2>Defects</h2>

@@ -40,7 +40,7 @@ Where something is *not* verified, it says so.
 | Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
 | `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 209 PHP files (93 of them templates), 170 routes (89 GET, 81 POST), 22 migrations |
+| Counted at time of writing | 269 PHP files (123 of them templates), 247 routes (128 GET, 116 POST), 9 migrations |
 | Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
@@ -54,7 +54,7 @@ Where something is *not* verified, it says so.
 
 Built by applying everything in `database/migrations/` to an empty database.
 
-**Totals:** 45 domain tables, 540 columns, 95 foreign keys.
+**Totals:** 46 domain tables, 556 columns, 97 foreign keys.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
 A database migrated with `php bin/migrate.php` has one more table,
@@ -65,7 +65,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-Eight files, applied in filename order and recorded in `migrations`. Each is
+Nine files, applied in filename order and recorded in `migrations`. Each is
 written to be safe to re-run.
 
 | File | Contents |
@@ -78,13 +78,14 @@ written to be safe to re-run.
 | `006_routine_scope_and_open_runs.sql` | `maintenance_routines.category_id`; `routine_versions.allow_out_of_order`; `routine_completions.status` / `.started_by` and a nullable `completed_at`; `routine_responses.answered_by` / `.answered_at` |
 | `007_routine_page_batching.sql` | `routine_versions.page_batched`; `routine_pages.required_for_signoff`; `routine_page_completions` |
 | `008_loler_examinations.sql` | `loler_examinations`, `loler_defects`; seven `assets.loler_*` columns behind `requires_loler`; the `organisation_address` setting; adds `loler.inspect`, granted to **no role** |
+| `009_password_policy_and_loler_photos.sql` | The three `password_*` settings and the three nullable `users.password_*` columns that override them; `loler_photos`. Uses MariaDB's `ADD COLUMN IF NOT EXISTS`, so it is safe to apply twice |
 
-A fresh install and one upgraded through 008 produce the same schema —
+A fresh install and one upgraded through 009 produce the same schema —
 verified by migrating both and diffing `information_schema` column by column,
 with rows in place on the upgraded one so an `ALTER` cannot be checked only
 against an empty table.
 
-To change the schema, add a new numbered file — `009_…` and upward. Do not edit
+To change the schema, add a new numbered file — `010_…` and upward. Do not edit
 one that has been applied anywhere.
 
 ### 2.2 Tables
@@ -104,7 +105,10 @@ Types are as MariaDB reports them. `NN` = NOT NULL.
 | job_title | varchar(150) | | NULL |
 | last_login_at | datetime | | NULL |
 | last_login_ip | varchar(45) | | NULL |
-| password_changed_at | datetime | | NULL |
+| password_changed_at | datetime | | NULL — what expiry is measured from |
+| password_expiry_days | smallint unsigned | | **NULL = follow the application policy; 0 = never expires.** Two different answers, see §4.18 |
+| password_min_length | tinyint unsigned | | NULL = follow the application policy |
+| password_min_classes | tinyint unsigned | | NULL = follow the application policy |
 | calendar_token | char(64) | | **unique**, NULL until the user creates a feed |
 | calendar_token_created_at | datetime | | NULL |
 | created_by | int unsigned | | NULL |
@@ -402,12 +406,20 @@ paper and typed back months later.
 `expires_at` datetime NN, `created_at`.
 Indexes `(user_id, expires_at)`.
 
-"Don't ask again on this computer", with **four** ways it stops working rather
-than one: the outer `expires_at`, an idle window measured from `last_seen_at`, a
-change of browser (`user_agent_hash`), and a change of network (`ip_address`,
-compared as a /24 or a /64 — see `TrustedDevice::sameNetwork()`). The cookie
-holds 32 random bytes and only the SHA-256 is stored. Rows are deleted outright
-on a password change and on deactivation.
+"Don't ask again on this computer", with **three** ways it stops working rather
+than one: the outer `expires_at`, an idle window measured from `last_seen_at`,
+and a change of browser (`user_agent_hash`). The cookie holds 32 random bytes
+and only the SHA-256 is stored. Rows are deleted outright on a password change
+and on deactivation.
+
+**`ip_address` is recorded and never checked.** It was a fourth criterion,
+compared as a /24 or a /64, and it was wrong: a laptop carried from the office
+wifi to a phone hotspot is the same laptop, and so is one whose ISP rotates its
+address overnight. Being asked for a code every morning is how people learn that
+a security control is broken, which is how it ends up switched off. What is
+trusted is the device — a secret it holds, plus the browser it runs in. The
+column stays because "first trusted from" is worth seeing on the security page.
+It is evidence, not a check. Do not put the comparison back.
 
 #### `pat_records` (24 columns)
 `id`, `asset_id` NN, `test_date` date NN, `retest_due_date` date,
@@ -660,13 +672,34 @@ particulars are required depends on the category.
 or imminent risk of serious personal injury, which obliges the competent person
 to send a copy to the enforcing authority — cuts across both, so it is a flag
 rather than a severity. Kitwell records and prints the duty; it sends nothing.
-### 2.3 Foreign keys (95)
+#### `loler_photos`
+`id` bigint, `examination_id` NN (CASCADE), `position` smallint NN 1,
+`file_path` varchar(255) NN, `thumbnail_path` varchar(255) (**NULL when gd could
+not make one**), `original_filename`, `mime_type` NN, `file_size_bytes` NN 0,
+`width_px`, `height_px`, `description` varchar(500), `uploaded_by` (SET NULL),
+`created_at`. Index `(examination_id, position)`.
+
+Photographic evidence of the physical examination, and **required**: a report
+cannot be submitted without at least one. It asserts that somebody looked at the
+equipment, and the photograph is the part of that assertion which can be checked
+afterwards.
+
+Exclusive to the examination, like a condition photo is to its asset and a
+routine's photo to its completion. Stored under `loler/{examinationId}` and
+**never** in the shared media library — the library describes what an asset is,
+this describes one day's inspection of it.
+
+`description` is a line the examiner may write per photograph, taken from one
+textarea a line at a time rather than from a field per file. A file input cannot
+be repopulated after a refused submission, so pairing separate inputs to files
+across a redirect is a promise the browser will not keep.
+### 2.3 Foreign keys (97)
 
 | Delete rule | Where it is used |
 |---|---|
-| **CASCADE** | **`loler_examinations.asset_id`**, **`loler_defects.examination_id`**, `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
+| **CASCADE** | **`loler_examinations.asset_id`**, **`loler_defects.examination_id`**, **`loler_photos.examination_id`**, `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
 | **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id`, **`routine_completions.routine_id`**, **`routine_completions.version_id`**, **`routine_responses.step_id`**, **`routine_response_files.step_id`**, **`routine_page_completions.page_id`** |
-| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`loler_examinations.examiner_user_id`**, **`loler_examinations.authenticated_by`**, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
+| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`loler_photos.uploaded_by`**, **`loler_examinations.examiner_user_id`**, **`loler_examinations.authenticated_by`**, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
 
 `maintenance_schedules.assigned_to_team_id` is SET NULL on purpose: archiving is
 the ordinary way to retire a team, so deleting one is a deliberate act that
@@ -728,12 +761,13 @@ this draft" safe.
     software deciding. Granting it is a deliberate act in Settings → Roles
 - Totals after 008: **39 permissions, 74 role_permissions rows** — the extra
   permission adds no grant.
-- **52 settings** on a fresh install (56 once both logo variants have been
+- **55 settings** on a fresh install (59 once both logo variants have been
   uploaded — the four `logo_*` keys are written on upload, never seeded;
   `flash_auto_hide_seconds` is likewise written the first time Settings is
   saved, not seeded). 008 added `organisation_address`, which the LOLER
   wizard's **Use our details** buttons fill the employer and premises
-  addresses from.
+  addresses from. 009 added `password_expiry_days` (0 = never),
+  `password_min_length` (12) and `password_min_classes` (3) — see §4.18.
   Stage 16 added `flash_auto_hide_seconds` (6, 0 = never), `two_factor_required`
   (0), `trusted_device_days` (30), `trusted_device_idle_days` (14),
   `email_otp_minutes` (10) and `two_factor_max_attempts` (5). Stage 17 added
@@ -855,7 +889,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── config/
 │   └── config.php           every value from Env::get(); nothing hardcoded
 │
-├── database/migrations/     001…008, plain .sql, applied in filename order
+├── database/migrations/     001…009, plain .sql, applied in filename order
 ├── vendor/                  gitignored; created by `composer install` (PHPMailer)
 │
 ├── public/                  ← the only directory the web server should serve
@@ -866,7 +900,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │              routine-editor.js, loler-wizard.js, api-docs.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 243 routes
+│   └── web.php              the whole route table, 247 routes
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -894,6 +928,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── Models/              ActivityLog, Asset, AssetPhoto, AssetTemplate,
 │   │                        Assignment, Category, FaultReport, Hire, Hirer,
 │   │                        Location, LolerExamination, MaintenanceLog,
+│   │                        PasswordPolicy,
 │   │                        MaintenanceRoutine,
 │   │                        MaintenanceSchedule, MediaLibrary, ApiKey,
 │   │                        CustomReport, PatRecord, Permission, Role,
@@ -916,10 +951,11 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │                            maintenance/{logId},
 │                            maintenance/{logId}/documents,
 │                            routines/{completionId},
+│                            loler/{examinationId},
 │                            faults/{faultReportId},
 │                            hires/{hireId}, branding/, imports/
 │
-├── templates/               122 .php templates
+├── templates/               123 .php templates
 │   ├── layouts/             app.php, auth.php, print.php
 │   ├── partials/            nav, brand, footer, print-header, flash,
 │   │                        photo-gallery, photo-upload, photo-inputs,
@@ -930,7 +966,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   ├── assets/              index, show, form, copy, apply, photos, labels,
 │   │                        print, print-list
 │   ├── auth/                login, invite, forgot-password, reset-password,
-│   │                        two-factor, two-factor-setup
+│   │                        password-expired, two-factor, two-factor-setup
 │   ├── faults/              form, history
 │   ├── dashboard/ errors/ scan/
 │   ├── profile/             edit, calendar, security, two-factor-setup
@@ -1354,8 +1390,9 @@ worth keeping.
   abandoned sign-in. It is sent when the challenge screen is *rendered*, not
   when the password is posted — otherwise it starts expiring before anybody has
   seen a page.
-- **Trusted devices are a window, not a bypass.** Four independent ways one
-  stops working; see the `trusted_devices` table in §2.2. They are deleted on a
+- **Trusted devices are a window, not a bypass.** Three independent ways one
+  stops working, and **the address is not one of them** — see the
+  `trusted_devices` table in §2.2 for why that check was removed. They are deleted on a
   password change and on deactivation — and `User::updatePassword()` takes a
   `$isChange` flag so a silent re-hash of the *same* password does not revoke
   everybody's devices the first time `PASSWORD_DEFAULT` moves on.
@@ -1677,6 +1714,59 @@ authentication is the signed-in account at submission — `authenticated_by`,
 the regulation allows in place of a signature, and it only means that if the
 record cannot be rewritten later.
 
+
+### 4.18 Password policy
+
+Two levels, and the whole design turns on **NULL not being zero**.
+
+`App\Models\PasswordPolicy` is the only place that decides anything. It reads
+three settings — `password_expiry_days`, `password_min_length`,
+`password_min_classes` — and three nullable columns of the same name on `users`,
+and merges them:
+
+| On `users` | Means |
+|---|---|
+| `NULL` | Follow whatever the application says, now and in future |
+| `0` in `password_expiry_days` | This account is exempt, and stays exempt when the site-wide figure changes |
+| any other value | This account's own figure |
+
+Collapsing NULL into 0 breaks the one case the feature exists for: a shared rig
+or service account nobody can be asked to log in and rotate must not quietly
+start expiring the day somebody sets a 90-day policy. `User::updatePasswordPolicy()`
+writes all three columns explicitly rather than merging whatever keys it is
+handed, because these are the only columns on the row where *not mentioning one*
+would silently mean something.
+
+**Nothing names a threshold except the settings.** `PasswordPolicy::rule($user)`
+builds the validator rule string at runtime — `password:16,4` — and every place
+a password can be set uses it: the invitation, the reset, an administrator's
+reset, the profile change, and the expired-password page. Tuning the policy is a
+settings change, never a release. The sentence under each password box comes
+from `PasswordPolicy::describe()`, so what somebody is told is always what will
+actually be checked.
+
+`Validator`'s `password:length,classes` rule holds no numbers of its own for the
+same reason. Character classes are counted with Unicode properties
+(`\p{Lu}`, `\p{Ll}`, `\p{Nd}`, and "anything else that is not whitespace"),
+rather than a punctuation list somebody has to keep in step with every keyboard
+layout.
+
+**An expired password interrupts the session, it does not refuse the sign-in.**
+Refusing at the door is the obvious place and it leaves somebody holding a
+correct password with no way forward — the exact failure this feature exists to
+avoid. So `Auth::attempt()` is untouched: the sign-in succeeds, and
+`AuthMiddleware` sends every subsequent request to `/password/expired` until a
+new password is set. Two paths are exempt, `/password/expired` itself and
+`/logout`; an expiry that can be clicked past is not an expiry.
+
+It lives in the `auth` middleware rather than route by route because a rule that
+has to be remembered on each of a few hundred routes is a rule that will be
+missed on one of them. The API is unaffected — it has its own gate and never
+runs `auth`.
+
+The expired-password page also refuses the password that has just expired.
+Without that, re-entering it satisfies every rule and resets the clock, which
+makes the whole policy ceremonial.
 ---
 
 ## 5. Build-prompt status
@@ -1917,6 +2007,22 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
     records and presents what the competent person reported and checks it is
     consistent and complete; it does not examine anything, certify anything, or
     send anything to anybody — the report says so (§4.17).
+26. **Password policy, a relaxed trusted device, and LOLER evidence.** Passwords
+    get an expiry and a minimum complexity, set for the site under Settings and
+    overridable per account — including "never expires" for a shared account,
+    which survives a later tightening of the site-wide rule (§4.18). An expired
+    password interrupts the session rather than refusing the sign-in: the person
+    gets in, is sent to one page, and cannot go anywhere else until they have
+    chosen a new one. **The trusted-device rule no longer looks at the address**,
+    only at the browser and the elapsed time — the same laptop on office wifi and
+    on a phone hotspot is one device. A LOLER examination now **requires at least
+    one photograph** of the equipment, taken with the same camera control the
+    rest of the application uses, each with an optional description, shown on the
+    report and given a page apiece in the PDF; the report itself still fits on
+    one page, whose fields were also given clearer label/value separation. The
+    examine wizard's stage indicators stay neutral until a stage is genuinely
+    done, and the blue "not available for hire" banner is gone from the asset
+    page — the badge in the heading already said it.
 
 ### 5.2 What has been verified, and how
 
@@ -1924,15 +2030,16 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 145 PHP files under `src/`, `bin/` and `routes/`, and all 122 templates | 0 failures |
+| `php -l` on all 146 PHP files under `src/`, `bin/` and `routes/`, and all 123 templates | 0 failures |
 | `tests/security-audit.php` | **45 passed, 0 failed** |
-| `tests/escape-audit.php` | **3313 output expressions across 122 templates, 0 unescaped** |
-| All 8 migrations against an empty database | applied cleanly; 45 tables, 540 columns, 95 FKs, all InnoDB |
-| A fresh install vs one upgraded through 008 | **identical** — 540 columns, 259 index rows and 95 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
-| Seed data counts | 4 roles / 39 permissions / 74 grants / 52 settings / 0 template overrides |
-| `tests/permission-matrix.php` | **420 checks, 0 mismatches** |
+| `tests/escape-audit.php` | **3386 output expressions across 123 templates, 0 unescaped** |
+| All 9 migrations against an empty database | applied cleanly; 46 tables, 556 columns, 97 FKs, all InnoDB |
+| A fresh install vs one upgraded through 009 | **identical** — 556 columns, 263 index rows and 97 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
+| Seed data counts | 4 roles / 39 permissions / 74 grants / 55 settings / 0 template overrides |
+| `tests/permission-matrix.php` | **428 checks, 0 mismatches** |
 | `tests/routines.php` | **165 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, category-scoped, worked through out of order by two different accounts a step *and* a page at a time, scanned to, and the PDF checked object by object |
-| `tests/loler.php` | **95 checks, 0 failed** — an asset marked as lifting equipment, examined through the wizard and read back on screen, in the register and out of the PDF; the statutory interval per type, `loler.inspect` refused to every role that ships, page-one corrections written back to the asset, every defect refusal the regulations require, and all eleven Schedule 1 paragraphs found in the document |
+| `tests/password-policy.php` | **35 checks, 0 failed** — the policy at both levels, an override that survives the site-wide rule being tightened, the expired-password interruption, and a trusted device followed across three different addresses |
+| `tests/loler.php` | **104 checks, 0 failed** — an asset marked as lifting equipment, examined through the wizard and read back on screen, in the register and out of the PDF; the statutory interval per type, `loler.inspect` refused to every role that ships, page-one corrections written back to the asset, every defect refusal the regulations require, and all eleven Schedule 1 paragraphs found in the document |
 | `tests/media-library.php` | **49 checks, 0 failed** — counted from the database *and* the filesystem |
 | `tests/fault-flow.php` | **68 checks, 0 failed** — end to end over HTTP, with a mail catcher |
 | `tests/api-contract.php` | **84 checks, 0 failed** — the API against its own generated specification |
@@ -1954,6 +2061,12 @@ were both adjusted until a single-section record lands on one page. The LOLER
 report of thorough examination went through the same renderer and came back a
 clean single page carrying all eleven Schedule 1 paragraphs, the verdict banner,
 the reg. 10(1)(c) notice, a ruled signature line and the closing statement.
+
+It went through again after the field spacing was opened up in prompt 26, and
+caught the cost of it: one line of the closing statement had moved onto a page
+of its own. The gap and the rule under each field were both trimmed a point at a
+time, with the page count re-measured each time, until an ordinary report was one
+page again — and the evidence photographs, one to a page, follow it.
 
 **Stage 12 specifically, verified on this machine:**
 
@@ -2629,6 +2742,32 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   case will not match either. `tests/loler.php` unescapes the parens and searches
   with `stripos`. Nine assertions were "failing" against a document that had been
   correct all along.
+- **`?>` inside a `//` comment ends the PHP block.** A generated patch script
+  carrying the line `// right after the docblock's closing ?>.` died with
+  "unclosed `{`" thirty lines further on, which points nowhere near the cause.
+  It is not a quirk of the comment, it is how the lexer leaves PHP mode. Write
+  the sequence as `'?' . '>'` or leave it out.
+- **A wizard step with nothing blank on it is not a finished step.** The LOLER
+  form's pages two and three arrive almost entirely prefilled — the employer from
+  Settings, the examiner from the session, the dates and the basis computed — so
+  "no required field is empty" made both go green before they had been opened.
+  A stage indicator has to wait on something only a person can supply: being
+  *visited*, and on page two the photograph. The PAT wizard does not need this
+  because nothing on its pages is prefilled; do not copy its rule here.
+- **Do not drive a whole settings form from a scraped copy of its own markup.**
+  `/admin/settings` saves every key it renders in one post, so re-posting the
+  fields a regex found and changing one of them silently rewrote two dozen
+  others — clearing `organisation_name`, and switching site-wide two-factor *on*,
+  which broke the next three test runs in ways that looked like unrelated
+  regressions. A test that needs a setting should write it with `Setting::put()`
+  and assert the form separately with a post that is *refused*, since a refusal
+  writes nothing.
+- **Opening up spacing in a fixed-length document costs pages.** Adding a rule
+  and a gap under each field of the LOLER report added roughly 3pt a field —
+  about 35pt over the page — which pushed one line of the closing statement onto
+  a second page. The report has perhaps 25pt of slack, so any change to
+  `LolerDocument`'s field metrics has to be re-measured by counting `/Type /Page`
+  in the output, not eyeballed.
 - **Two dev servers can bind the same port on Windows.** A second `php -S` on a
   port already in use starts, logs that it started, and serves nothing — every
   request goes to the first one. If a page 404s with another project's branding
@@ -2692,3 +2831,10 @@ php tests/security-audit.php && php tests/escape-audit.php
     statement on the report: the application records what a competent person
     said, and claiming more than that on their behalf is the one failure mode
     here that matters.
+12. **On `users`, NULL is a value.** `password_expiry_days`,
+    `password_min_length` and `password_min_classes` mean "follow the
+    application policy" when NULL, and 0 in the first means "never expires".
+    They are different answers to different questions (§4.18), and collapsing
+    one into the other breaks the case the feature exists for. Anything writing
+    those columns should go through `User::updatePasswordPolicy()`, which names
+    all three.

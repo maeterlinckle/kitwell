@@ -197,7 +197,8 @@ $setting = static fn (string $key, string $default = ''): string => (string) ($s
                        value="<?= e(old($old, 'trusted_device_idle_days', $setting('trusted_device_idle_days', '14'))) ?>">
                 <p class="field-hint">
                     A machine not signed in from for this long is asked again. Capped at the figure on the
-                    left. A code is also required again if the browser or the network changes.
+                    left. A code is also required again if the browser changes — but not if the address it
+                    is used from does, so the same laptop on wifi and on a hotspot stays trusted.
                 </p>
                 <?php if (isset($errors['trusted_device_idle_days'])): ?><p class="field-error"><?= e($errors['trusted_device_idle_days']) ?></p><?php endif; ?>
             </div>
@@ -225,6 +226,65 @@ $setting = static fn (string $key, string $default = ''): string => (string) ($s
                 <?php if (isset($errors['two_factor_max_attempts'])): ?><p class="field-error"><?= e($errors['two_factor_max_attempts']) ?></p><?php endif; ?>
             </div>
         </div>
+    </div>
+
+    <div class="card">
+        <h2>Passwords</h2>
+        <p class="muted">
+            The policy everybody follows unless their own account says otherwise. An individual account can
+            be given its own expiry and its own complexity on
+            <a href="<?= e(url('/admin/users')) ?>">its user page</a> — a shared or service account that must
+            never expire, say — and what is set there wins over what is set here.
+        </p>
+
+        <div class="field">
+            <label class="label" for="password_expiry_days">Require a new password after (days)</label>
+            <input class="input<?= isset($errors['password_expiry_days']) ? ' has-error' : '' ?>" type="number"
+                   id="password_expiry_days" name="password_expiry_days" min="0" max="3650" step="1" required
+                   value="<?= e(old($old, 'password_expiry_days', $setting('password_expiry_days', '0'))) ?>">
+            <p class="field-hint">
+                <strong>0 means never.</strong> Otherwise, somebody signing in with a password older than this
+                is asked to set a new one before they can go any further — they are not locked out, and there
+                is nothing for an administrator to unlock.
+            </p>
+            <?php if (isset($errors['password_expiry_days'])): ?><p class="field-error"><?= e($errors['password_expiry_days']) ?></p><?php endif; ?>
+        </div>
+
+        <div class="field-row">
+            <div class="field">
+                <label class="label" for="password_min_length">Minimum length</label>
+                <input class="input<?= isset($errors['password_min_length']) ? ' has-error' : '' ?>" type="number"
+                       id="password_min_length" name="password_min_length" min="8" max="64" step="1" required
+                       value="<?= e(old($old, 'password_min_length', $setting('password_min_length', '12'))) ?>">
+                <p class="field-hint">
+                    Length is the part that actually costs an attacker time. Below 8 is not offered.
+                </p>
+                <?php if (isset($errors['password_min_length'])): ?><p class="field-error"><?= e($errors['password_min_length']) ?></p><?php endif; ?>
+            </div>
+
+            <div class="field">
+                <label class="label" for="password_min_classes">Different character types required</label>
+                <select class="input<?= isset($errors['password_min_classes']) ? ' has-error' : '' ?>"
+                        id="password_min_classes" name="password_min_classes" required>
+                    <?php foreach ([1, 2, 3, 4] as $count): ?>
+                        <option value="<?= (int) $count ?>"
+                            <?= (int) old($old, 'password_min_classes', $setting('password_min_classes', '3')) === $count ? 'selected' : '' ?>>
+                            <?= (int) $count ?> of 4
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="field-hint">
+                    Out of upper case, lower case, numbers and symbols. Three is the usual answer: it rules
+                    out a plain word without forcing the unmemorable muddle that gets written on a note.
+                </p>
+                <?php if (isset($errors['password_min_classes'])): ?><p class="field-error"><?= e($errors['password_min_classes']) ?></p><?php endif; ?>
+            </div>
+        </div>
+
+        <p class="field-hint">
+            Changing this does not invalidate anybody's current password. It applies the next time one is
+            set — at an invitation, a reset, or a change.
+        </p>
     </div>
 
     <div class="card">

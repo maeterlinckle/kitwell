@@ -838,14 +838,28 @@ textarea.input { min-height: 120px; resize: vertical; }
     border-top: 1px solid var(--border);
 }
 
+/*
+ * Filter bars come in two shapes: unlabelled boxes (`.field-inline` with an
+ * `.sr-only` label) and ones with visible labels above each control. Both have
+ * to put every control on the same bottom edge, which is why this aligns to
+ * flex-end rather than centring. Centring lines up the middles of columns of
+ * different heights, so a submit button with no label above it floats above
+ * the boxes it sits beside — which is exactly what it did on /loler.
+ */
 .filter-bar {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    align-items: center;
+    align-items: flex-end;
     margin-bottom: var(--space-4);
 }
 .field-inline { margin: 0; flex: 1 1 180px; }
+
+/* A field's usual bottom margin is spacing between rows of a form. Inside a
+   filter bar the gap does that job, and the margin only pushes the controls off
+   the bar's own baseline. */
+.filter-bar .field { margin-bottom: 0; flex: 1 1 180px; }
+.filter-bar .field-aligned { flex: 0 0 auto; }
 .filter-bar .btn { flex: 0 0 auto; }
 
 /* --- Flash messages ------------------------------------------------------- */
@@ -1871,6 +1885,17 @@ tr.preview-warning td { background: var(--warn-soft); }
     overflow: hidden;
 }
 .photo-tile.is-primary { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* What a photograph shows, under it. Evidence on a LOLER report, where the
+   description is part of the record rather than a nicety. */
+.photo-tile-caption {
+    margin: 0;
+    padding: var(--space-2);
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+}
 
 .photo-link {
     position: relative;

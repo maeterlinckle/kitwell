@@ -213,6 +213,14 @@ check('every non-public route requires a session', $unauthed === [], implode("\n
 //    that is self-scoping or applies to any signed-in user.
 $permissionExempt = [
     '/login', '/logout', '/health', '/', '/profile', '/profile/password',
+    // Setting a password that has aged out of the policy. Self-scoping like
+    // /profile/password beside it: both act on Auth::id() and nothing else,
+    // there is no id in the path, and the current password has to be given
+    // again. A permission would be the wrong tool anyway — everybody's password
+    // can expire, including the administrator's, and a permission somebody
+    // could lack would be a way to be locked out with no route forward, which
+    // is the exact failure this page exists to prevent.
+    '/password/expired',
     '/my-hires', '/my-hires/{hireId:\d+}', '/my-hires/{hireId:\d+}/photo',
     '/my-hires/{hireId:\d+}/manuals/{manualId:\d+}',
     // A user's own calendar subscription. Self-scoping in the strongest

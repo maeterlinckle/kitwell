@@ -48,6 +48,11 @@ $matrix = [
     // Everyone signed in
     '/'                          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
     '/profile'                   => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
+    // Setting a password that has aged out. Reachable by everybody because
+    // everybody's password can expire, and it redirects to /profile when the
+    // caller's has not — an "allow" here means "not refused", which is the
+    // property under test.
+    '/password/expired'          => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
     '/my-hires'                  => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'allow'],
 
     // The register
@@ -114,6 +119,12 @@ $matrix = [
     '/loler'                     => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/1/loler'            => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
     '/assets/1/loler/examine'    => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny',  'hirer' => 'deny'],
+    // A LOLER evidence photograph is deliberately *not* here. Its permission is
+    // the report's own, but the address needs a photograph that exists, and a
+    // seeded database has none — a row that 404s for three roles and 403s for
+    // the fourth proves nothing about permissions. tests/loler.php checks it
+    // instead, against a photograph it has just created, including that one
+    // report cannot reach another report's evidence.
 
     // PAT
     '/pat'                       => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'allow', 'hirer' => 'deny'],
@@ -195,6 +206,9 @@ $writeMatrix = [
     '/hirers'              => ['admin' => 'allow', 'manager' => 'allow', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/users'            => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/users/1/invite'   => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
+    // Exempting an account from the password policy is an administrative act,
+    // and one worth being able to point at afterwards.
+    '/admin/users/1/password-policy' => ['admin' => 'allow', 'manager' => 'deny', 'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/teams'            => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/teams/1/status'   => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],
     '/admin/teams/1/members'  => ['admin' => 'allow', 'manager' => 'deny',  'viewer' => 'deny', 'hirer' => 'deny'],

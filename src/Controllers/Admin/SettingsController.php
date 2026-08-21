@@ -107,6 +107,9 @@ final class SettingsController extends Controller
             'pat_guide_leakage_class1_ma' => 'required|numeric|min_value:0|max_value:1000',
             'pat_guide_leakage_class2_ma' => 'required|numeric|min_value:0|max_value:1000',
             'flash_auto_hide_seconds'     => 'required|integer|min_value:0|max_value:120',
+            'password_expiry_days'        => 'required|integer|min_value:0|max_value:3650',
+            'password_min_length'         => 'required|integer|min_value:8|max_value:64',
+            'password_min_classes'        => 'required|integer|min_value:1|max_value:4',
             'trusted_device_days'         => 'required|integer|min_value:1|max_value:365',
             'trusted_device_idle_days'    => 'required|integer|min_value:1|max_value:365',
             'email_otp_minutes'           => 'required|integer|min_value:1|max_value:60',
@@ -126,6 +129,9 @@ final class SettingsController extends Controller
             'pat_guide_leakage_class1_ma' => 'Leakage guideline (Class I)',
             'pat_guide_leakage_class2_ma' => 'Leakage guideline (Class II)',
             'flash_auto_hide_seconds'     => 'Confirmation banner timeout',
+            'password_expiry_days'        => 'Password expiry',
+            'password_min_length'         => 'Minimum password length',
+            'password_min_classes'        => 'Character types required',
             'trusted_device_days'         => 'Trusted device duration',
             'trusted_device_idle_days'    => 'Trusted device inactivity window',
             'email_otp_minutes'           => 'Emailed code lifetime',
@@ -177,6 +183,13 @@ final class SettingsController extends Controller
         }
 
         Setting::put('two_factor_required',      $requireTwoFactor ? '1' : '0');
+        // Nobody's current password is invalidated by this. It governs the next
+        // one set — an invitation, a reset, a change — and the expiry is
+        // measured from `users.password_changed_at`, which already exists.
+        Setting::put('password_expiry_days',     (string) (int) $data['password_expiry_days']);
+        Setting::put('password_min_length',      (string) (int) $data['password_min_length']);
+        Setting::put('password_min_classes',     (string) (int) $data['password_min_classes']);
+
         Setting::put('trusted_device_days',      (string) (int) $data['trusted_device_days']);
         Setting::put('email_otp_minutes',        (string) (int) $data['email_otp_minutes']);
         Setting::put('two_factor_max_attempts',  (string) (int) $data['two_factor_max_attempts']);

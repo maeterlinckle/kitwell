@@ -14,6 +14,7 @@ use App\Models\ActivityLog;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserToken;
+use App\Models\PasswordPolicy;
 
 final class UserController extends Controller
 {
@@ -65,7 +66,10 @@ final class UserController extends Controller
         ];
 
         if (!$canInvite) {
-            $rules['password']              = 'required|min:12|max:255';
+            // No user yet, so the application policy is the one that applies.
+            // An override set on the account afterwards governs the *next*
+            // password, not this one.
+            $rules['password']              = 'required|max:255|' . PasswordPolicy::rule();
             $rules['password_confirmation'] = 'required|matches:password';
         }
 
@@ -252,6 +256,90 @@ final class UserController extends Controller
         Response::redirect('/admin/users');
     }
 
+    /**
+     * This account's own password policy, overriding the site's.
+     *
+     * Three values on the row, all nullable, and NULL is a real answer: it
+     * means "whatever the site says", which has to stay true when the site
+     * changes its mind. 0 days means never. Collapsing either into the other
+     * would break the one case the feature exists for — a shared account that
+     * must stay exempt after somebody tightens the site-wide rule.
+     */
+    public function updatePasswordPolicy(string $id): void
+    {
+        $userId = (int) $id;
+        $user   = User::find($userId);
+
+        if ($user === null) {
+            Flash::error('That user no longer exists.');
+            Response::redirect('/admin/users');
+        }
+
+        $back = '/admin/users/' . $userId . '/edit';
+
+        $data = $this->validate([
+            'password_expiry_mode'     => 'required|in:inherit,never,custom',
+            'password_complexity_mode' => 'required|in:inherit,custom',
+            'password_expiry_days'     => 'integer|min_value:1|max_value:3650',
+            'password_min_length'      => 'integer|min_value:8|max_value:64',
+            'password_min_classes'     => 'integer|min_value:1|max_value:4',
+        ], [
+            'password_expiry_mode'     => 'Password expiry',
+            'password_complexity_mode' => 'Minimum complexity',
+            'password_expiry_days'     => 'Expiry in days',
+            'password_min_length'      => 'Minimum length',
+            'password_min_classes'     => 'Character types required',
+        ], $back);
+
+        // A number is only required by the mode that uses one, which is why it
+        // is not `required` above — the field is hidden in the other two modes
+        // and a hidden required field is a form nobody can submit.
+        if ($data['password_expiry_mode'] === 'custom' && (string) $data['password_expiry_days'] === '') {
+            Flash::errors(['password_expiry_days' => 'Say how many days.']);
+            Flash::error('Choose the number of days, or pick one of the other two options.');
+            Response::redirect($back);
+        }
+
+        if ($data['password_complexity_mode'] === 'custom'
+            && ((string) $data['password_min_length'] === '' || (string) $data['password_min_classes'] === '')) {
+            Flash::errors(['password_min_length' => 'Set both a length and a number of character types.']);
+            Flash::error('Set both a length and a number of character types, or follow the site policy.');
+            Response::redirect($back);
+        }
+
+        $expiry = match ($data['password_expiry_mode']) {
+            'never'  => 0,
+            'custom' => (int) $data['password_expiry_days'],
+            default  => null,
+        };
+
+        $custom = $data['password_complexity_mode'] === 'custom';
+
+        User::updatePasswordPolicy($userId, [
+            'password_expiry_days' => $expiry,
+            'password_min_length'  => $custom ? (int) $data['password_min_length'] : null,
+            'password_min_classes' => $custom ? (int) $data['password_min_classes'] : null,
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'user',
+            $userId,
+            'Set the password policy for ' . $user['name'] . ': '
+            . match (true) {
+                $expiry === null => 'expiry follows the site policy',
+                $expiry === 0    => 'password never expires',
+                default          => 'password expires after ' . $expiry . ' days',
+            }
+            . ', complexity ' . ($custom
+                ? $data['password_min_length'] . ' characters and ' . $data['password_min_classes'] . ' of 4 types'
+                : 'follows the site policy')
+        );
+
+        Flash::success('Password policy saved for ' . $user['name'] . '.');
+        Response::redirect($back);
+    }
+
     public function resetPassword(string $id): void
     {
         $userId = (int) $id;
@@ -263,7 +351,7 @@ final class UserController extends Controller
         }
 
         $this->validate([
-            'password'              => 'required|min:12|max:255',
+            'password'              => 'required|max:255|' . PasswordPolicy::rule($user),
             'password_confirmation' => 'required|matches:password',
         ], [
             'password'              => 'New password',

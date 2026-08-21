@@ -5,6 +5,7 @@ Who can do what, how a role is defined, and how somebody gets an account in the 
 **On this page**
 
 - [Roles and permissions](#roles-and-permissions)
+- [Password policy](#password-policy)
 - [Accounts: invitations and password recovery](#accounts-invitations-and-password-recovery)
 
 ---
@@ -109,6 +110,65 @@ The calendar feed needs no permission of its own: every signed-in user can
 create their own, and what it contains is decided by the permissions they
 already hold.
 
+---
+
+## Password policy
+
+Two settings, at two levels. The application sets a policy for everybody, and
+any individual account can be given its own.
+
+### For everybody
+
+**Settings → Passwords**, administrator only.
+
+| Setting | Default | What it does |
+|---|---|---|
+| Require a new password after (days) | **0 — never** | Somebody signing in with a password older than this sets a new one before they can go any further |
+| Minimum length | **12** | Characters. Below 8 is not offered |
+| Different character types required | **3 of 4** | Out of upper case, lower case, numbers and symbols |
+
+Three of four types is the usual answer: it rules out a plain word without
+forcing the unmemorable muddle that ends up written on a note under the
+keyboard. Length is the part that actually costs an attacker time, which is why
+the floor is 12 rather than 8.
+
+**Changing the policy does not invalidate anybody's current password.** It
+applies the next time one is set — at an invitation, a reset, or a change. The
+rule is enforced on the server at every one of those points, and the sentence
+under each password box is generated from the policy, so what somebody is told
+is always what will actually be checked.
+
+### For one account
+
+The same two settings appear on each user's page, under **Password policy for
+this account**, and what is set there wins.
+
+| Choice | Meaning |
+|---|---|
+| **Site policy** | Follow whatever the application says, now and in future |
+| **Never expires** | This account is exempt, and stays exempt if the site-wide figure changes later |
+| **Expires after…** | A number of days for this account alone |
+
+"Site policy" and "never expires" are not the same answer. An account left on
+site policy follows the site the next time somebody edits it; an account set to
+never expire has been *decided about*, and a later tightening of the site-wide
+rule leaves it alone. That distinction is the reason the per-account setting
+exists: a shared rig or service account that nobody can be asked to log in and
+rotate should not quietly start expiring the day somebody sets a 90-day policy.
+
+Minimum complexity works the same way, and can go either direction — stricter
+for an administrator's account, more lenient for a device account that has to
+match something else's rules.
+
+### When a password expires
+
+The person **signs in normally** and is then sent to a page asking them to set
+a new one. Nothing else in the application opens until they have. They are not
+locked out, no code is needed, and there is nothing for an administrator to
+undo.
+
+They have to give the current password again, and the new one cannot be the one
+that just expired.
 ---
 
 ## Accounts: invitations and password recovery

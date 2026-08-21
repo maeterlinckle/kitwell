@@ -68,8 +68,9 @@ if ($defects === []) {
 <?php endif; ?>
 
 <form method="post" action="<?= e(url('/assets/' . $assetId . '/loler/examine')) ?>"
-      class="form form-wide loler-wizard" novalidate
+      class="form form-wide loler-wizard" novalidate enctype="multipart/form-data"
       data-loler-wizard
+      data-photo-form data-max-bytes="<?= (int) config('uploads.max_photo_bytes') ?>"
       data-org-name="<?= e($organisation['name']) ?>"
       data-org-address="<?= e($organisation['address']) ?>">
     <?= csrf_field() ?>
@@ -440,6 +441,51 @@ if ($defects === []) {
             </label>
         </div>
 
+        <?php /* Photographic evidence of the physical examination.
+
+                 Required, and required here rather than as an afterthought on
+                 the report page: a report of thorough examination asserts that
+                 somebody looked at the equipment, and a photograph is the one
+                 part of that assertion which can be checked afterwards. The
+                 same camera/gallery control as everywhere else in the
+                 application — on a phone "Take photo" opens the camera
+                 directly, which is how these are actually taken.
+
+                 They belong to this examination and not to the media library:
+                 what the library holds describes an asset, and this describes
+                 one day's inspection of it. */ ?>
+        <div class="field<?= isset($errors['photos']) ? ' has-error' : '' ?>" data-photo-required>
+            <span class="label">Photographs of the equipment examined</span>
+            <p class="field-hint">
+                At least one is required. Add as many as it takes to evidence what you found —
+                the whole item, and a close-up of anything you are reporting.
+            </p>
+
+            <?= partial('partials/photo-inputs', ['name' => 'photos[]', 'primary' => false]) ?>
+
+            <p class="field-hint">
+                JPEG, PNG or WebP (and HEIC from an iPhone), up to
+                <?= (int) (config('uploads.max_photo_bytes') / 1048576) ?> MB each. Large photos are
+                rotated the right way up and scaled down automatically.
+            </p>
+
+            <div class="photo-preview" data-photo-preview hidden></div>
+
+            <div class="field" data-photo-meta hidden>
+                <label class="label" for="photo_descriptions">
+                    What the photographs show <span class="optional">(optional)</span>
+                </label>
+                <textarea class="input" id="photo_descriptions" name="photo_descriptions" rows="3"
+                          maxlength="2000"
+                          placeholder="One line per photograph, in the order they were added."><?= e($value('photo_descriptions')) ?></textarea>
+                <p class="field-hint">
+                    One line per photograph, in the order added. A line is optional — leave it blank for
+                    anything self-evident. Descriptions appear under their photograph on the report.
+                </p>
+            </div>
+
+            <?php if (isset($errors['photos'])): ?><p class="field-error"><?= e($errors['photos']) ?></p><?php endif; ?>
+        </div>
         <div class="field">
             <label class="label" for="notes">Notes <span class="optional">(optional)</span></label>
             <textarea class="input" id="notes" name="notes" rows="2" maxlength="5000"><?= e($value('notes')) ?></textarea>

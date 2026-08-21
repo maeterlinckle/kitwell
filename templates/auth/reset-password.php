@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\UserToken;
+use App\Models\PasswordPolicy;
 
 /**
  * Choose a new password from an emailed link.
@@ -10,6 +11,11 @@ use App\Models\UserToken;
  * @var string                   $token
  * @var array<string,string>     $errors
  */
+
+// The minimum this account's policy asks for. Resolved once, so that what is
+// printed on the control is what the server will enforce.
+$passwordMinLength = PasswordPolicy::forUser($user)['min_length'];
+
 ?>
 <?php if ($status !== UserToken::OK): ?>
     <h1 class="auth-title">
@@ -50,10 +56,10 @@ use App\Models\UserToken;
         <label class="label" for="password">New password</label>
         <div class="input-with-button">
             <input class="input<?= isset($errors['password']) ? ' has-error' : '' ?>" type="password"
-                   id="password" name="password" autocomplete="new-password" required minlength="12" autofocus>
+                   id="password" name="password" autocomplete="new-password" required minlength="<?= (int) $passwordMinLength ?>" autofocus>
             <button type="button" class="btn btn-ghost btn-inline" data-toggle-password="password">Show</button>
         </div>
-        <p class="field-hint">At least 12 characters.</p>
+        <p class="field-hint"><?= e(PasswordPolicy::describe($user)) ?></p>
         <?php if (isset($errors['password'])): ?><p class="field-error"><?= e($errors['password']) ?></p><?php endif; ?>
     </div>
 

@@ -12,14 +12,22 @@ use App\Core\Request;
  *
  * The cookie holds 32 random bytes and the database holds only their SHA-256,
  * so a stolen backup is not a set of working bypasses. A row is accepted only
- * when four things still hold, and any one of them failing means the challenge
+ * when three things still hold, and any one of them failing means the challenge
  * is put again:
  *
  *   - it has not passed `expires_at` (the outer limit)
  *   - it has been used within the idle window (a laptop last seen six weeks ago
  *     is not the laptop that was trusted)
  *   - the browser still matches (a hash of the user agent)
- *   - the network still matches approximately (see `sameNetwork()`)
+ *
+ * **The address it is used from is not one of them.** It was, and it was wrong:
+ * a laptop carried from the office wifi to a phone hotspot is the same laptop,
+ * and so is one whose ISP rotates its address overnight. Re-challenging for
+ * that taught people the feature was broken, which is how a security control
+ * ends up switched off. What is being trusted is the device, and the device is
+ * identified by a secret it holds plus the browser it is running in. The
+ * address is still recorded on the row, because "first trusted from" is worth
+ * seeing on the security page — it is evidence, not a check.
  *
  * And it is thrown away outright when the password changes or an administrator
  * deactivates the account, because both of those mean "whoever has that cookie
@@ -106,66 +114,9 @@ final class TrustedDevice
             return false;
         }
 
-        if (!self::sameNetwork((string) $row['ip_address'], Request::ip())) {
-            self::forget((int) $row['id']);
-
-            return false;
-        }
-
         Database::run('UPDATE trusted_devices SET last_seen_at = NOW() WHERE id = ?', [(int) $row['id']]);
 
         return true;
-    }
-
-    /**
-     * Is this close enough to the same place?
-     *
-     * A /24 for IPv4 and a /64 for IPv6: the same office, the same home
-     * broadband, the same phone on the same cell. It is a heuristic and it is
-     * meant to be — the alternative, an exact match, re-challenges anybody whose
-     * ISP rotates their address overnight, and people who are asked for a code
-     * every single morning start looking for ways to turn the feature off.
-     *
-     * Both are compared as *strings of octets/hextets* rather than parsed, so a
-     * malformed or missing address simply fails to match.
-     */
-    public static function sameNetwork(string $before, string $now): bool
-    {
-        if ($before === '' || $now === '') {
-            return false;
-        }
-
-        if ($before === $now) {
-            return true;
-        }
-
-        if (str_contains($before, ':') !== str_contains($now, ':')) {
-            // One IPv4, one IPv6 — often the same machine on a network that
-            // offers both, but not something to assume.
-            return false;
-        }
-
-        if (str_contains($before, ':')) {
-            $a = array_slice(explode(':', self::expandIpv6($before)), 0, 4);
-            $b = array_slice(explode(':', self::expandIpv6($now)), 0, 4);
-        } else {
-            $a = array_slice(explode('.', $before), 0, 3);
-            $b = array_slice(explode('.', $now), 0, 3);
-        }
-
-        return $a === $b;
-    }
-
-    /** `::1` and friends written out in full, so the halves line up. */
-    private static function expandIpv6(string $address): string
-    {
-        $packed = @inet_pton($address);
-
-        if ($packed === false) {
-            return $address;
-        }
-
-        return implode(':', str_split(bin2hex($packed), 4));
     }
 
     /** @return array<int,array<string,mixed>> */

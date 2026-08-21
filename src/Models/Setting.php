@@ -46,6 +46,19 @@ final class Setting
         return self::$cache ?? [];
     }
 
+    /**
+     * Forget the cached settings, so the next read goes to the database.
+     *
+     * The cache is per-request and that is right for a request. It is wrong for
+     * anything long-lived that has to notice a change made somewhere else — a
+     * CLI process, or a test driving the settings form over HTTP and then
+     * asking the application what the policy now is.
+     */
+    public static function flush(): void
+    {
+        self::$cache = null;
+    }
+
     public static function put(string $key, ?string $value): void
     {
         Database::run(

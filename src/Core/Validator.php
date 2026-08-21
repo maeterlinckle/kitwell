@@ -4,12 +4,19 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Models\PasswordPolicy;
+
 /**
  * Small rule-based validator.
  *
  * Rules: required, email, min:n, max:n, numeric, integer, decimal, date, url,
  *        in:a,b,c, matches:field, unique:table,column[,ignoreId], exists:table,column,
- *        boolean, alphadash.
+ *        boolean, alphadash, password:length,classes.
+ *
+ * `password:` takes its two numbers from the policy in force rather than from
+ * anything written here — see App\Models\PasswordPolicy::rule(). The rule is
+ * built at the call site so that tuning the thresholds is a settings change,
+ * not a release.
  */
 final class Validator
 {
@@ -153,6 +160,24 @@ final class Validator
             case 'alphadash':
                 if (!preg_match('/^[A-Za-z0-9._\- ]+$/', (string) $value)) {
                     return $this->fail($field, "$label may only contain letters, numbers, spaces, dots, dashes and underscores.");
+                }
+                break;
+
+            case 'password':
+                // password:minLength,minClasses — the thresholds come from the
+                // application or account policy, so this rule holds no numbers
+                // of its own.
+                $parts   = explode(',', (string) $parameter);
+                $length  = (int) ($parts[0] ?? 12);
+                $classes = (int) ($parts[1] ?? 3);
+
+                if (mb_strlen((string) $value) < $length) {
+                    return $this->fail($field, "$label must be at least $length characters.");
+                }
+
+                if (PasswordPolicy::classesUsed((string) $value) < $classes) {
+                    return $this->fail($field, "$label must include at least $classes of: "
+                        . implode(', ', array_values(PasswordPolicy::CLASSES)) . '.');
                 }
                 break;
 

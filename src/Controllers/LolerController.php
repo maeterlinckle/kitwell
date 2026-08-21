@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Auth;
+use App\Core\Config;
 use App\Core\Database;
 use App\Core\Flash;
+use App\Core\Image;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Upload;
 use App\Models\ActivityLog;
 use App\Models\Asset;
 use App\Models\LolerExamination;
@@ -112,6 +115,46 @@ final class LolerController extends Controller
         ]);
     }
 
+    /** Stream a photograph taken during an examination. `?size=thumb` where one exists. */
+    public function photo(string $id, string $photoId): void
+    {
+        $photo = LolerExamination::photo((int) $photoId);
+
+        if ($photo === null || (int) $photo['examination_id'] !== (int) $id) {
+            $this->notFound('That photograph is not part of this report.');
+        }
+
+        $wantsThumb = Request::query('size') === 'thumb';
+        $relative   = ($wantsThumb && !empty($photo['thumbnail_path']))
+            ? (string) $photo['thumbnail_path']
+            : (string) $photo['file_path'];
+
+        $path = Upload::absolutePath($relative);
+
+        // A missing thumbnail should never break the gallery — fall back.
+        if ($path === null && $wantsThumb) {
+            $path = Upload::absolutePath((string) $photo['file_path']);
+        }
+
+        if ($path === null) {
+            $this->notFound('The photograph is missing from the server.');
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: ' . (string) $photo['mime_type']);
+        header('Content-Length: ' . (string) filesize($path));
+        header('Content-Disposition: inline; filename="' . str_replace('"', '', Upload::displayName((string) ($photo['original_filename'] ?: 'photo'))) . '"');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, max-age=2592000, immutable');
+        header_remove('Pragma');
+
+        readfile($path);
+        exit;
+    }
+
     /** Record the examination, and the report it produces. */
     public function store(string $assetId): void
     {
@@ -155,6 +198,21 @@ final class LolerController extends Controller
         if ($examiner === null || !User::holdsPermission($examinerId, 'loler.inspect')) {
             $this->failValidation([
                 'examiner_user_id' => 'That person does not hold the LOLER examination permission.',
+            ], $redirect);
+        }
+
+        // Photographic evidence of the physical examination. Last of the
+        // refusals and before the transaction opens, so nothing is written —
+        // but after the ones about what the report *says*, because a report
+        // that contradicts itself is a more useful thing to be told about than
+        // a missing attachment, and being told one at a time is the cost of
+        // a file input that cannot be repopulated.
+        $photos = Upload::files('photos');
+
+        if ($photos === []) {
+            $this->failValidation([
+                'photos' => 'At least one photograph of the equipment examined is required.'
+                    . ' Photographs are not kept when a submission is refused, so please attach them again.',
             ], $redirect);
         }
 
@@ -232,6 +290,8 @@ final class LolerController extends Controller
                 ]);
             }
 
+            $this->storePhotos($examinationId, $photos);
+
             Database::commit();
         } catch (\Throwable $e) {
             Database::rollBack();
@@ -276,6 +336,7 @@ final class LolerController extends Controller
             'pageTitle'   => 'LOLER report · ' . $examination['asset_tag'],
             'examination' => $examination,
             'defects'     => LolerExamination::defects((int) $examination['id']),
+            'photos'      => LolerExamination::photos((int) $examination['id']),
         ]);
     }
 
@@ -288,7 +349,11 @@ final class LolerController extends Controller
             $this->notFound();
         }
 
-        $document = LolerDocument::build($examination, LolerExamination::defects((int) $examination['id']));
+        $document = LolerDocument::build(
+            $examination,
+            LolerExamination::defects((int) $examination['id']),
+            LolerExamination::photos((int) $examination['id'])
+        );
         $filename = LolerDocument::filename($examination);
 
         while (ob_get_level() > 0) {
@@ -359,6 +424,81 @@ final class LolerController extends Controller
      *
      * @return array<int,array<string,mixed>>
      */
+    /**
+     * Save the photographs taken during the examination.
+     *
+     * Inside the caller's transaction, so a report and its evidence arrive
+     * together or not at all. The files themselves are already on disk by the
+     * time this runs — a rolled-back transaction can therefore leave an
+     * orphaned image in storage, which is the same trade every other upload in
+     * the application makes and the right way round: a file with no row is
+     * inert, a row with no file is a broken report.
+     *
+     * Descriptions come from one textarea, a line per photograph in the order
+     * they were added, rather than a field per file. A file input cannot be
+     * repopulated after a failed submission, so pairing inputs to files across
+     * a redirect is a promise the browser will not keep.
+     *
+     * @param array<int,array<string,mixed>> $photos
+     */
+    private function storePhotos(int $examinationId, array $photos): void
+    {
+        $descriptions = preg_split('/\r\n|\r|\n/', (string) Request::post('photo_descriptions', '')) ?: [];
+
+        $maxBytes   = (int) Config::get('uploads.max_photo_bytes');
+        $mimes      = (array) Config::get('uploads.photo_mimes');
+        $extensions = (array) Config::get('uploads.photo_extensions');
+
+        $position = 0;
+
+        foreach ($photos as $index => $file) {
+            $error = Upload::validate($file, $mimes, $extensions, $maxBytes);
+
+            if ($error !== null) {
+                // Not fatal: a report with three good photographs and one that
+                // was too large is still evidenced. The requirement is "at
+                // least one", and that was checked before any of this ran.
+                Flash::error($error);
+                continue;
+            }
+
+            $mime      = (string) Upload::detectMime($file['tmp_name']);
+            $extension = match ($mime) {
+                'image/png'  => 'png',
+                'image/webp' => 'webp',
+                'image/heic' => 'heic',
+                'image/heif' => 'heif',
+                default      => 'jpg',
+            };
+
+            $path     = Upload::store($file, 'loler/' . $examinationId, $extension);
+            $absolute = Upload::absolutePath($path);
+
+            // Straightening, shrinking and the thumbnail are all no-ops without
+            // gd, and the photograph still uploads.
+            $meta = $absolute === null
+                ? ['width' => null, 'height' => null, 'taken_at' => null]
+                : Image::normalise($absolute, $mime);
+
+            $description = trim((string) ($descriptions[$index] ?? ''));
+
+            LolerExamination::addPhoto([
+                'examination_id'    => $examinationId,
+                'position'          => ++$position,
+                'file_path'         => $path,
+                'thumbnail_path'    => Image::thumbnail($path, $mime),
+                'original_filename' => Upload::displayName((string) $file['name']),
+                'mime_type'         => $mime,
+                'file_size_bytes'   => $absolute !== null ? (int) filesize($absolute) : (int) $file['size'],
+                'width_px'          => $meta['width'],
+                'height_px'         => $meta['height'],
+                'description'       => $description !== '' ? mb_substr($description, 0, 500) : null,
+                'uploaded_by'       => Auth::id(),
+            ]);
+        }
+    }
+
+    /** @return array<int,array<string,mixed>> */
     private function readDefects(string $redirect, string $outcome): array
     {
         $submitted = Request::post('defect');

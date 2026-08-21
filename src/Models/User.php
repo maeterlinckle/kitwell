@@ -95,6 +95,26 @@ final class User
     }
 
     /**
+     * This account's own password policy.
+     *
+     * Separate from `update()` because the three columns are the only ones on
+     * the row where **NULL is a value with a meaning** — "follow whatever the
+     * site says" — rather than an omission. Writing them through a method that
+     * merges whatever keys it is handed would make it far too easy to clear one
+     * by not mentioning it, or to fail to clear one by passing null in an array
+     * something else has filtered.
+     *
+     * @param array{password_expiry_days:?int,password_min_length:?int,password_min_classes:?int} $policy
+     */
+    public static function updatePasswordPolicy(int $id, array $policy): void
+    {
+        Database::update('users', [
+            'password_expiry_days' => $policy['password_expiry_days'],
+            'password_min_length'  => $policy['password_min_length'],
+            'password_min_classes' => $policy['password_min_classes'],
+        ], $id);
+    }
+    /**
      * @param bool $isChange False only for a silent re-hash of the *same*
      *                       password, which is not a change and must not have a
      *                       change's consequences.

@@ -101,6 +101,13 @@ $router->get('/calendar/{token:[a-f0-9]+}.ics', [CalendarController::class, 'fee
 $router->group(['auth'], static function (Router $router): void {
     $router->get('/', [DashboardController::class, 'index'], [], 'dashboard');
 
+    // An expired password. Inside the `auth` group because the person *is*
+    // signed in — that is the whole design: refusing at the door leaves
+    // somebody with a correct password and nowhere to go. AuthMiddleware sends
+    // every other route here until this one is satisfied.
+    $router->get('/password/expired',  [ProfileController::class, 'expired'], [], 'password.expired');
+    $router->post('/password/expired', [ProfileController::class, 'updateExpired'], ['csrf']);
+
     $router->get('/profile', [ProfileController::class, 'edit'], [], 'profile');
     $router->post('/profile', [ProfileController::class, 'update'], ['csrf']);
     $router->post('/profile/password', [ProfileController::class, 'updatePassword'], ['csrf']);
@@ -296,6 +303,11 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/loler/{id:\d+}',     [LolerController::class, 'show'], ['can:maintenance.view']);
     $router->get('/loler/{id:\d+}/pdf', [LolerController::class, 'pdf'],  ['can:maintenance.view']);
 
+    // Evidence photographs, streamed through PHP from outside the document root
+    // like every other upload. Reading a report and seeing its evidence are the
+    // same act, so this sits behind the same permission the report does.
+    $router->get('/loler/{id:\d+}/photos/{photoId:\d+}', [LolerController::class, 'photo'], ['can:maintenance.view']);
+
     $router->get('/assets/{assetId:\d+}/loler',          [LolerController::class, 'history'], ['can:maintenance.view']);
     $router->get('/assets/{assetId:\d+}/loler/examine',  [LolerController::class, 'create'],  ['can:loler.inspect']);
     $router->post('/assets/{assetId:\d+}/loler/examine', [LolerController::class, 'store'],   ['can:loler.inspect', 'csrf']);
@@ -430,6 +442,7 @@ $router->group(['auth'], static function (Router $router): void {
     $router->get('/admin/users/{id:\d+}/edit',      [UserController::class, 'edit'],   ['can:users.manage']);
     $router->post('/admin/users/{id:\d+}',          [UserController::class, 'update'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/password', [UserController::class, 'resetPassword'], ['can:users.manage', 'csrf']);
+    $router->post('/admin/users/{id:\d+}/password-policy', [UserController::class, 'updatePasswordPolicy'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/invite',   [UserController::class, 'invite'],        ['can:users.manage', 'csrf']);
 
     // The lost-phone path: an administrator removes somebody's second factor.

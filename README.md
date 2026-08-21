@@ -56,8 +56,9 @@ application.
   every message. → [Email and notifications](docs/email-and-notifications.md)
 - **Calendar feeds** — each user can subscribe their calendar app to the dates
   their role lets them see.
-- **Accounts** — invitations, self-service password recovery, and optional
-  two-factor authentication with an authenticator app or a code by email.
+- **Accounts** — invitations, self-service password recovery, a password policy
+  you set once and can override for a single account, and optional two-factor
+  authentication with an authenticator app or a code by email.
   → [Users and roles](docs/users-roles-permissions.md) ·
   [Two-factor](docs/two-factor-authentication.md)
 - **REST API** — `/api/v1`, authenticated with keys that inherit exactly their

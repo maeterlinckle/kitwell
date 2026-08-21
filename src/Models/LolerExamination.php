@@ -291,6 +291,40 @@ final class LolerExamination
         );
     }
 
+    // -- Photographic evidence ----------------------------------------------
+    //
+    // Belongs to the examination, not to the asset. A photograph of a stretched
+    // chain is a claim about one day's inspection, and filing it in the shared
+    // media library — which describes what an asset *is* — would leave the
+    // report's evidence detachable from the report. Same treatment as PAT,
+    // fault and maintenance evidence.
+
+    /** @param array<string,mixed> $data */
+    public static function addPhoto(array $data): int
+    {
+        return Database::insert('loler_photos', $data);
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public static function photos(int $examinationId): array
+    {
+        return Database::select(
+            'SELECT * FROM loler_photos WHERE examination_id = ? ORDER BY position, id',
+            [$examinationId]
+        );
+    }
+
+    /** @return array<string,mixed>|null */
+    public static function photo(int $photoId): ?array
+    {
+        return Database::selectOne(
+            'SELECT p.*, e.asset_id
+               FROM loler_photos p
+               INNER JOIN loler_examinations e ON e.id = p.examination_id
+              WHERE p.id = ?',
+            [$photoId]
+        );
+    }
     // -- The regulation's own arithmetic ------------------------------------
 
     public static function typeLabel(?string $key): string

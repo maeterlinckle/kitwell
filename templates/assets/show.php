@@ -104,7 +104,15 @@ $location = trim((string) ($asset['location_parent_name'] ?? '') . ' → ' . (st
             <?php endif; ?>
         </div>
     </div>
-<?php elseif ($hireBlocked !== null && can('hires.create') && !$retired): ?>
+<?php elseif ($hireBlocked !== null && (int) $asset['is_hireable'] === 1 && can('hires.create') && !$retired): ?>
+    <?php /* A blocked hire is worth a banner when it is a *state* somebody might
+             not expect — in maintenance, already out. "Not available for hire"
+             is not that: it is a standing property of the asset, it is already
+             on the heading as a badge and in the details below, and a banner
+             saying so on every visit is three statements of one fact. The
+             `is_hireable` test is on the flag rather than on the message text,
+             because matching a sentence is a way to reintroduce this the next
+             time somebody rewords it. */ ?>
     <div class="flash flash-info"><span class="flash-text"><?= e($hireBlocked) ?></span></div>
 <?php endif; ?>
 

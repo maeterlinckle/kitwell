@@ -56,6 +56,7 @@
 
     function show(index) {
         current = Math.max(0, Math.min(steps.length - 1, index));
+        visited[current] = true;
 
         steps.forEach(function (step, i) { step.hidden = i !== current; });
 
@@ -84,22 +85,66 @@
             }
         }
 
+        /*
+         * The photographs cannot carry `required`. There are two file inputs on
+         * purpose — a camera one and a gallery one, so that a phone opens the
+         * right thing — and only ever one of them holds the files, so marking
+         * both required would make the page unsatisfiable and marking one would
+         * be a guess at which the examiner used.
+         *
+         * Without this the page reads as complete the moment it is opened,
+         * because everything else on it arrives prefilled. The photograph is
+         * the part of this page that can only come from somebody standing in
+         * front of the equipment, which makes it exactly the right thing for
+         * the stage indicator to wait on.
+         */
+        var photoField = step.querySelector('[data-photo-required]');
+
+        if (photoField) {
+            var inputs = Array.prototype.slice.call(photoField.querySelectorAll('input[type="file"]'));
+            var chosen = inputs.some(function (input) { return input.files && input.files.length > 0; });
+
+            if (!chosen) {
+                return inputs[0] || null;
+            }
+        }
+
         return null;
     }
 
-    function complete(step) {
-        return firstBlank(step) === null;
+    /*
+     * A page is complete when it has been looked at *and* has nothing
+     * outstanding on it.
+     *
+     * The second half alone is not enough here, the way it is on the PAT
+     * wizard, because most of what these pages ask arrives prefilled: the
+     * employer and premises come from Settings, the examiner is whoever is
+     * signed in, the dates default to today and the interval, and the basis is
+     * worked out from the type. Judged on blank fields alone, pages two and
+     * three are finished before they have been opened — which paints the rail
+     * green for an examination nobody has carried out yet, and green is the
+     * one thing on this form that should never be given away.
+     *
+     * Page one counts as visited from the start, because it is the one on
+     * screen.
+     */
+    var visited = { 0: true };
+
+    function complete(step, index) {
+        return visited[index] === true && firstBlank(step) === null;
     }
 
     function paint() {
         Array.prototype.forEach.call(progress.children, function (li, i) {
             li.className = 'wizard-progress-step'
                 + (i === current ? ' is-current' : '')
-                + (complete(steps[i]) ? ' is-pass' : '');
+                + (complete(steps[i], i) ? ' is-pass' : '');
         });
     }
 
     function flag(field) {
+        if (!field) return;
+
         var row = field.closest('.confirm-row') || field.closest('.field') || field.closest('.defect-row');
 
         if (row) {

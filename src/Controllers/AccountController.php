@@ -14,6 +14,7 @@ use App\Mail\AccountMail;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Models\UserToken;
+use App\Models\PasswordPolicy;
 
 /**
  * The two ways somebody gets into an account without an administrator typing a
@@ -67,8 +68,8 @@ final class AccountController extends Controller
             return;
         }
 
-        $password = $this->validatedPassword('/invite/' . $token);
         $user     = $result['user'];
+        $password = $this->validatedPassword('/invite/' . $token, $user);
 
         if (!UserToken::consume((int) $result['token']['id'])) {
             $this->showInvite($token);
@@ -193,8 +194,8 @@ final class AccountController extends Controller
             return;
         }
 
-        $password = $this->validatedPassword('/reset-password/' . $token);
         $user     = $result['user'];
+        $password = $this->validatedPassword('/reset-password/' . $token, $user);
 
         if (!UserToken::consume((int) $result['token']['id'])) {
             $this->showReset($token);
@@ -229,11 +230,18 @@ final class AccountController extends Controller
     /**
      * The password rules, in one place, matching the ones an administrator is
      * held to on /admin/users.
+     *
+     * The account is passed in because the policy may be overridden for it —
+     * a shared account can be held to different rules from everybody else, and
+     * the rule applied when its password is *set* has to be the same one
+     * `PasswordPolicy` will judge it by afterwards.
+     *
+     * @param array<string,mixed>|null $user
      */
-    private function validatedPassword(string $redirectTo): string
+    private function validatedPassword(string $redirectTo, ?array $user = null): string
     {
         $this->validate([
-            'password'              => 'required|min:12|max:255',
+            'password'              => 'required|max:255|' . PasswordPolicy::rule($user),
             'password_confirmation' => 'required|matches:password',
         ], [
             'password'              => 'Password',

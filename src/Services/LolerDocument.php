@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Pdf;
+use App\Core\Upload;
 use App\Models\LolerExamination;
 use App\Models\Setting;
 
@@ -37,10 +38,20 @@ final class LolerDocument
     private const WARN  = [0.60, 0.40, 0.05];
 
     /**
+     * Space under each field's rule before the next label.
+     *
+     * Small, and it has to stay small: the point of this document is that an
+     * ordinary examination is one page. Every point added here is multiplied by
+     * however many fields the tallest column happens to have.
+     */
+    private const FIELD_GAP = 2.0;
+
+    /**
      * @param array<string,mixed> $examination
      * @param array<int,array<string,mixed>> $defects
+     * @param array<int,array<string,mixed>> $photos
      */
-    public static function build(array $examination, array $defects): string
+    public static function build(array $examination, array $defects, array $photos = []): string
     {
         $pdf = new Pdf(Pdf::A4_WIDTH, Pdf::A4_HEIGHT, 40.0);
 
@@ -59,6 +70,7 @@ final class LolerDocument
         self::examination($pdf, $examination);
         self::findings($pdf, $examination, $defects);
         self::signOff($pdf, $examination);
+        self::evidence($pdf, $examination, $photos);
 
         return $pdf->output();
     }
@@ -226,8 +238,6 @@ final class LolerDocument
             ['Serial number', (string) ($examination['serial_number'] ?? 'Not recorded')],
             ['Date of manufacture', $manufacture],
             ['Safe working load', $swl],
-            ['Examination interval', $examination['interval_months'] === null
-                ? 'Not recorded' : ((int) $examination['interval_months'] . ' months')],
         ];
 
         $right = [
@@ -278,6 +288,19 @@ final class LolerDocument
                     : 'Not reported as correctly installed.'),
             ];
         }
+
+        // The interval belongs with the examination rather than with the
+        // equipment: it is not a Schedule 1(3) or (5) particular, it is the
+        // context for 1(7)(a)'s "which of regulation 9(3)(a)(i)-(iv)", and it
+        // reads directly under the basis it produced. Moving it also takes a
+        // row off the tallest column on the page, which is what keeps an
+        // ordinary report to one page.
+        $right[] = [
+            'Examination interval',
+            $examination['interval_months'] === null
+                ? 'Not recorded'
+                : ((int) $examination['interval_months'] . ' months'),
+        ];
 
         $right[] = [
             'Testing',
@@ -465,12 +488,117 @@ final class LolerDocument
 
     // -- Primitives -----------------------------------------------------------
 
+    /**
+     * The photographs, one to a page, after the report itself.
+     *
+     * After rather than among: the report is the statutory document and an
+     * ordinary examination has to stay on one page, so evidence that runs to
+     * four photographs must not push Schedule 1(9) onto page two. Somebody
+     * printing only the report gets a complete report; somebody printing the
+     * file gets the evidence with it.
+     *
+     * One photograph a page is the simple answer and the right one here. These
+     * are pictures of a defect in a chain link, and the reason for taking them
+     * is that somebody can see it.
+     *
+     * @param array<string,mixed> $examination
+     * @param array<int,array<string,mixed>> $photos
+     */
+    private static function evidence(Pdf $pdf, array $examination, array $photos): void
+    {
+        if ($photos === []) {
+            return;
+        }
+
+        $total = count($photos);
+
+        foreach (array_values($photos) as $index => $photo) {
+            $absolute = Upload::absolutePath((string) $photo['file_path']);
+
+            // A row whose file has gone missing is not worth a blank page.
+            if ($absolute === null || !is_file($absolute)) {
+                continue;
+            }
+
+            $pdf->addPage();
+
+            self::band($pdf, sprintf(
+                'Photograph %d of %d  —  evidence of the examination on %s',
+                $index + 1,
+                $total,
+                format_date((string) $examination['examined_on'])
+            ));
+
+            $description = trim((string) ($photo['description'] ?? ''));
+
+            // Reserve the caption's height before sizing the image, so a long
+            // description shrinks the photograph rather than falling off the
+            // page under it.
+            $captionLines = $description === ''
+                ? []
+                : $pdf->wrap($description, $pdf->contentWidth(), Pdf::REGULAR, 9.5);
+
+            $captionHeight = $captionLines === [] ? 0.0 : (count($captionLines) * 13.0) + 14.0;
+            $available     = $pdf->bottom() - $pdf->y() - $captionHeight;
+
+            $size = $pdf->imageSize($absolute);
+            $box  = self::boxFor($size, $pdf->contentWidth(), $available);
+
+            // Centred horizontally: a portrait photograph pinned to the left
+            // margin with white to its right looks like a layout accident.
+            $x = $pdf->left() + (($pdf->contentWidth() - $box[0]) / 2);
+            $y = $pdf->y();
+
+            if ($pdf->image($absolute, $x, $y, $box[0], $box[1])) {
+                $pdf->strokeRect($x, $y, $box[0], $box[1], 0.5, self::RULE);
+            } else {
+                // No gd, or a format it cannot read. Say so rather than leaving
+                // a caption floating under nothing.
+                $pdf->setFont(Pdf::ITALIC, 9.0);
+                $pdf->text('This photograph could not be rendered into the document.', $pdf->left(), $y + 14.0, self::MUTED);
+                $box[1] = 20.0;
+            }
+
+            $pdf->setY($y + $box[1] + 14.0);
+
+            if ($captionLines !== []) {
+                $pdf->setFont(Pdf::REGULAR, 9.5);
+
+                foreach ($captionLines as $line) {
+                    $pdf->text($line, $pdf->left(), $pdf->y() + 9.0, self::INK);
+                    $pdf->moveDown(13.0);
+                }
+            }
+        }
+    }
+
+    /**
+     * The largest box with the image's own aspect ratio that fits the space.
+     *
+     * An unknown size (no getimagesize, an exotic format) falls back to 4:3
+     * rather than to the whole box, because stretching a photograph to a shape
+     * it is not is worse than leaving a margin.
+     *
+     * @param array{0:int,1:int}|null $size
+     * @return array{0:float,1:float}
+     */
+    private static function boxFor(?array $size, float $maxWidth, float $maxHeight): array
+    {
+        $maxHeight = max(60.0, $maxHeight);
+
+        [$w, $h] = ($size === null || $size[0] <= 0 || $size[1] <= 0) ? [4, 3] : $size;
+
+        $scale = min($maxWidth / $w, $maxHeight / $h);
+
+        return [$w * $scale, $h * $scale];
+    }
+
     private static function band(Pdf $pdf, string $title): void
     {
         $pdf->fillRect($pdf->left(), $pdf->y(), $pdf->contentWidth(), 16.0, self::BAND);
         $pdf->setFont(Pdf::BOLD, 8.0);
         $pdf->text(strtoupper($title), $pdf->left() + 6.0, $pdf->y() + 11.0, self::INK);
-        $pdf->moveDown(22.0);
+        $pdf->moveDown(23.0);
     }
 
     private static function bandedHeading(Pdf $pdf, string $left, string $right, float $columnWidth, float $rightX): void
@@ -482,7 +610,7 @@ final class LolerDocument
         $pdf->text(strtoupper($left), $pdf->left() + 6.0, $pdf->y() + 11.0, self::INK);
         $pdf->text(strtoupper($right), $rightX + 6.0, $pdf->y() + 11.0, self::INK);
 
-        $pdf->moveDown(22.0);
+        $pdf->moveDown(23.0);
     }
 
     /**
@@ -504,7 +632,11 @@ final class LolerDocument
                 continue;
             }
 
-            $pdf->setFont(Pdf::BOLD, 7.0);
+            // The label is deliberately small, light and set apart from its
+            // value: a statutory record is read by somebody hunting for one
+            // particular Schedule 1 item, and a page where labels and values
+            // sit at the same weight makes that a search rather than a glance.
+            $pdf->setFont(Pdf::BOLD, 6.5);
             $pdf->text(strtoupper($label), $x, $y + 6.0, self::MUTED);
 
             $pdf->setFont(Pdf::REGULAR, 9.0);
@@ -514,7 +646,12 @@ final class LolerDocument
                 $pdf->text($line, $x, $y + 17.0 + ($index * 10.5), self::INK);
             }
 
-            $y += 21.0 + ((count($lines) - 1) * 10.5);
+            // A hairline under each field. It is what stops a two-column block
+            // of similar-length values reading as one grey mass.
+            $bottom = $y + 21.0 + ((count($lines) - 1) * 10.5);
+            $pdf->line($x, $bottom, $x + $width, $bottom, 0.3, self::RULE);
+
+            $y = $bottom + self::FIELD_GAP;
         }
 
         return $y;

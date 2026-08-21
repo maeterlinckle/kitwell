@@ -42,8 +42,17 @@ $jar  = sys_get_temp_dir() . '/kitwell-loler-' . getmypid() . '.txt';
 $passed = 0;
 $failed = 0;
 
-/** @param array<string,mixed> $fields */
-function request(string $method, string $path, array $fields = [], bool $follow = true): array
+/**
+ * A form post, or a multipart one when it carries files.
+ *
+ * The examination form nests its defect fields (`defect[0][category]`), and
+ * cURL turns a nested array in a multipart body into the literal word `Array`
+ * — which reads as a validation bug in the code under test rather than a bug
+ * here. `flatten()` does what http_build_query() would have done.
+ *
+ * @param array<string,mixed> $fields
+ */
+function request(string $method, string $path, array $fields = [], bool $follow = true, bool $multipart = false): array
 {
     global $base, $jar;
 
@@ -58,7 +67,7 @@ function request(string $method, string $path, array $fields = [], bool $follow 
 
     if ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($fields));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $multipart ? flatten($fields) : http_build_query($fields));
     }
 
     $raw     = (string) curl_exec($ch);
@@ -73,6 +82,53 @@ function request(string $method, string $path, array $fields = [], bool $follow 
         'body'    => substr($raw, $headers),
         'url'     => $url,
     ];
+}
+
+/**
+ * Nested arrays to `a[b][c]` keys, for a multipart body.
+ *
+ * @param array<string,mixed> $fields
+ * @return array<string,mixed>
+ */
+function flatten(array $fields, string $prefix = ''): array
+{
+    $flat = [];
+
+    foreach ($fields as $key => $value) {
+        $name = $prefix === '' ? (string) $key : $prefix . '[' . $key . ']';
+
+        if (is_array($value)) {
+            $flat += flatten($value, $name);
+            continue;
+        }
+
+        $flat[$name] = $value;
+    }
+
+    return $flat;
+}
+
+/**
+ * Post an examination with photographic evidence attached.
+ *
+ * Every complete report needs at least one, so this is the ordinary way to
+ * submit one and `request()` is what the refusal cases use.
+ *
+ * @param array<string,mixed> $fields
+ */
+function examine(string $path, array $fields, int $count = 1): array
+{
+    global $photoFile;
+
+    $files = [];
+
+    for ($i = 0; $i < $count; $i++) {
+        $files[] = new CURLFile($photoFile, 'image/jpeg', 'examination-' . ($i + 1) . '.jpg');
+    }
+
+    $fields['photos'] = $files;
+
+    return request('POST', $path, $fields, true, true);
 }
 
 function token(string $path): string
@@ -136,6 +192,16 @@ function registerLiftingAsset(string $name, string $type, string $interval, stri
 }
 
 $nonce = substr(bin2hex(random_bytes(4)), 0, 8);
+
+// Photographic evidence of the physical examination is required, so every
+// successful submission below carries one. Drawn rather than shipped as a
+// fixture: a real JPEG, made here, keeps the test self-contained.
+$photoFile = tempnam(sys_get_temp_dir(), 'kw') . '.jpg';
+$image     = imagecreatetruecolor(1200, 900);
+imagefill($image, 0, 0, (int) imagecolorallocate($image, 226, 232, 240));
+imagestring($image, 5, 40, 40, 'LOAD CHAIN ' . strtoupper($nonce), (int) imagecolorallocate($image, 20, 40, 70));
+imagejpeg($image, $photoFile, 90);
+imagedestroy($image);
 
 echo "LOLER thorough examinations — " . $base . "\n\n";
 
@@ -263,7 +329,7 @@ $clean = [
     'reported_on'               => date('Y-m-d'),
 ];
 
-$r = request('POST', $examine, $clean);
+$r = examine($examine, $clean);
 check('a clean examination is recorded', str_contains($r['url'], '/loler/'), $r['url']);
 
 preg_match('#/loler/(\d+)#', $r['url'], $m);
@@ -310,7 +376,7 @@ $corrected['examination_basis']   = 'scheme';
 $corrected['next_examination_date'] = date('Y-m-d', strtotime('+6 months'));
 $corrected['previous_examination_date'] = date('Y-m-d');
 
-$r = request('POST', $examine, $corrected);
+$r = examine($examine, $corrected);
 check('a corrected examination is recorded', str_contains($r['url'], '/loler/'), $r['url']);
 
 $r = request('GET', '/assets/' . $hoist);
@@ -403,7 +469,7 @@ $good['defect'] = [
 ];
 $good['take_out_of_service'] = '1';
 
-$r = request('POST', $examine, $good);
+$r = examine($examine, $good, 2);
 check('a properly particularised examination is recorded', str_contains($r['url'], '/loler/'), $r['url']);
 
 preg_match('#/loler/(\d+)#', $r['url'], $m);
@@ -485,8 +551,15 @@ foreach ($required as $label => $needle) {
     check('the PDF carries ' . $label, $carries($needle), $needle);
 }
 
-check('the PDF fits on one page', substr_count($text, 'Page 1 of 1') > 0 || !str_contains($text, 'Page 2 of'),
-    'a two-defect report should still be one page');
+// The report itself stays on one page however much evidence follows it. Two
+// defects and two photographs: the statutory report on page 1, a photograph on
+// each of pages 2 and 3.
+check('the report itself is still one page', substr_count($text, 'Page 1 of 3') > 0,
+    'a two-defect report with two photographs should be one page of report plus two of evidence');
+check('each photograph gets its own page',
+    $carries('Photograph 1 of 2') && $carries('Photograph 2 of 2'));
+check('the evidence pages name the examination they belong to',
+    substr_count(strtolower($text), 'evidence of the examination on') >= 2);
 
 // ---------------------------------------------------------------------------
 echo "\n== The register and the history ==\n";
@@ -502,6 +575,38 @@ $r = request('GET', '/assets/' . $hoist . '/loler');
 check('the asset history lists every examination', substr_count($r['body'], '/loler/') >= 3);
 check('and offers a new one', str_contains($r['body'], 'New examination'));
 
+// ---------------------------------------------------------------------------
+echo "\n== Photographic evidence ==\n";
+
+// A report complete in every other respect, with nothing attached. Everything
+// else about it is the report that was accepted above, so a refusal here can
+// only be about the photograph.
+$noPhoto = $clean;
+$noPhoto['_token'] = token($examine);
+
+$r = request('POST', $examine, $noPhoto);
+check('an examination with no photograph is refused',
+    str_contains($r['body'], 'At least one photograph'));
+// Back on the form, not on a report: /loler/{id} is what a recorded one looks
+// like, and the examine URL contains "/loler/" too.
+check('and nothing was recorded', preg_match('#/loler/\d+#', $r['url']) !== 1, $r['url']);
+
+// The two attached to the report above.
+$r = request('GET', '/loler/' . $defectId);
+check('the report page shows the photographs', substr_count($r['body'], '/photos/') >= 2);
+check('and counts them', str_contains($r['body'], 'Photographs'));
+
+preg_match('#/loler/' . $defectId . '/photos/(\d+)#', $r['body'], $m);
+$photoId = (int) ($m[1] ?? 0);
+check('a photograph has an address of its own', $photoId > 0);
+
+$r = request('GET', '/loler/' . $defectId . '/photos/' . $photoId, [], false);
+check('the photograph is served as an image',
+    $r['status'] === 200 && str_contains(strtolower($r['headers']), 'content-type: image/'));
+
+// It belongs to its own examination and to no other.
+$r = request('GET', '/loler/' . $cleanId . '/photos/' . $photoId, [], false);
+check('and is not reachable through another report', $r['status'] === 404, (string) $r['status']);
 // ---------------------------------------------------------------------------
 echo "\n== Contradictions the server refuses ==\n";
 
@@ -563,6 +668,8 @@ if ($manager > 0) {
 }
 
 @unlink($jar);
+@unlink($photoFile);
+@unlink($photoFile);
 
 echo "\n----------------------------------------------\n";
 echo "passed: $passed   failed: $failed\n";

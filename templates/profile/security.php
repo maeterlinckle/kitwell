@@ -153,7 +153,7 @@
                         <tr>
                             <td>
                                 <strong><?= e((string) $device['label']) ?></strong>
-                                <div class="cell-sub muted">first trusted from <?= e((string) $device['ip_address']) ?></div>
+                                <div class="cell-sub muted">first trusted from <?= e((string) $device['ip_address']) ?> &middot; signing in from elsewhere does not end it</div>
                             </td>
                             <td class="nowrap"><?= e(format_datetime((string) $device['last_seen_at'])) ?></td>
                             <td class="nowrap"><?= e(format_date((string) $device['expires_at'])) ?></td>

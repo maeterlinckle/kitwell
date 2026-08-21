@@ -47,9 +47,14 @@ these happen:
 
 - the device is not used for **{{setting:trusted_device_idle_days}}**;
 - the browser changes — an update to the browser counts;
-- you sign in from a noticeably different network;
 - you change your password, or an administrator deactivates the account;
 - you forget it yourself, from **My account → Security**.
+
+**Where you are signing in from makes no difference.** The same laptop on the
+office wifi, on a phone hotspot and at home is one device, and it stays
+trusted. What is remembered is the browser, not the address it reaches the
+site from; the address on the list is only there so you can recognise the
+entry.
 
 Never tick it on a shared or public machine.
 
