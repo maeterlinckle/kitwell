@@ -158,10 +158,17 @@ final class User
      * Active users who hold a permission, optionally narrowed to a set of ids.
      *
      * This is the same rule Auth::can() applies — a superuser role holds
-     * everything, everyone else needs the explicit grant — asked of an
-     * arbitrary user rather than the signed-in one. It backs the reminder
-     * notify list and the calendar feed, both of which have to answer "may
-     * *this* person see PAT dates?" with nobody signed in at all.
+     * everything, everyone else gets their role's permissions plus their own
+     * grants and minus their own denies — asked of an arbitrary user rather
+     * than the signed-in one. It backs the reminder notify list and the
+     * calendar feed, both of which have to answer "may *this* person see PAT
+     * dates?" with nobody signed in at all.
+     *
+     * The condition itself comes from `UserPermission::holdsSql()` rather than
+     * being written out here. An access-control rule with two copies is a rule
+     * with one copy that will quietly stop matching the other, and this is the
+     * copy nobody would notice going stale: it decides who gets *emailed*, not
+     * who sees a 403.
      *
      * @param array<int,int>|null $ids null = every user
      * @return array<int,array<string,mixed>>
@@ -177,13 +184,11 @@ final class User
                   INNER JOIN roles r ON r.id = u.role_id
                  WHERE u.is_active = 1
                    AND u.email <> \'\'
-                   AND (r.is_superuser = 1 OR EXISTS (
-                           SELECT 1
-                             FROM role_permissions rp
-                             INNER JOIN permissions p ON p.id = rp.permission_id
-                            WHERE rp.role_id = r.id AND p.slug = ?
-                       ))';
-        $params = [$permission];
+                   AND ' . UserPermission::holdsSql();
+
+        // holdsSql() names the slug three times: the role's grant, the
+        // account's grant, and the account's deny.
+        $params = [$permission, $permission, $permission];
 
         if ($ids !== null) {
             $ids = array_values(array_unique(array_map('intval', $ids)));

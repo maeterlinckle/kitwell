@@ -5,6 +5,7 @@ Who can do what, how a role is defined, and how somebody gets an account in the 
 **On this page**
 
 - [Roles and permissions](#roles-and-permissions)
+- [Permissions for one person](#permissions-for-one-person)
 - [Password policy](#password-policy)
 - [Accounts: invitations and password recovery](#accounts-invitations-and-password-recovery)
 
@@ -24,6 +25,9 @@ Four roles ship with the system:
 
 Permissions are **data, not code**: `roles` → `role_permissions` → `permissions`.
 Adding a permission or a whole new role is an `INSERT`, never a schema change.
+
+A role is the baseline. An individual account can differ from it in either
+direction — see [Permissions for one person](#permissions-for-one-person).
 
 **Add role** on the Roles & permissions page creates one: give it a name, a
 description and tick what it may do. Its machine name is derived from the name
@@ -110,6 +114,47 @@ The calendar feed needs no permission of its own: every signed-in user can
 create their own, and what it contains is decided by the permissions they
 already hold.
 
+---
+
+## Permissions for one person
+
+A role is the **baseline**, not the whole answer. Any account can be given a
+permission on top of its role, or have one withheld despite it — so somebody who
+needs a little more or a little less than their role does not need a role
+inventing for them.
+
+On the user's page, under **Permissions for this account**, every permission has
+three choices:
+
+| Choice | Meaning |
+|---|---|
+| **Role** | Follow whatever the role says, now and in future |
+| **Allow** | This person has it, whether or not the role gives it |
+| **Deny** | This person does not have it, even though the role gives it |
+
+Deny beats allow, and both beat the role. An account left on **Role** keeps
+following the role, so changing the role later still reaches them — which is
+what you want unless there is a reason otherwise.
+
+**Use it for the exception, not the pattern.** If three people need the same
+extra permission, that is a role. The overrides are for the one technician who
+is also the competent person for lifting examinations, or the one account that
+should not be able to delete anything.
+
+Every change is written to the activity log (**Settings → Activity log**) with
+what each permission was before and what it became, because "permissions
+changed" tells nobody anything six months later.
+
+Setting this needs *Manage roles* — deciding what somebody may do is the same
+kind of act as editing a role, not the same kind as fixing their phone number.
+The section is not shown to anybody who could not save it.
+
+**A superuser is not affected.** The built-in Administrator role holds every
+permission, and withholding one is deliberately impossible: denying an
+administrator `users.manage` and `roles.manage` would lock the installation out
+of its own administration, and nothing reachable from a browser could undo it.
+The page says so instead of offering controls that do nothing. Move the account
+to another role first if it should not have everything.
 ---
 
 ## Password policy

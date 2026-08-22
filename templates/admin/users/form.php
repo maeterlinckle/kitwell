@@ -11,6 +11,9 @@ use App\Models\PasswordPolicy;
  * @var string                   $inviteExpiry  "3 days"
  * @var array<string,mixed>|null $invite        The most recent invite row, if any
  * @var string|null              $inviteState   accepted | pending | expired | null
+ * @var array<string,array<int,array<string,mixed>>> $permissions      All permissions, grouped
+ * @var array<int,int>                                $rolePermissions  Ids the role gives
+ * @var array<int,string>                             $userPermissions  Overrides: id => grant|deny
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
@@ -319,6 +322,91 @@ $passwordMinLength = PasswordPolicy::forUser($user)['min_length'];
             <button type="submit" class="btn btn-primary">Save password policy</button>
         </div>
     </form>
+    <?php $isSuperuser = (int) ($user['role_is_superuser'] ?? 0) === 1; ?>
+    <?php /* Deciding what somebody may do is the same act as editing a role, so
+             it carries roles.manage — and the card is not shown at all to
+             somebody who could not save it. A form nobody can submit is worse
+             than no form. */ ?>
+    <?php if (can('roles.manage')): ?>
+    <form method="post" action="<?= e(url('/admin/users/' . $user['id'] . '/permissions')) ?>" class="form card" novalidate>
+        <?= csrf_field() ?>
+        <h2>Permissions for this account</h2>
+        <p class="muted">
+            The <strong><?= e((string) $user['role_name']) ?></strong> role is the baseline. Anything set here
+            applies to <?= e((string) $user['name']) ?> alone — one extra ability, or one withheld — so a person
+            who needs a little more or a little less than their role does not need a role of their own.
+            <a href="<?= e(url('/admin/roles')) ?>">Change the role itself</a> when it is the whole role that is
+            wrong.
+        </p>
+
+        <?php if ($isSuperuser): ?>
+            <p class="field-error">
+                <strong>This account's role is a superuser, so nothing here has any effect.</strong>
+                A superuser holds every permission, and withholding one is deliberately not possible: denying an
+                administrator <span class="mono">users.manage</span> and <span class="mono">roles.manage</span>
+                would lock this installation out of its own administration, and nothing reachable from a browser
+                can undo it. Move the account to another role first if it should not have everything.
+            </p>
+        <?php endif; ?>
+
+        <?php foreach ($permissions as $group => $items): ?>
+            <div class="permission-group">
+                <div class="permission-group-head">
+                    <h3><?= e($group) ?></h3>
+                </div>
+
+                <div class="permission-list permission-list-override">
+                    <?php foreach ($items as $permission): ?>
+                        <?php
+                            $pid       = (int) $permission['id'];
+                            $fromRole  = in_array($pid, $rolePermissions, true);
+                            $override  = $userPermissions[$pid] ?? '';
+                            $field     = 'override[' . $pid . ']';
+                        ?>
+                        <div class="permission-item permission-override<?= $override !== '' ? ' is-overridden' : '' ?>">
+                            <span class="permission-name"><?= e($permission['name']) ?></span>
+                            <span class="permission-desc muted"><?= e((string) $permission['description']) ?></span>
+                            <span class="permission-slug mono muted"><?= e($permission['slug']) ?></span>
+
+                            <span class="permission-choice" role="group"
+                                  aria-label="<?= e($permission['name']) ?>">
+                                <label class="choice">
+                                    <input type="radio" name="<?= e($field) ?>" value="inherit"
+                                        <?= $override === '' ? 'checked' : '' ?>
+                                        <?= $isSuperuser ? 'disabled' : '' ?>>
+                                    <span>Role<span class="choice-sub"><?= $fromRole ? 'allows' : 'does not' ?></span></span>
+                                </label>
+                                <label class="choice choice-allow">
+                                    <input type="radio" name="<?= e($field) ?>" value="grant"
+                                        <?= $override === 'grant' ? 'checked' : '' ?>
+                                        <?= $isSuperuser ? 'disabled' : '' ?>>
+                                    <span>Allow</span>
+                                </label>
+                                <label class="choice choice-deny">
+                                    <input type="radio" name="<?= e($field) ?>" value="deny"
+                                        <?= $override === 'deny' ? 'checked' : '' ?>
+                                        <?= $isSuperuser ? 'disabled' : '' ?>>
+                                    <span>Deny</span>
+                                </label>
+                            </span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
+
+        <p class="field-hint">
+            <strong>Deny beats allow, and both beat the role.</strong> An account left on <em>Role</em> follows
+            whatever the role says now and in future — which is what you want unless there is a reason not to.
+            Every change here is written to the <a href="<?= e(url('/admin/activity')) ?>">activity log</a> with
+            what it was before.
+        </p>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" <?= $isSuperuser ? 'disabled' : '' ?>>Save permissions</button>
+        </div>
+    </form>
+    <?php endif; ?>
     <?php /* The lost-phone path. Not a reset — there is nothing to reset to,
              because the secret only exists on their device — so this removes
              the second factor and lets them set a new one up. */ ?>

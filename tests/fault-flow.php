@@ -263,13 +263,28 @@ if (!$mailReady) {
 }
 
 // Three assets: one owned by a person, one by a team, one by nobody.
+//
+// Nothing that is out on hire. This file forces a status on its fixtures and
+// then saves them through the real edit form, and an asset with an open hire
+// has no status field on that form and refuses one if it is posted anyway —
+// correctly: "In Stock" and an open hire is the contradiction that guard
+// exists to prevent. Picking by id alone put a hired-out asset in the middle
+// of a test about responsible parties, and the failure read like a broken
+// notifier.
 $assetIds = array_map(
     static fn (array $r): int => (int) $r['id'],
-    Database::select("SELECT id FROM assets WHERE status <> 'Retired' ORDER BY id LIMIT 3")
+    Database::select(
+        "SELECT a.id
+           FROM assets a
+           LEFT JOIN hires h ON h.asset_id = a.id AND h.returned_at IS NULL
+          WHERE a.status <> 'Retired' AND h.id IS NULL
+          ORDER BY a.id
+          LIMIT 3"
+    )
 );
 
 if (count($assetIds) < 3) {
-    fwrite(STDERR, "Needs at least three live assets. Run bin/seed.php first.\n");
+    fwrite(STDERR, "Needs at least three live assets that are not out on hire. Run bin/seed.php first.\n");
     exit(1);
 }
 

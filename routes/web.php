@@ -443,6 +443,11 @@ $router->group(['auth'], static function (Router $router): void {
     $router->post('/admin/users/{id:\d+}',          [UserController::class, 'update'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/password', [UserController::class, 'resetPassword'], ['can:users.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/password-policy', [UserController::class, 'updatePasswordPolicy'], ['can:users.manage', 'csrf']);
+    // Permissions for one account, over and above the role. `roles.manage`
+    // rather than `users.manage`: this decides what somebody may do, which is
+    // the same act as editing a role, not the same act as fixing their phone
+    // number.
+    $router->post('/admin/users/{id:\d+}/permissions', [UserController::class, 'updatePermissions'], ['can:roles.manage', 'csrf']);
     $router->post('/admin/users/{id:\d+}/invite',   [UserController::class, 'invite'],        ['can:users.manage', 'csrf']);
 
     // The lost-phone path: an administrator removes somebody's second factor.

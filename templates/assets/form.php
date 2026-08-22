@@ -18,6 +18,7 @@ use App\Models\Asset;
  * @var array<string,mixed>           $prefill
  * @var array<int,array<string,mixed>> $templateMedia
  * @var bool $scannedTag
+ * @var array<string,mixed>|null $openHire  The hire this asset is out on, if any
  * @var array<string,string> $errors
  * @var array<string,mixed>  $old
  */
@@ -29,6 +30,7 @@ $assetTemplate      = $assetTemplate ?? null;
 $prefill       = $prefill ?? [];
 $templateMedia = $templateMedia ?? [];
 $scannedTag    = (bool) ($scannedTag ?? false);
+$openHire      = $openHire ?? null;
 
 /**
  * Current value for a field: old input first, then the record, then whatever a
@@ -260,14 +262,58 @@ $responsible = array_key_exists('responsible', $old)
         <h2>Status &amp; condition</h2>
 
         <div class="field-row">
-            <div class="field">
-                <label class="label" for="status">Status</label>
-                <select class="input" id="status" name="status" required>
-                    <?php foreach (Asset::STATUSES as $status): ?>
-                        <option value="<?= e($status) ?>" <?= $value('status', 'In Stock') === $status ? 'selected' : '' ?>><?= e($status) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
+            <?php if ($openHire !== null): ?>
+                <?php /* The status of something that is physically out with
+                         somebody is decided by the hire, not typed in here.
+                         Offering the dropdown is what let an item be set back to
+                         "In Stock" while it was still booked out — after which
+                         the register says it is available and the hire is still
+                         open. Book it in, and the status follows.
+
+                         The field is omitted rather than disabled: a disabled
+                         input posts nothing either, but a name that is present
+                         and empty invites somebody to make the server "cope"
+                         with it. The server keeps 'On Hire' regardless. */ ?>
+                <div class="field">
+                    <span class="label">Status</span>
+                    <p class="static-value">
+                        <span class="badge status-on-hire">On Hire</span>
+                    </p>
+                    <p class="field-hint">
+                        Out with
+                        <a href="<?= e(url('/hirers/' . $openHire['hirer_id'])) ?>"><?= e((string) $openHire['hirer_name']) ?></a>
+                        since <?= e(format_date((string) $openHire['checked_out_at'])) ?>,
+                        due back <?= e(format_date((string) $openHire['due_back_date'])) ?>.
+                        Book it in to change the status.
+                    </p>
+                    <?php if (can('hires.return')): ?>
+                        <p class="form-actions form-actions-inline">
+                            <a class="btn btn-primary" href="<?= e(url('/hires/' . $openHire['id'] . '/return')) ?>">Book in</a>
+                            <a class="btn btn-ghost" href="<?= e(url('/hires/' . $openHire['id'])) ?>">Hire details</a>
+                        </p>
+                    <?php else: ?>
+                        <p class="field-hint">
+                            Booking in needs the <em>Return hires</em> permission, which this account does not have.
+                        </p>
+                    <?php endif; ?>
+                    <?php if (isset($errors['status'])): ?><p class="field-error"><?= e($errors['status']) ?></p><?php endif; ?>
+                </div>
+            <?php else: ?>
+                <div class="field<?= isset($errors['status']) ? ' has-error' : '' ?>">
+                    <label class="label" for="status">Status</label>
+                    <select class="input" id="status" name="status" required>
+                        <?php foreach (Asset::STATUSES as $status): ?>
+                            <?php /* Only a check-out puts an asset on hire, so it is
+                                     not an answer anybody can pick here. */ ?>
+                            <?php if ($status === 'On Hire' && $value('status', 'In Stock') !== 'On Hire'): ?>
+                                <?php continue; ?>
+                            <?php endif; ?>
+                            <option value="<?= e($status) ?>" <?= $value('status', 'In Stock') === $status ? 'selected' : '' ?>><?= e($status) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if (isset($errors['status'])): ?><p class="field-error"><?= e($errors['status']) ?></p><?php endif; ?>
+                </div>
+            <?php endif; ?>
 
             <div class="field">
                 <label class="label" for="condition_rating">Condition</label>

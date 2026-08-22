@@ -15,6 +15,8 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\UserToken;
 use App\Models\PasswordPolicy;
+use App\Models\Permission;
+use App\Models\UserPermission;
 
 final class UserController extends Controller
 {
@@ -50,6 +52,11 @@ final class UserController extends Controller
             'inviteExpiry' => UserToken::describeExpiry(UserToken::expiryHours(UserToken::INVITE)),
             'invite'       => null,
             'inviteState'  => null,
+            // Not offered until the account exists: an override is a statement
+            // about a person, and there is nobody to make it about yet.
+            'permissions'      => [],
+            'rolePermissions'  => [],
+            'userPermissions'  => [],
         ]);
     }
 
@@ -195,6 +202,12 @@ final class UserController extends Controller
             'inviteExpiry' => UserToken::describeExpiry(UserToken::expiryHours(UserToken::INVITE)),
             'invite'       => $invite,
             'inviteState'  => UserToken::inviteStates()[(int) $id] ?? null,
+            // The permission picker. `rolePermissions` is what the role gives,
+            // so each row can say what "role default" actually means rather
+            // than making somebody open the role in another tab to find out.
+            'permissions'      => Permission::grouped(),
+            'rolePermissions'  => Role::permissionIds((int) $user['role_id']),
+            'userPermissions'  => UserPermission::forUser((int) $id),
         ]);
     }
 
@@ -254,6 +267,105 @@ final class UserController extends Controller
 
         Flash::success($data['name'] . ' has been updated.');
         Response::redirect('/admin/users');
+    }
+
+    /**
+     * This account's permission overrides.
+     *
+     * A whole-set write: the form shows every permission at once and anything
+     * left on "Role" is simply not stored, because inheriting has to be
+     * expressible by the absence of a row rather than by a third kind of row
+     * that would then have to be kept in step with the role.
+     */
+    public function updatePermissions(string $id): void
+    {
+        $userId = (int) $id;
+        $user   = User::find($userId);
+
+        if ($user === null) {
+            Flash::error('That user no longer exists.');
+            Response::redirect('/admin/users');
+        }
+
+        $back = '/admin/users/' . $userId . '/edit';
+
+        // A superuser holds everything and cannot be denied anything, so there
+        // is nothing here to save. Refused rather than silently ignored: a form
+        // that appears to save and changes nothing is worse than one that says
+        // it cannot.
+        if ((int) ($user['role_is_superuser'] ?? 0) === 1) {
+            Flash::error('That account has a superuser role, which holds every permission. '
+                . 'Move it to another role before setting permissions for it individually.');
+            Response::redirect($back);
+        }
+
+        $submitted = Request::post('override');
+        $submitted = is_array($submitted) ? $submitted : [];
+
+        // Only ids that exist, and only the two effects. Anything else is
+        // dropped rather than refused: an unknown id is a stale form, not an
+        // attack worth an error message, and the foreign key would refuse it
+        // anyway.
+        $valid   = array_column(Permission::all(), 'id');
+        $effects = [];
+
+        foreach ($submitted as $permissionId => $effect) {
+            $permissionId = (int) $permissionId;
+
+            if (!in_array($permissionId, array_map('intval', $valid), true)) {
+                continue;
+            }
+
+            if ($effect === UserPermission::GRANT || $effect === UserPermission::DENY) {
+                $effects[$permissionId] = (string) $effect;
+            }
+        }
+
+        $before = UserPermission::forUser($userId);
+
+        UserPermission::replace($userId, $effects, Auth::id());
+
+        // The diff is the point of the audit entry: "permissions changed" tells
+        // nobody anything six months later.
+        $names   = [];
+        $changes = [];
+
+        foreach (Permission::all() as $permission) {
+            $names[(int) $permission['id']] = (string) $permission['slug'];
+        }
+
+        foreach ($names as $permissionId => $slug) {
+            $was = $before[$permissionId]  ?? 'inherit';
+            $now = $effects[$permissionId] ?? 'inherit';
+
+            if ($was !== $now) {
+                $changes[] = $slug . ': ' . $was . ' → ' . $now;
+            }
+        }
+
+        if ($changes === []) {
+            Flash::success('No permission changes for ' . $user['name'] . '.');
+            Response::redirect($back);
+        }
+
+        ActivityLog::record(
+            'updated',
+            'user',
+            $userId,
+            'Changed the permissions held by ' . $user['name'] . ' individually: ' . implode(', ', $changes)
+        );
+
+        $granted = count(array_filter($effects, static fn (string $e): bool => $e === UserPermission::GRANT));
+        $denied  = count($effects) - $granted;
+
+        Flash::success(sprintf(
+            'Permissions saved for %s: %d added to the role, %d withheld from it.',
+            $user['name'],
+            $granted,
+            $denied
+        ));
+
+        Response::redirect($back);
     }
 
     /**

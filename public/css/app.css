@@ -978,6 +978,96 @@ textarea.input { min-height: 120px; resize: vertical; }
 .permission-desc { font-size: 0.86rem; }
 .permission-slug { font-size: 0.78rem; }
 
+/* --- Per-account permission overrides -------------------------------------
+ *
+ * A role's picker is a checkbox: on or off. An account's is three-way — follow
+ * the role, allow anyway, withhold anyway — so it cannot be a checkbox, and a
+ * <select> per permission across forty rows is a page of grey boxes nobody can
+ * scan. Three small radio pills read at a glance and say which of the three is
+ * in force without being read.
+ */
+.permission-group-head h3 { margin: 0; font-size: 1rem; }
+
+/* One row per permission rather than two columns. A role's picker is a
+   checkbox and two fit a line; this row carries a name, a description, a slug
+   *and* three buttons, and squeezing that into half a card leaves 18px for the
+   buttons. */
+.permission-list-override { grid-template-columns: 1fr; }
+@media (min-width: 760px) {
+    .permission-list-override { grid-template-columns: 1fr; }
+}
+
+.permission-override {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "name   choice"
+        "desc   choice"
+        "slug   choice";
+    align-items: center;
+    gap: 0 var(--space-3);
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+}
+.permission-override .permission-name { grid-area: name; }
+.permission-override .permission-desc { grid-area: desc; }
+.permission-override .permission-slug { grid-area: slug; }
+.permission-override .permission-choice { grid-area: choice; }
+
+/* An account that differs from its role is the thing somebody is looking for
+   on this page, so it is marked on the row rather than only in the control. */
+.permission-override.is-overridden { border-color: var(--accent); background: var(--bg-sunken); }
+
+.permission-override .permission-choice { display: flex; gap: 2px; flex: 0 0 auto; }
+
+.permission-override .permission-choice .choice {
+    display: block;
+    position: relative;
+    margin: 0;
+}
+.permission-choice .choice input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+}
+.permission-choice .choice > span {
+    display: block;
+    min-width: 62px;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    font-size: 0.8rem;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+}
+.permission-choice .choice:first-child > span { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.permission-choice .choice:last-child > span  { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+.choice-sub { display: block; font-size: 0.7rem; opacity: 0.7; }
+
+.permission-choice .choice input:checked + span {
+    border-color: var(--border-strong);
+    background: var(--bg-hover);
+    font-weight: 600;
+}
+.permission-choice .choice-allow input:checked + span {
+    border-color: var(--ok);
+    background: var(--ok-soft);
+    color: var(--ok);
+}
+.permission-choice .choice-deny input:checked + span {
+    border-color: var(--danger);
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+.permission-choice .choice input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.permission-choice .choice input:disabled + span { opacity: 0.5; cursor: not-allowed; }
+
 .changes pre {
     margin: var(--space-2) 0 0;
     padding: var(--space-2);
@@ -2946,6 +3036,10 @@ form + .section-title,
 /* --- The editor ------------------------------------------------------------ */
 
 .card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* A field whose value is shown rather than edited — the asset status while the
+   item is out on hire, where the hire decides it and a button changes it. */
+.static-value { margin: 0; }
 
 .form-actions-inline {
     display: flex;

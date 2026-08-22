@@ -20,6 +20,7 @@ uses. The ninth is a web page, because the thing it tests is JavaScript.
 | `routines.php` | A running site + seeded database | **Yes** |
 | `loler.php` | A running site + seeded database | **Yes** |
 | `password-policy.php` | A running site + seeded database | **Yes** |
+| `user-permissions.php` | A running site + seeded database | **Yes** |
 
 ## Static checks (safe anywhere, including production)
 
@@ -253,6 +254,45 @@ Six claims it exists to hold up:
 > saves every key it renders at once, so driving it from a scraped copy of its
 > own markup rewrites two dozen unrelated settings and breaks whatever runs
 > next.
+
+```bash
+php tests/user-permissions.php
+```
+
+`user-permissions.php` covers the per-account permission overrides, and the
+asset-status guard that landed beside them.
+
+Seven claims it exists to hold up:
+
+- **A grant opens what the role does not.** `loler.inspect` is granted to one
+  Manager / Staff account, which then reaches the examination form it was
+  refused a moment earlier — while another account on the *same* role still
+  does not hold it. That is what makes this an override rather than a quiet
+  edit to the role.
+- **A deny closes what the role does give.** The same account is denied
+  `pat.manage`, which its role holds, and is refused the PAT form.
+- **Both readers of the rule agree.** `Auth::can()` decides 403s and
+  `User::withPermission()` decides who gets *emailed*; the second is the copy
+  nobody would notice going stale, so it is asserted separately every time.
+- **The contradiction cannot be stored.** A grant and a deny are written for the
+  same permission in turn, and the table is asserted to hold exactly one row —
+  the primary key is the pair.
+- **Clearing goes back to the role.** Saving with everything on *Role* leaves no
+  rows at all, and the role's own answer is in force again in both directions.
+- **A superuser is untouched.** The form refuses to save for one, and even with
+  denies written straight into the table `Auth::can()` still allows it. Without
+  that, an administrator could deny themselves `users.manage` and
+  `roles.manage` and lock the installation out of its own administration.
+- **An asset on hire has no status dropdown.** Its edit page offers **Book in**
+  instead; a hand-made post to change the status is refused with the hirer and
+  the due date named; an ordinary save — which sends no status at all — leaves
+  it *On Hire*, which also repairs a record the old behaviour had already
+  broken. And the mirror image: an asset with nothing out cannot be marked *On
+  Hire* by hand.
+
+> **This one writes too.** It sets and clears permission overrides on the
+> seeded accounts and saves one asset. Whatever overrides the database already
+> had are read first and put back on exit, including if a check throws.
 
 ## The barcode decoder
 

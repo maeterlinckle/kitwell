@@ -186,6 +186,8 @@ final class AssetController extends Controller
             // What the library picker shows before anybody searches.
             'libraryDocuments' => MediaLibrary::search('document', '', 1, 12)['rows'],
             'libraryPhotos'    => MediaLibrary::search('photo', '', 1, 12)['rows'],
+            // Nothing can be on hire before it exists.
+            'openHire'     => null,
         ]);
     }
 
@@ -244,6 +246,11 @@ final class AssetController extends Controller
             'templateMedia'=> [],
             'libraryDocuments' => [],
             'libraryPhotos'    => [],
+            // An asset that is physically out with somebody. The form shows a
+            // "Book in" button in place of the status dropdown when it is:
+            // changing the status by hand is what leaves the register saying
+            // "In Stock" about something that is in the back of a van.
+            'openHire'         => Hire::openForAsset((int) $asset['id']),
         ]);
     }
 
@@ -440,6 +447,13 @@ final class AssetController extends Controller
         $id       = $existing === null ? 0 : (int) $existing['id'];
         $redirect = $existing === null ? '/assets/create' : '/assets/' . $id . '/edit';
 
+        // An asset that is out with somebody has its status decided by the hire,
+        // not by this form. Setting it back to "In Stock" by hand is what makes
+        // the register claim an item is available while it is still booked out
+        // — the defect this guards against — so the form drops the dropdown
+        // entirely and the status is not read from the request at all.
+        $openHire = $existing === null ? null : Hire::openForAsset($id);
+
         $data = $this->validate([
             'asset_tag'             => 'required|max:64',
             'barcode'               => 'max:64',
@@ -448,7 +462,9 @@ final class AssetController extends Controller
             'category_id'           => 'integer',
             'location_id'           => 'integer',
             'condition_rating'      => 'required|in:' . implode(',', Asset::CONDITIONS),
-            'status'                => 'required|in:' . implode(',', Asset::STATUSES),
+            // Not required while the asset is on hire, because the form does not
+            // offer it then. See the two checks below.
+            'status'                => ($openHire === null ? 'required|' : '') . 'in:' . implode(',', Asset::STATUSES),
             'purchase_date'         => 'date',
             'purchase_cost'         => 'numeric|min_value:0|max_value:99999999',
             'current_value'         => 'numeric|min_value:0|max_value:99999999',
@@ -582,6 +598,32 @@ final class AssetController extends Controller
             );
         }
 
+        // Posted by hand rather than by the form, which omits the field. The
+        // status is still forced, but saying so beats appearing to accept it.
+        if ($openHire !== null && $data['status'] !== '' && $data['status'] !== 'On Hire') {
+            $this->failValidation(
+                ['status' => sprintf(
+                    'This asset is out with %s until %s. Book it in before changing its status.',
+                    $openHire['hirer_name'],
+                    format_date((string) $openHire['due_back_date'])
+                )],
+                $redirect
+            );
+        }
+
+        // And the mirror image, which produces exactly the same broken register
+        // from the other direction: an asset marked On Hire with no hire behind
+        // it looks unavailable, cannot be checked out, and has nothing to book
+        // in. "On Hire" is a fact about a hire record, so only checking out may
+        // set it.
+        if ($openHire === null && $data['status'] === 'On Hire') {
+            $this->failValidation(
+                ['status' => 'Nothing is out on this asset, so it cannot be marked On Hire. '
+                    . 'Use Check out to put it on hire — that sets the status itself.'],
+                $redirect
+            );
+        }
+
         return [
             'asset_tag'             => $tag,
             'barcode'               => $barcode !== '' ? $barcode : null,
@@ -592,7 +634,7 @@ final class AssetController extends Controller
             'responsible_user_id'   => $responsibleKind === 'user' ? $responsibleId : null,
             'responsible_team_id'   => $responsibleKind === 'team' ? $responsibleId : null,
             'condition_rating'      => $data['condition_rating'],
-            'status'                => $data['status'],
+            'status'                => $openHire !== null ? 'On Hire' : $data['status'],
             'purchase_date'         => self::nullIfBlank($data['purchase_date']),
             'purchase_cost'         => self::nullIfBlank($data['purchase_cost']),
             'current_value'         => self::nullIfBlank($data['current_value']),

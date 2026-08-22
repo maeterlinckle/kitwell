@@ -40,7 +40,7 @@ Where something is *not* verified, it says so.
 | Optional extensions | `gd` (image resize + thumbnails), `exif` (orientation + capture date), `curl` (test scripts only). **`openssl` is required to store the SMTP password** |
 | `composer.lock` | **committed** since stage 12. It was gitignored while there were no packages; now it is what makes a server's `composer install` reproducible |
 | Front end | server-rendered PHP templates, hand-written CSS, vanilla JS. No build step |
-| Counted at time of writing | 269 PHP files (123 of them templates), 247 routes (128 GET, 116 POST), 9 migrations |
+| Counted at time of writing | 270 PHP files (123 of them templates), 248 routes (128 GET, 117 POST), 10 migrations |
 | Runtime dependency | **one**: `phpmailer/phpmailer ^6.9`, installed by `composer install`. Without it everything works except *sending* email — see §4.8 |
 
 > **The database is MariaDB, not MySQL.** Two things deliberately keep the MySQL
@@ -54,7 +54,7 @@ Where something is *not* verified, it says so.
 
 Built by applying everything in `database/migrations/` to an empty database.
 
-**Totals:** 46 domain tables, 556 columns, 97 foreign keys.
+**Totals:** 47 domain tables, 561 columns, 100 foreign keys.
 Every table is **InnoDB / utf8mb4_unicode_ci**.
 
 A database migrated with `php bin/migrate.php` has one more table,
@@ -65,7 +65,7 @@ tracking, not domain data — and note that it is *not* created if you pipe the
 
 ### 2.1 Migrations
 
-Nine files, applied in filename order and recorded in `migrations`. Each is
+Ten files, applied in filename order and recorded in `migrations`. Each is
 written to be safe to re-run.
 
 | File | Contents |
@@ -79,13 +79,14 @@ written to be safe to re-run.
 | `007_routine_page_batching.sql` | `routine_versions.page_batched`; `routine_pages.required_for_signoff`; `routine_page_completions` |
 | `008_loler_examinations.sql` | `loler_examinations`, `loler_defects`; seven `assets.loler_*` columns behind `requires_loler`; the `organisation_address` setting; adds `loler.inspect`, granted to **no role** |
 | `009_password_policy_and_loler_photos.sql` | The three `password_*` settings and the three nullable `users.password_*` columns that override them; `loler_photos`. Uses MariaDB's `ADD COLUMN IF NOT EXISTS`, so it is safe to apply twice |
+| `010_user_permissions.sql` | `user_permissions` — one row per (account, permission) carrying `grant` or `deny`, so a role becomes a baseline rather than the whole answer |
 
-A fresh install and one upgraded through 009 produce the same schema —
+A fresh install and one upgraded through 010 produce the same schema —
 verified by migrating both and diffing `information_schema` column by column,
 with rows in place on the upgraded one so an `ALTER` cannot be checked only
 against an empty table.
 
-To change the schema, add a new numbered file — `010_…` and upward. Do not edit
+To change the schema, add a new numbered file — `011_…` and upward. Do not edit
 one that has been applied anywhere.
 
 ### 2.2 Tables
@@ -693,13 +694,30 @@ this describes one day's inspection of it.
 textarea a line at a time rather than from a field per file. A file input cannot
 be repopulated after a refused submission, so pairing separate inputs to files
 across a redirect is a promise the browser will not keep.
-### 2.3 Foreign keys (97)
+#### `user_permissions`
+`user_id` NN (CASCADE), `permission_id` NN (CASCADE),
+`effect` enum('grant','deny') NN, `granted_by` (SET NULL), `created_at`.
+Primary key `(user_id, permission_id)`. Indexes `permission_id`,
+`(user_id, effect)`.
+
+What one account may do that its role does not say:
+
+    effective = (role's permissions + this account's grants) - this account's denies
+
+**The primary key is the pair, so one account cannot hold a grant and a deny for
+the same permission.** Making the contradiction unstorable is cheaper than
+resolving it on every read, and there is no third "inherit" row — inheriting is
+the *absence* of a row, which is what keeps an untouched account following its
+role when the role changes.
+
+A superuser role ignores both directions; see §4.19.
+### 2.3 Foreign keys (100)
 
 | Delete rule | Where it is used |
 |---|---|
-| **CASCADE** | **`loler_examinations.asset_id`**, **`loler_defects.examination_id`**, **`loler_photos.examination_id`**, `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
+| **CASCADE** | **`user_permissions.user_id`**, **`user_permissions.permission_id`**, **`loler_examinations.asset_id`**, **`loler_defects.examination_id`**, **`loler_photos.examination_id`**, `asset_photos.asset_id`, `asset_manuals.asset_id`, `maintenance_schedules.asset_id`, `maintenance_logs.asset_id`, `maintenance_log_photos.maintenance_log_id`, `maintenance_log_documents.maintenance_log_id`, `pat_records.asset_id`, `hire_photos.hire_id`, `role_permissions.role_id`, `role_permissions.permission_id`, `team_members.team_id`, `team_members.user_id`, `user_tokens.user_id`, `fault_reports.asset_id`, `fault_report_photos.fault_report_id` |
 | **RESTRICT** | `hires.asset_id`, `hires.hirer_id`, `users.role_id`, **`routine_completions.routine_id`**, **`routine_completions.version_id`**, **`routine_responses.step_id`**, **`routine_response_files.step_id`**, **`routine_page_completions.page_id`** |
-| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`loler_photos.uploaded_by`**, **`loler_examinations.examiner_user_id`**, **`loler_examinations.authenticated_by`**, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
+| **SET NULL** | everything else — every `created_by` / `updated_by` / `uploaded_by` / `added_by` / `*_user_id`, plus `assets.parent_asset_id`, `assets.category_id`, `assets.location_id`, `categories.parent_id`, `locations.parent_id`, `maintenance_logs.schedule_id`, **`maintenance_schedules.assigned_to_team_id`**, `hirers.user_id`, `activity_log.user_id`, `settings.updated_by`, `email_templates.updated_by`, `email_log.user_id`, **`user_permissions.granted_by`**, **`loler_photos.uploaded_by`**, **`loler_examinations.examiner_user_id`**, **`loler_examinations.authenticated_by`**, **`assets.responsible_user_id`**, **`assets.responsible_team_id`**, `fault_reports.reported_by` |
 
 `maintenance_schedules.assigned_to_team_id` is SET NULL on purpose: archiving is
 the ordinary way to retire a team, so deleting one is a deliberate act that
@@ -889,7 +907,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 ├── config/
 │   └── config.php           every value from Env::get(); nothing hardcoded
 │
-├── database/migrations/     001…009, plain .sql, applied in filename order
+├── database/migrations/     001…010, plain .sql, applied in filename order
 ├── vendor/                  gitignored; created by `composer install` (PHPMailer)
 │
 ├── public/                  ← the only directory the web server should serve
@@ -900,7 +918,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │              routine-editor.js, loler-wizard.js, api-docs.js
 │
 ├── routes/
-│   └── web.php              the whole route table, 247 routes
+│   └── web.php              the whole route table, 248 routes
 │
 ├── src/
 │   ├── bootstrap.php        autoload, env, config, errors, HTTPS, headers, session
@@ -933,7 +951,7 @@ Nothing here is accidental, but a reader coming from the brief should know:
 │   │                        MaintenanceSchedule, MediaLibrary, ApiKey,
 │   │                        CustomReport, PatRecord, Permission, Role,
 │   │                        RoutineCompletion, Setting, Team, Tree,
-│   │                        TrustedDevice, User, UserToken
+│   │                        TrustedDevice, User, UserPermission, UserToken
 │   ├── Reports/             Report (base), ReportRegistry, AllAssets,
 │   │                        FaultyAssets, MaintenanceDue, PatDue, AssetsOnHire,
 │   │                        HiresDueBack; StoredReport, DataSource,
@@ -1767,6 +1785,67 @@ runs `auth`.
 The expired-password page also refuses the password that has just expired.
 Without that, re-entering it satisfies every rule and resets the clock, which
 makes the whole policy ceremonial.
+
+### 4.19 Per-account permissions, and statuses a record does not own
+
+Two unrelated changes with the same shape: a record was able to say something
+that was not true.
+
+**A role is the baseline, not the whole answer.** `user_permissions` holds one
+row per (account, permission) saying `grant` or `deny`, and the effective set is
+
+    (role's permissions + the account's grants) - the account's denies
+
+The alternative — a role per combination — is what sites actually did before,
+and it ends in nine roles nobody can tell apart.
+
+`App\Models\UserPermission` owns the rule, and owns it **once**:
+`holdsSql()` returns the condition as SQL for a query that already has `users u`
+and `roles r` in scope, and both readers use it. There are two readers and they
+answer different questions — `Auth::can()` decides 403s, `User::withPermission()`
+decides who gets *emailed* — and the second is the one that would go stale
+without anybody noticing for months. Do not write the condition out a third
+time; add a caller to `holdsSql()`.
+
+**A superuser ignores both directions.** `Auth::can()` short-circuits on
+`role_is_superuser` before any of this is consulted, and the controller refuses
+to save overrides for such an account rather than appearing to. This is not an
+oversight: denying an administrator `users.manage` and `roles.manage` would lock
+the installation out of its own administration, and nothing reachable from a
+browser can set the superuser flag to get back in. The same reasoning as
+"a role you create can never be a superuser".
+
+**Inheriting is the absence of a row.** There is no third `effect` value, and
+there must not be one: an account that has never been thought about has to keep
+following its role when the role changes, and a stored "inherit" would be a
+snapshot of today's answer pretending to be a policy. The primary key is the
+pair, so a grant and a deny for one permission cannot coexist — the
+contradiction is unstorable rather than resolved by a rule somebody has to
+remember. Writes go through `UserPermission::replace()`, a whole-set write,
+because the form shows every permission at once.
+
+The route carries `roles.manage`, not `users.manage`: deciding what somebody may
+do is the same kind of act as editing a role. The card is hidden from anybody
+who could not save it.
+
+**An asset's status while it is out on hire is not the asset's to state.** The
+edit form used to offer the ordinary dropdown, so an item could be set back to
+*In Stock* while its hire was still open — after which the register said it was
+available and it was in the back of a van. Now:
+
+- the form drops the status field entirely when `Hire::openForAsset()` returns a
+  row, and shows **Book in** instead;
+- `validateAsset()` drops `required` from the status rule in that case, refuses a
+  hand-made post that names a different status (with the hirer and the due date
+  in the message), and forces `'On Hire'` on the way out — so an ordinary save
+  also *repairs* a record the old behaviour had already broken;
+- and the mirror image is refused too: `'On Hire'` cannot be set on an asset with
+  nothing out, and is not offered in the dropdown, because it is a fact about a
+  hire record and only checking out creates one.
+
+The field is omitted rather than disabled. A disabled input posts nothing
+either, but a name that is present and empty invites somebody to make the server
+"cope" with it, and the server should be refusing instead.
 ---
 
 ## 5. Build-prompt status
@@ -2023,6 +2102,18 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
     examine wizard's stage indicators stay neutral until a stage is genuinely
     done, and the blue "not available for hire" banner is gone from the asset
     page — the badge in the heading already said it.
+27. **Permissions per account, and a status the asset does not own.** A role is
+    now the *baseline*: any account can be given a permission on top of it or
+    have one withheld despite it, from a three-way picker on the user's page
+    (§4.19). It is for the exception — the one technician who is also the
+    competent person for lifting examinations — and three people needing the
+    same thing is still a role. A superuser is unaffected in either direction,
+    deliberately. Separately, an asset that is **out on hire** no longer offers a
+    status dropdown at all: its edit page shows who has it and a **Book in**
+    button, a hand-made post to change the status is refused with the hirer
+    named, and an ordinary save forces *On Hire* — which repairs a record the old
+    behaviour had already broken. *On Hire* likewise cannot be set by hand on an
+    asset with nothing out.
 
 ### 5.2 What has been verified, and how
 
@@ -2030,14 +2121,15 @@ All eighteen prompts are **complete**. Nothing is partial or unstarted.
 
 | Check | Result |
 |---|---|
-| `php -l` on all 146 PHP files under `src/`, `bin/` and `routes/`, and all 123 templates | 0 failures |
+| `php -l` on all 147 PHP files under `src/`, `bin/` and `routes/`, and all 123 templates | 0 failures |
 | `tests/security-audit.php` | **45 passed, 0 failed** |
-| `tests/escape-audit.php` | **3386 output expressions across 123 templates, 0 unescaped** |
-| All 9 migrations against an empty database | applied cleanly; 46 tables, 556 columns, 97 FKs, all InnoDB |
-| A fresh install vs one upgraded through 009 | **identical** — 556 columns, 263 index rows and 97 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
+| `tests/escape-audit.php` | **3418 output expressions across 123 templates, 0 unescaped** |
+| All 10 migrations against an empty database | applied cleanly; 47 tables, 561 columns, 100 FKs, all InnoDB |
+| A fresh install vs one upgraded through 010 | **identical** — 561 columns, 269 index rows and 100 foreign keys diffed one by one from `information_schema`, with rows in place on the upgraded database so an `ALTER` is not checked only against an empty table |
 | Seed data counts | 4 roles / 39 permissions / 74 grants / 55 settings / 0 template overrides |
 | `tests/permission-matrix.php` | **428 checks, 0 mismatches** |
 | `tests/routines.php` | **165 checks, 0 failed** — routines built, published, run ad-hoc and from a schedule, versioned, category-scoped, worked through out of order by two different accounts a step *and* a page at a time, scanned to, and the PDF checked object by object |
+| `tests/user-permissions.php` | **39 checks, 0 failed** — a permission granted to one account and denied to another, enforced over HTTP and agreed on by both readers of the rule; a superuser unaffected by either even with denies written straight into the table; and an asset on hire whose status only booking in can change |
 | `tests/password-policy.php` | **35 checks, 0 failed** — the policy at both levels, an override that survives the site-wide rule being tightened, the expired-password interruption, and a trusted device followed across three different addresses |
 | `tests/loler.php` | **104 checks, 0 failed** — an asset marked as lifting equipment, examined through the wizard and read back on screen, in the register and out of the PDF; the statutory interval per type, `loler.inspect` refused to every role that ships, page-one corrections written back to the asset, every defect refusal the regulations require, and all eleven Schedule 1 paragraphs found in the document |
 | `tests/media-library.php` | **49 checks, 0 failed** — counted from the database *and* the filesystem |
@@ -2768,6 +2860,23 @@ codebase** — grepped, zero matches. The list below is therefore things that ar
   a second page. The report has perhaps 25pt of slack, so any change to
   `LolerDocument`'s field metrics has to be re-measured by counting `/Type /Page`
   in the output, not eyeballed.
+- **`1fr` in a grid does not mean "whatever is left".** It is
+  `minmax(auto, 1fr)`, and the auto minimum is the content's min-content width —
+  so a long description in the per-account permission row took the whole line and
+  left the three buttons beside it 6px. `minmax(0, 1fr)` is what actually lets a
+  text column shrink.
+- **`.permission-item span { display: block }` outranks `.permission-choice`.**
+  Two classes beat one, so a `<span>` wrapper inside a `.permission-item` cannot
+  be turned back into a flex row by a single-class selector however far down the
+  file it sits. The three-way buttons stacked vertically until the selector was
+  written as `.permission-override .permission-choice`. Check specificity before
+  adding a rule inside somebody else's component.
+- **A test that grants or denies a permission must put it back.** A leftover
+  `pat.manage` deny on the seeded Manager / Staff account made
+  `tests/permission-matrix.php` report four permissions holes that did not
+  exist. `tests/user-permissions.php` reads whatever overrides the database
+  already had and restores them from a shutdown function, so a check that throws
+  still cleans up.
 - **Two dev servers can bind the same port on Windows.** A second `php -S` on a
   port already in use starts, logs that it started, and serves nothing — every
   request goes to the first one. If a page 404s with another project's branding
@@ -2831,7 +2940,12 @@ php tests/security-audit.php && php tests/escape-audit.php
     statement on the report: the application records what a competent person
     said, and claiming more than that on their behalf is the one failure mode
     here that matters.
-12. **On `users`, NULL is a value.** `password_expiry_days`,
+12. **An access-control rule has exactly one copy.** `UserPermission::holdsSql()`
+    is it. `Auth::can()` and `User::withPermission()` both use it, and they
+    answer different questions — one decides 403s, the other decides who gets
+    emailed. A third copy will not be noticed going stale until somebody stops
+    getting reminders they should have had (§4.19).
+13. **On `users`, NULL is a value.** `password_expiry_days`,
     `password_min_length` and `password_min_classes` mean "follow the
     application policy" when NULL, and 0 in the first means "never expires".
     They are different answers to different questions (§4.18), and collapsing

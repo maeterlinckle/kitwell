@@ -24,6 +24,15 @@ scanning the same item at the same moment cannot both succeed. On checkout the
 asset moves to *On Hire*; on return it goes back to *In Stock*, or straight into
 maintenance if it came back needing work.
 
+**While an item is out, only booking it in changes its status.** Its edit page
+shows *On Hire*, who has it and when it is due, and a **Book in** button in
+place of the usual status dropdown. Setting the status by hand used to be
+possible and it left the register saying an item was available while the hire
+was still open — so it says *In Stock* on the screen and sits in the back of
+somebody's van. The same applies the other way: *On Hire* cannot be chosen from
+the dropdown, because it is a fact about a hire record and only Check out can
+create one.
+
 The default hire period is {{setting:hire_default_days}} days, and an item
 counts as due back soon {{setting:hire_due_soon_days}} days before its due date.
 Both are set under **Settings → Application settings**. Hire references are

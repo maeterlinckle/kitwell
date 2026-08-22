@@ -7,13 +7,16 @@ namespace App\Core;
 use App\Models\ActivityLog;
 use App\Models\TrustedDevice;
 use App\Models\User;
+use App\Models\UserPermission;
 use App\Services\TwoFactor;
 
 /**
  * Authentication and the read side of role-based access control.
  *
  * Permissions are data (roles -> role_permissions -> permissions), so new roles
- * and finer-grained permissions can be added without touching the schema.
+ * and finer-grained permissions can be added without touching the schema. A role
+ * is the *baseline*: an account may hold extra permissions on top of it, or have
+ * some withheld despite it — see App\Models\UserPermission.
  */
 final class Auth
 {
@@ -235,15 +238,10 @@ final class Auth
             return self::$permissions = [];
         }
 
-        $rows = Database::select(
-            'SELECT p.slug
-               FROM permissions p
-               INNER JOIN role_permissions rp ON rp.permission_id = p.id
-              WHERE rp.role_id = ?',
-            [(int) $user['role_id']]
-        );
-
-        return self::$permissions = array_map(static fn (array $r): string => (string) $r['slug'], $rows);
+        // The role plus this account's own grants, less its own denies. The
+        // rule lives in UserPermission so this and User::withPermission() cannot
+        // drift apart.
+        return self::$permissions = UserPermission::effectiveSlugs((int) $user['id']);
     }
 
     /**
@@ -259,6 +257,13 @@ final class Auth
         }
 
         // The admin role is a superuser by design; everything else is explicit.
+        //
+        // A per-account **deny** deliberately does not apply here. Denying an
+        // administrator `users.manage` and `roles.manage` would lock the
+        // installation out of its own administration with no way back except
+        // SQL, and nothing reachable from the web can set the superuser flag to
+        // restore it. The user page says as much rather than offering a control
+        // that quietly does nothing.
         if ((int) ($user['role_is_superuser'] ?? 0) === 1) {
             return true;
         }
